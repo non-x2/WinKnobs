@@ -1,0 +1,129 @@
+# Build outputs
+bin/
+obj/
+out/
+publish/
+*.user
+*.suo
+*.cache
+
+# Visual Studio
+.vs/
+*.vssscc
+*.vspscc
+*.userprefs
+
+# .NET / NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Logs (runtime)
+logs/
+*.log
+
+# Backups (runtime - 開発時のテストバックアップは除外)
+backup/
+*.reg
+*.reg.bak
+
+# Local user settings
+*.local.json
+appsettings.Development.json
+secrets.json
+.env
+
+# Tests output
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Rider
+.idea/
+
+# Paket
+.paket/paket.exe
+
+# Windows
+*.tmp
+*.swp
+*~
+
+# 本家参考画像（著作権配慮・GitHub公開対象外）
+docs/本家参考/
+「いじくるツール」 レイアウトキャプチャ画像/
+「いじくるツール」レイアウトキャプチャ画像 （タブ部分）/
+**/「いじくるツール」*/
+
+# Personal notes (作業メモ等)
+docs/メモ_*
+
+# ─────────────────────────────────────────────────────────
+# 🔒 機密情報・個人情報を含むファイル（OSS公開対象外）
+# 2026-05-21 追加：plan-validator 指摘＋実 grep 結果に基づく
+# ─────────────────────────────────────────────────────────
+
+# VM 認証情報（パスワード生平文・SecureString いずれも公開禁止）
+scripts/vm_cred.xml
+scripts/vm_cred*.xml
+scripts/*_credential*.ps1
+
+# VM セットアップ系ログ（開発者固有のホスト名・ユーザー名・認証情報を含むため除外）
+docs/autologon_setup_result.log
+docs/create_vm_result.log
+docs/share_setup_result.log
+docs/grant_guest_result.log
+docs/apply_test_result.log
+docs/apply_test_result.json
+
+# VM ホスト固有パスを含む構築スクリプト（汎用化前は公開しない）
+# scripts/ 直下の .ps1 を一括除外（個別列挙の穴を防ぐため）
+# ※ scripts/ui_automation/ 配下は別階層・公開対象なので影響なし
+scripts/*.ps1
+scripts/*.bat
+
+# テスト結果・引き継ぎメモ（個人開発ログ・ホスト名含む）
+docs/テスト結果_*.md
+docs/引き継ぎメモ_*.md
+
+# 次セッション再開ガイド（個人運用ファイル・ホスト名含む）
+次セッション再開ガイド.md
+
+# 計画書（OSS化以外の内部計画書）
+docs/A3-2-c_計画書_*.md
+docs/v0.1.4_BUG-3_計画書.md
+docs/UI_Automation_対応計画書_*.md
+docs/OSS化_Week3_実装計画書_*.md
+
+# Visual Studio 導入ガイド（個人環境想定）
+docs/VisualStudio導入ガイド.md
+docs/Hyper-V構築ガイド.md
+docs/本家レイアウト解析.md
+
+# 個人開発メモ系（OSS版では README に集約済み）
+docs/開発計画.md
+docs/項目リスト.md
+
+# 個人プラン参照
+**/.claude/plans/
