@@ -29,15 +29,50 @@
             </TextBlock>
         </Border>
 
-        <!-- ツールバー枠（R-2 以降で「+追加」「✏編集」「🗑削除」「💾保存」「↺戻す」を入れる） -->
+        <!-- ツールバー（Phase R-2：編集・保存。追加・削除は R-3 で実装予定） -->
         <Border Grid.Row="1"
                 Padding="8,4"
                 Background="{DynamicResource Bg.Panel}"
                 BorderBrush="{DynamicResource Border.Default}"
                 BorderThickness="0,0,0,1">
-            <TextBlock FontSize="11"
-                       Foreground="{DynamicResource Fg.Subtle}"
-                       Text="（Phase R-1：閲覧のみ。編集・有効化トグルは R-2 で実装予定）"/>
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="StartupAddButton"
+                        AutomationProperties.AutomationId="StartupAddButton"
+                        Content="+ 追加"
+                        IsEnabled="False"
+                        ToolTip="Phase R-3 で実装予定"
+                        MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
+                <Button x:Name="StartupEditButton"
+                        AutomationProperties.AutomationId="StartupEditButton"
+                        Content="✏ 編集"
+                        Command="{Binding EditCommand}"
+                        ToolTip="選択中のエントリの起動コマンドを編集します"
+                        MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
+                <Button x:Name="StartupDeleteButton"
+                        AutomationProperties.AutomationId="StartupDeleteButton"
+                        Content="🗑 削除"
+                        IsEnabled="False"
+                        ToolTip="Phase R-3 で実装予定"
+                        MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
+                <Button x:Name="StartupSaveButton"
+                        AutomationProperties.AutomationId="StartupSaveButton"
+                        Content="💾 保存"
+                        Command="{Binding SaveDirtyCommand}"
+                        IsEnabled="{Binding HasDirtyEntries}"
+                        ToolTip="編集中のエントリをレジストリに書込みます（HKLM 系は管理者権限要）"
+                        MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
+                <Button x:Name="StartupRevertButton"
+                        AutomationProperties.AutomationId="StartupRevertButton"
+                        Content="↺ 戻す"
+                        Command="{Binding RevertAllCommand}"
+                        IsEnabled="{Binding HasDirtyEntries}"
+                        ToolTip="編集中の変更を破棄して元の値に戻します（レジストリは触らない・R-3 でバックアップ復元と差別化）"
+                        MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
+                <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Fg.Default}"
+                           Text="⚠ 操作モード：CheckBox は即時反映 ／ ✏編集 は 💾保存 で永続化（2モード混在）"/>
+            </StackPanel>
         </Border>
 
         <!-- メインリスト -->
@@ -58,17 +93,27 @@
                 <Style TargetType="DataGridRow">
                     <Setter Property="AutomationProperties.AutomationId"
                             Value="{Binding RawName, StringFormat=StartupEntry_{0}}"/>
+                    <Style.Triggers>
+                        <!-- 編集中（IsDirty=true）→ 薄オレンジ背景で視認性向上（既存 SettingDialog のオレンジ枠と同系統） -->
+                        <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                            <Setter Property="Background" Value="#33FF9933"/>
+                        </DataTrigger>
+                    </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
-                <!-- 有効/無効 CheckBox（R-1 は IsEnabled=False でロック表示） -->
-                <DataGridTemplateColumn Header="有効" Width="50">
+                <!-- 有効/無効 CheckBox（R-2 即時トグル：クリックで ToggleEnabledCommand 即発火） -->
+                <!-- R-2 cross#7/#16 対応：列ヘッダに「即時」明示・CanToggleEnabled で RunOnce/IsDirty 中は disable -->
+                <DataGridTemplateColumn Header="有効（即時）" Width="80">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <CheckBox IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                      IsEnabled="False"
+                            <CheckBox AutomationProperties.AutomationId="StartupEnabledCheckBox"
+                                      IsChecked="{Binding IsEnabledForDisplay, Mode=OneWay}"
+                                      IsEnabled="{Binding CanToggleEnabled}"
+                                      Command="{Binding DataContext.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      CommandParameter="{Binding}"
                                       HorizontalAlignment="Center"
-                                      ToolTip="Phase R-2 で編集可能化"/>
+                                      ToolTip="{Binding CheckBoxTooltip}"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -77,6 +122,11 @@
                 <DataGridTextColumn Header="コマンド" Binding="{Binding Command}" Width="*"/>
                 <DataGridTextColumn Header="ハイブ" Binding="{Binding HiveDisplay}" Width="140"/>
             </DataGrid.Columns>
+            <!-- ダブルクリックで編集ダイアログ起動（既存 ItemsGrid と同じ UX） -->
+            <DataGrid.InputBindings>
+                <MouseBinding MouseAction="LeftDoubleClick"
+                              Command="{Binding EditCommand}"/>
+            </DataGrid.InputBindings>
         </DataGrid>
 
         <!-- ステータス -->

@@ -76,7 +76,7 @@ public class StartupItemsProvider
                 var commandText = value.ToString() ?? string.Empty;
                 var displayName = StripRunOncePrefix(rawName);
 
-                items.Add(new StartupEntryItem
+                var item = new StartupEntryItem
                 {
                     Hive = hiveEnum,
                     RawName = rawName,
@@ -85,7 +85,10 @@ public class StartupItemsProvider
                     ValueKind = kind,
                     IsEnabled = null,            // StartupApproved 突合は後段
                     StartupApprovedTrailing = null
-                });
+                };
+                // R-2 cross-reviewer 致命15 対応：Load 直後に Original を確定
+                item.SnapshotOriginal();
+                items.Add(item);
             }
         }
         catch
@@ -116,22 +119,22 @@ public class StartupItemsProvider
     /// </summary>
     private static void MergeApprovedState(IList<StartupEntryItem> entries)
     {
-        var hklmApprovedRun   = ReadApprovedValues(RegistryHive.LocalMachine, RegistryView.Registry64, ApprovedRun);
-        var hklmApprovedRun32 = ReadApprovedValues(RegistryHive.LocalMachine, RegistryView.Registry64, ApprovedRun32);
-        var hkcuApprovedRun     = ReadApprovedValues(RegistryHive.CurrentUser, RegistryView.Default, ApprovedRun);
-        var hkcuApprovedRunOnce = ReadApprovedValues(RegistryHive.CurrentUser, RegistryView.Default, ApprovedRunOnce);
+        // R-2 plan/cross 致命1 対応：Wow64 側の StartupApproved は Registry32 ビュー + ApprovedRun で統一。
+        // R-2 plan 致命2 対応：HKLM_RunOnce / HKLM_Wow64_RunOnce / HKCU_RunOnce は StartupApproved 連動なし（CanToggleEnabled=false）。
+        // 読込時は IsEnabled=true（有効扱い）のまま StartupApproved 辞書突合をスキップする。
+        var hklmApprovedRun       = ReadApprovedValues(RegistryHive.LocalMachine, RegistryView.Registry64, ApprovedRun);
+        var hklmApprovedRunWow64  = ReadApprovedValues(RegistryHive.LocalMachine, RegistryView.Registry32, ApprovedRun);
+        var hkcuApprovedRun       = ReadApprovedValues(RegistryHive.CurrentUser,  RegistryView.Default,    ApprovedRun);
 
         foreach (var e in entries)
         {
-            // ハイブ → StartupApproved 辞書の対応関係
+            // ハイブ → StartupApproved 辞書の対応関係（RunOnce 系は null → IsEnabled=true 扱い）
             Dictionary<string, byte[]>? source = e.Hive switch
             {
-                StartupHive.HKLM_Run           => hklmApprovedRun,
-                StartupHive.HKLM_RunOnce       => hklmApprovedRun,    // HKLM 側 RunOnce も Run と同居
-                StartupHive.HKLM_Wow64_Run     => hklmApprovedRun32,
-                StartupHive.HKLM_Wow64_RunOnce => hklmApprovedRun32,
-                StartupHive.HKCU_Run           => hkcuApprovedRun,
-                StartupHive.HKCU_RunOnce       => hkcuApprovedRunOnce,
+                StartupHive.HKLM_Run       => hklmApprovedRun,
+                StartupHive.HKLM_Wow64_Run => hklmApprovedRunWow64,
+                StartupHive.HKCU_Run       => hkcuApprovedRun,
+                // RunOnce 系：StartupApproved 連動なし（タスクマネージャー実装と整合）
                 _ => null
             };
 
@@ -179,12 +182,76 @@ public class StartupItemsProvider
         return dict;
     }
 
-    // ─── R-2 以降で実装（R-1 では空メソッド） ───
+    // ─── R-2 実装：SetEnabled / Save ───
 
-    /// <summary>1 エントリを書込（Phase R-2 で実装）。</summary>
-    public void Save(StartupEntryItem entry)
+    /// <summary>
+    /// StartupApproved の有効/無効を書込（Phase R-2 実装）。
+    /// 既存値があれば byte[1..11]（タイムスタンプ等・MS未公開）を保持し、byte[0] のみ書換。
+    /// 既存値がなければ Codec.Build(enabled, null) で新規 12 byte を生成。
+    /// HKLM 系は管理者権限必須（呼び元で UnauthorizedAccessException 等を捕捉してフォールバック）。
+    /// 設計書 3-2 / 6-1。
+    ///
+    /// R-2 plan-validator 致命2 対応：RunOnce 系は StartupApproved 連動非対応のため NotSupportedException。
+    /// （タスクマネージャーが RunOnce を「スタートアップ」タブに表示しない実装と整合）
+    /// </summary>
+    public void SetEnabled(StartupEntryItem entry, bool enabled)
     {
-        throw new NotImplementedException("Phase R-2 で実装予定");
+        if (entry.Hive is StartupHive.HKLM_RunOnce
+                       or StartupHive.HKCU_RunOnce
+                       or StartupHive.HKLM_Wow64_RunOnce)
+        {
+            throw new NotSupportedException(
+                $"RunOnce 系（{entry.HiveDisplay}）は StartupApproved 連動非対応です。" +
+                "次回起動後に自動削除される仕様のため、有効/無効トグルは無効化されています。");
+        }
+
+        var (hive, view, approvedSubKey) = GetApprovedLocation(entry.Hive);
+        var bytes = StartupApprovedCodec.Build(enabled, entry.StartupApprovedTrailing);
+
+        using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+        // CreateSubKey：キーが無くても作成（StartupApproved\Run はユーザーが空のままの場合あり）
+        using var key = baseKey.CreateSubKey(approvedSubKey, writable: true)
+            ?? throw new InvalidOperationException($"StartupApproved キーを開けません：{approvedSubKey}");
+
+        key.SetValue(entry.RawName, bytes, RegistryValueKind.Binary);
+    }
+
+    /// <summary>
+    /// 1 エントリを Run キー側に書込（Phase R-2 実装）。
+    /// R-2 では Command + ValueKind のみ編集対象（Name 変更は R-3 で削除→追加として実装）。
+    ///
+    /// 楽観ロック（plan-validator エッジ#3）：
+    ///   forceOverwrite=false なら Save 直前にレジストリを再読込し、メモリ上 entry.Command と差分検証。
+    ///   差分あれば SaveResult.ConflictDetected=true で返し、書込はしない。
+    ///
+    /// REG_EXPAND_SZ 厳守（plan-validator エッジ#4）：
+    ///   entry.ValueKind を SetValue 第 4 引数に渡し、%ProgramFiles% 等の環境変数を維持。
+    ///
+    /// 設計書 3-3 / 6-1。
+    /// </summary>
+    public SaveResult Save(StartupEntryItem entry, bool forceOverwrite = false)
+    {
+        if (!forceOverwrite)
+        {
+            var (currentCommand, _) = ReadCurrentValue(entry);
+            if (currentCommand != null && currentCommand != entry.Command)
+            {
+                return new SaveResult
+                {
+                    Success = false,
+                    ConflictDetected = true,
+                    CurrentCommandOnConflict = currentCommand
+                };
+            }
+        }
+
+        var (hive, view, runSubKey) = GetRunLocation(entry.Hive);
+        using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+        using var key = baseKey.OpenSubKey(runSubKey, writable: true)
+            ?? throw new InvalidOperationException($"Run キーを開けません：{runSubKey}");
+
+        key.SetValue(entry.RawName, entry.Command, entry.ValueKind);
+        return new SaveResult { Success = true };
     }
 
     /// <summary>Run と StartupApproved 両方から削除（Phase R-3 で実装）。</summary>
@@ -193,9 +260,77 @@ public class StartupItemsProvider
         throw new NotImplementedException("Phase R-3 で実装予定");
     }
 
-    /// <summary>StartupApproved の有効/無効を書込（Phase R-2 で実装）。</summary>
-    public void SetEnabled(StartupEntryItem entry, bool enabled)
+    // ─── R-2 内部ヘルパー ───
+
+    /// <summary>
+    /// StartupApproved の書込先（HKLM/HKCU + キーパス）を返す。
+    /// R-2 plan/cross 致命1 対応：HKLM_Wow64_Run は Registry32 ビュー + ApprovedRun（OS が WOW6432Node にリダイレクト）。
+    /// RunOnce 系は SetEnabled の冒頭で NotSupportedException として弾かれる前提（ここに来たら設計ミス）。
+    /// </summary>
+    private static (RegistryHive hive, RegistryView view, string subKey) GetApprovedLocation(StartupHive entryHive)
     {
-        throw new NotImplementedException("Phase R-2 で実装予定");
+        return entryHive switch
+        {
+            StartupHive.HKLM_Run       => (RegistryHive.LocalMachine, RegistryView.Registry64, ApprovedRun),
+            // Wow64 側：Run キー本体（GetRunLocation）と View を揃え Registry32 で開く。
+            // タスクマネージャー実装も Wow64 側 StartupApproved は WOW6432Node 配下を見るため整合。
+            StartupHive.HKLM_Wow64_Run => (RegistryHive.LocalMachine, RegistryView.Registry32, ApprovedRun),
+            StartupHive.HKCU_Run       => (RegistryHive.CurrentUser,  RegistryView.Default,    ApprovedRun),
+            // RunOnce 系は呼ばれない（SetEnabled で NotSupportedException）
+            _ => throw new InvalidOperationException(
+                $"StartupApproved 連動非対応のハイブです：{entryHive}（RunOnce 系は CanToggleEnabled=false で UI からブロック済）")
+        };
     }
+
+    /// <summary>Run キー側の書込先（HKLM/HKCU + キーパス + View）を返す。</summary>
+    private static (RegistryHive hive, RegistryView view, string subKey) GetRunLocation(StartupHive entryHive)
+    {
+        return entryHive switch
+        {
+            StartupHive.HKLM_Run           => (RegistryHive.LocalMachine, RegistryView.Registry64, RunSubKey),
+            StartupHive.HKLM_RunOnce       => (RegistryHive.LocalMachine, RegistryView.Registry64, RunOnceSubKey),
+            StartupHive.HKLM_Wow64_Run     => (RegistryHive.LocalMachine, RegistryView.Registry32, Wow64RunSubKey),
+            StartupHive.HKLM_Wow64_RunOnce => (RegistryHive.LocalMachine, RegistryView.Registry32, Wow64RunOnceSubKey),
+            StartupHive.HKCU_Run           => (RegistryHive.CurrentUser,  RegistryView.Default,    RunSubKey),
+            StartupHive.HKCU_RunOnce       => (RegistryHive.CurrentUser,  RegistryView.Default,    RunOnceSubKey),
+            _ => throw new ArgumentOutOfRangeException(nameof(entryHive))
+        };
+    }
+
+    /// <summary>Run キーから現在の値を読む（楽観ロック用）。</summary>
+    private static (string? command, RegistryValueKind? kind) ReadCurrentValue(StartupEntryItem entry)
+    {
+        var (hive, view, runSubKey) = GetRunLocation(entry.Hive);
+        try
+        {
+            using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+            using var key = baseKey.OpenSubKey(runSubKey, writable: false);
+            if (key == null) return (null, null);
+
+            var value = key.GetValue(entry.RawName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            if (value == null) return (null, null);
+
+            return (value.ToString(), key.GetValueKind(entry.RawName));
+        }
+        catch
+        {
+            return (null, null);
+        }
+    }
+}
+
+/// <summary>
+/// Save の結果を返す（楽観ロック対応）。
+/// 設計書 3-3 エッジ#3。
+/// </summary>
+public class SaveResult
+{
+    /// <summary>書込成功。</summary>
+    public bool Success { get; init; }
+
+    /// <summary>並行編集を検出したため書込を中止した。</summary>
+    public bool ConflictDetected { get; init; }
+
+    /// <summary>Conflict 検出時、外部で書き換えられた現在の Command 値（ユーザーへの提示用）。</summary>
+    public string? CurrentCommandOnConflict { get; init; }
 }

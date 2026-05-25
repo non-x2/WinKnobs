@@ -112,6 +112,13 @@ scripts/*.bat
 docs/テスト結果_*.md
 docs/引き継ぎメモ_*.md
 
+# Phase R-2（2026-05-26）：UI Automation テスト結果・スクショ
+# JSON 結果はタイムスタンプ付き履歴・スクショは FAIL 時自動生成
+# どちらも個人 PC のテスト履歴で公開対象外
+scripts/ui_automation/results/*.json
+scripts/ui_automation/results/*.log
+scripts/ui_automation/screenshots/*.png
+
 # 次セッション再開ガイド（個人運用ファイル・ホスト名含む）
 次セッション再開ガイド.md
 

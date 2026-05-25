@@ -130,6 +130,13 @@ public partial class MainViewModel : ObservableObject
 
         if (isStartup)
         {
+            // R-2 plan-validator 依存関係指摘：IsDirty 編集が残っている時は Load しない
+            //   問答無用 Load だと「カテゴリ切替で編集消失」の致命 UX バグになる
+            if (StartupListVM.HasDirtyEntries)
+            {
+                StatusMessage = $"カテゴリ「{value!.Name}」を選択中。⚠️ 編集中のエントリがあります（💾保存 または ↺戻す で確定してください）。";
+                return;
+            }
             // Startup に切り替わるたびに読み直し（regedit 外部変更が反映されるように）
             StartupListVM.Load();
         }
@@ -185,6 +192,18 @@ public partial class MainViewModel : ObservableObject
         // Startup ペイン時はスタートアップ項目を再読込（設計書 9 リスク表 #8）
         if (IsStartupCategorySelected)
         {
+            // R-2 plan-validator 依存関係指摘：F5 でも IsDirty 編集を破棄しない
+            if (StartupListVM.HasDirtyEntries)
+            {
+                var ok = _dialogs.Confirm(
+                    "編集中のエントリがあります。\n再読込すると編集内容が失われます。\n\nそれでも再読込しますか？",
+                    "編集破棄の確認");
+                if (!ok)
+                {
+                    StatusMessage = "🔄 再読込をキャンセルしました。";
+                    return;
+                }
+            }
             StartupListVM.Load();
             StatusMessage = "🔄 スタートアップ項目を最新の状態に更新しました。";
             return;

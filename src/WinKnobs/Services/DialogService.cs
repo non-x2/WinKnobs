@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using WinKnobs.Models;
 using WinKnobs.ViewModels;
+using WinKnobs.ViewModels.Startup;
 using WinKnobs.Views;
+using WinKnobs.Views.Startup;
 
 namespace WinKnobs.Services;
 
@@ -125,6 +127,22 @@ public class DialogService
             MessageBoxResult.No  => ElevationChoice.ContinueAnyway,
             _                    => ElevationChoice.Cancel,  // Cancel または × ボタン
         };
+    }
+
+    /// <summary>
+    /// スタートアップエントリ編集ダイアログを開く（Phase R-2）。
+    /// 戻り値：true=OK / false=キャンセル / null=オーナーなしで何もしなかった等。
+    /// </summary>
+    public bool? OpenStartupEdit(StartupEntryItem entry)
+    {
+        var vm = _services.GetRequiredService<StartupEntryEditViewModel>();
+        vm.Load(entry);
+
+        var dlg = _services.GetRequiredService<StartupEntryEditDialog>();
+        dlg.DataContext = vm;
+        dlg.Owner = Owner;
+
+        return dlg.ShowDialog();
     }
 
     /// <summary>

@@ -94,7 +94,9 @@ if ($Mode -eq "VM") {
         @{ Source = "$scriptRoot\testcases\tc_bug2_regression.ps1"; Dest = "$VMScriptsDir\testcases\tc_bug2_regression.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_apply_registry.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_registry.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_apply_fsutil.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_fsutil.ps1" },
-        @{ Source = "$scriptRoot\testcases\tc_apply_v2.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_v2.ps1" }
+        @{ Source = "$scriptRoot\testcases\tc_apply_v2.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_v2.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_startup_smoke.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_smoke.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_startup_edit.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_edit.ps1" }
     )
     foreach ($f in $filesToCopy) {
         Copy-VMFile -Name $VMName -SourcePath $f.Source -DestinationPath $f.Dest -FileSource Host -Force
@@ -212,6 +214,8 @@ $tcFiles = @{
     "apply_registry"   = "tc_apply_registry.ps1"
     "apply_fsutil"     = "tc_apply_fsutil.ps1"
     "apply_v2"         = "tc_apply_v2.ps1"
+    "startup_smoke"    = "tc_startup_smoke.ps1"  # R-2 閲覧UI 動作確認（書込なし）
+    "startup_edit"     = "tc_startup_edit.ps1"   # R-2 編集・保存・トグル（HKCU 書込発生・cleanup あり）
 }
 
 foreach ($tc in $TestCase) {
@@ -313,6 +317,8 @@ foreach ($tc in $TestCase) {
         "apply_registry"   { "Invoke-ApplyRegistry" }
         "apply_fsutil"     { "Invoke-ApplyFsutil" }
         "apply_v2"         { "Invoke-ApplyV2" }
+        "startup_smoke"    { "Invoke-StartupSmoke" }
+        "startup_edit"     { "Invoke-StartupEdit" }
     }
 
     Write-Log ("===== TestCase: " + $tc + " =====")
@@ -330,6 +336,9 @@ foreach ($tc in $TestCase) {
 
     try {
         $tcResults = & $funcName -Win $win
+        # 暗黙的 pipeline 出力（boolean 等の混入）を除去
+        # PSCustomObject (New-TestResult が返す型) のみ通す
+        $tcResults = @($tcResults | Where-Object { $_ -is [PSCustomObject] -and $null -ne $_.Status })
 
         $okCount = 0
         $failCount = 0
