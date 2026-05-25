@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+
+    <!-- アプリ情報 -->
+    <AssemblyTitle>WinKnobs</AssemblyTitle>
+    <AssemblyDescription>Modern Windows 11 tweaking tool inspired by Ijikuru Tool</AssemblyDescription>
+    <AssemblyCompany>のんラボ (nonlabo)</AssemblyCompany>
+    <AssemblyProduct>WinKnobs</AssemblyProduct>
+    <Authors>nonlabo</Authors>
+    <Copyright>Copyright (c) 2026 のんラボ (nonlabo)</Copyright>
+    <AssemblyVersion>0.1.4.0</AssemblyVersion>
+    <FileVersion>0.1.4.0</FileVersion>
+    <Version>0.1.4-dev</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/nonlabo/WinKnobs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/nonlabo/WinKnobs</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- マニフェスト（HiDPI・UAC設定） -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon></ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.7" />
+  </ItemGroup>
+
+</Project>

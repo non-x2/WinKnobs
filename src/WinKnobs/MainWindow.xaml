@@ -1,0 +1,219 @@
+<Window x:Class="WinKnobs.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WinKnobs.ViewModels"
+        xmlns:conv="clr-namespace:WinKnobs.Converters"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="WinKnobs"
+        Height="720" Width="1280"
+        MinHeight="500" MinWidth="900"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Bg.Window}"
+        Foreground="{DynamicResource Fg.Default}">
+
+    <Window.Resources>
+        <conv:EnumEqualsConverter x:Key="EnumEquals"/>
+    </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Key="F" Modifiers="Control" Command="{Binding RefreshCommand}"/>
+        <KeyBinding Key="F5"                    Command="{Binding RefreshCommand}"/>
+        <KeyBinding Key="E" Modifiers="Control" Command="{Binding OpenRegistryEditorCommand}"/>
+    </Window.InputBindings>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- =================== メニューバー =================== -->
+        <Menu Grid.Row="0" FontSize="13">
+            <MenuItem Header="ファイル(_F)" x:Name="MenuFile" AutomationProperties.AutomationId="MenuFile">
+                <MenuItem x:Name="MenuOpenItem" Header="開く(_O)..." InputGestureText="Enter" Command="{Binding OpenSelectedItemCommand}" AutomationProperties.AutomationId="MenuOpenItem"/>
+                <Separator/>
+                <MenuItem Header="設定プロファイル">
+                    <MenuItem Header="エクスポート(_E)..." InputGestureText="Ctrl+Shift+E" IsEnabled="False"/>
+                    <MenuItem Header="インポート(_I)..." InputGestureText="Ctrl+Shift+I" IsEnabled="False"/>
+                    <MenuItem Header="プロファイル管理(_M)..." IsEnabled="False"/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem x:Name="MenuOpenBackupFolderFile" Header="バックアップフォルダを開く" Command="{Binding OpenBackupFolderCommand}" AutomationProperties.AutomationId="MenuOpenBackupFolderFile"/>
+                <Separator/>
+                <MenuItem x:Name="MenuExitApp" Header="終了(_X)" InputGestureText="Alt+F4" Command="{Binding ExitAppCommand}" AutomationProperties.AutomationId="MenuExitApp"/>
+            </MenuItem>
+
+            <MenuItem Header="編集(_E)" x:Name="MenuEdit" AutomationProperties.AutomationId="MenuEdit">
+                <MenuItem Header="元に戻す(_U)" InputGestureText="Ctrl+Z" IsEnabled="False"/>
+                <Separator/>
+                <MenuItem x:Name="MenuSearch" Header="検索(_F)..." InputGestureText="Ctrl+F" Click="SearchMenu_Click" AutomationProperties.AutomationId="MenuSearch"/>
+                <MenuItem Header="お気に入りに追加(_D)" InputGestureText="Ctrl+D" IsEnabled="False"/>
+            </MenuItem>
+
+            <MenuItem Header="表示(_V)" x:Name="MenuView" AutomationProperties.AutomationId="MenuView">
+                <MenuItem Header="大きいアイコン" IsCheckable="True"/>
+                <MenuItem Header="詳細表示" IsCheckable="True" IsChecked="True"/>
+                <Separator/>
+                <MenuItem Header="ナビゲーター（ツリー）を表示" IsCheckable="True" IsChecked="True"/>
+                <MenuItem Header="危険度マーク表示" IsCheckable="True" IsChecked="True"/>
+                <Separator/>
+                <MenuItem x:Name="MenuApplyLight"  Header="ライトテーマ"        Command="{Binding ApplyLightCommand}"        AutomationProperties.AutomationId="MenuApplyLight"
+                          IsChecked="{Binding CurrentThemeMode, Converter={StaticResource EnumEquals}, ConverterParameter=Light, Mode=OneWay}"/>
+                <MenuItem x:Name="MenuApplyDark"   Header="ダークテーマ"        Command="{Binding ApplyDarkCommand}"         AutomationProperties.AutomationId="MenuApplyDark"
+                          IsChecked="{Binding CurrentThemeMode, Converter={StaticResource EnumEquals}, ConverterParameter=Dark, Mode=OneWay}"/>
+                <MenuItem x:Name="MenuApplySystem" Header="システムに合わせる"   Command="{Binding ApplySystemThemeCommand}"  AutomationProperties.AutomationId="MenuApplySystem"
+                          IsChecked="{Binding CurrentThemeMode, Converter={StaticResource EnumEquals}, ConverterParameter=System, Mode=OneWay}"/>
+                <Separator/>
+                <MenuItem x:Name="MenuRefresh" Header="最新の情報に更新" InputGestureText="F5" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="MenuRefresh"/>
+            </MenuItem>
+
+            <MenuItem Header="ツール(_T)" x:Name="MenuTools" AutomationProperties.AutomationId="MenuTools">
+                <MenuItem x:Name="MenuOpenRegistry"     Header="レジストリエディタを開く" InputGestureText="Ctrl+E" Command="{Binding OpenRegistryEditorCommand}"   AutomationProperties.AutomationId="MenuOpenRegistry"/>
+                <MenuItem x:Name="MenuOpenControlPanel" Header="コントロールパネル"      Command="{Binding OpenControlPanelCommand}"                          AutomationProperties.AutomationId="MenuOpenControlPanel"/>
+                <MenuItem x:Name="MenuOpenMsConfig"     Header="システム構成 (msconfig)" Command="{Binding OpenMsConfigCommand}"                              AutomationProperties.AutomationId="MenuOpenMsConfig"/>
+                <MenuItem x:Name="MenuOpenGodMode"      Header="GodMode を開く"          Command="{Binding OpenGodModeCommand}"                               AutomationProperties.AutomationId="MenuOpenGodMode"/>
+                <Separator/>
+                <MenuItem x:Name="MenuOpenBackupFolder"  Header="バックアップフォルダを開く" Command="{Binding OpenBackupFolderCommand}"                       AutomationProperties.AutomationId="MenuOpenBackupFolder"/>
+                <MenuItem x:Name="MenuCreateRestorePoint" Header="復元ポイントを作成"      Command="{Binding CreateRestorePointCommand}"                       AutomationProperties.AutomationId="MenuCreateRestorePoint"/>
+                <Separator/>
+                <MenuItem x:Name="MenuLogoff"           Header="ログオフ"                  Command="{Binding LogoffCommand}"                                    AutomationProperties.AutomationId="MenuLogoff"/>
+                <MenuItem x:Name="MenuRestart"          Header="再起動"                    Command="{Binding RestartCommand}"                                   AutomationProperties.AutomationId="MenuRestart"/>
+                <MenuItem x:Name="MenuShutdown"         Header="シャットダウン"            Command="{Binding ShutdownCommand}"                                  AutomationProperties.AutomationId="MenuShutdown"/>
+                <MenuItem x:Name="MenuRestartExplorer"  Header="シェル(エクスプローラ)再起動" Command="{Binding RestartExplorerCommand}"                       AutomationProperties.AutomationId="MenuRestartExplorer"/>
+            </MenuItem>
+
+            <MenuItem Header="ヘルプ(_H)" x:Name="MenuHelp" AutomationProperties.AutomationId="MenuHelp">
+                <MenuItem Header="ヘルプ" InputGestureText="F1" IsEnabled="False"/>
+                <MenuItem Header="チュートリアル" IsEnabled="False"/>
+                <Separator/>
+                <MenuItem x:Name="MenuCopyEnvironmentInfo" Header="環境情報をコピー(_C)" Command="{Binding CopyEnvironmentInfoCommand}" AutomationProperties.AutomationId="MenuCopyEnvironmentInfo"/>
+                <MenuItem Header="更新を確認(_U)" IsEnabled="False"/>
+                <Separator/>
+                <MenuItem x:Name="MenuOpenGitHubRepo" Header="GitHub リポジトリを開く"      Command="{Binding OpenGitHubRepoCommand}" AutomationProperties.AutomationId="MenuOpenGitHubRepo"/>
+                <MenuItem x:Name="MenuOpenGitHubIssues" Header="不具合・要望を報告 (Issues)"  Command="{Binding OpenGitHubIssuesCommand}" AutomationProperties.AutomationId="MenuOpenGitHubIssues"/>
+                <MenuItem x:Name="MenuOpenGitHubSponsors" Header="開発を支援する (Sponsors)"    Command="{Binding OpenGitHubSponsorsCommand}" AutomationProperties.AutomationId="MenuOpenGitHubSponsors"/>
+                <Separator/>
+                <MenuItem x:Name="MenuShowVersion" Header="バージョン情報" InputGestureText="F10" Command="{Binding ShowVersionCommand}" AutomationProperties.AutomationId="MenuShowVersion"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- =================== メインエリア =================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260" MinWidth="180"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    BorderBrush="{DynamicResource Border.Default}"
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0"
+                            Padding="6"
+                            Background="{DynamicResource Bg.Panel}"
+                            BorderBrush="{DynamicResource Border.Default}"
+                            BorderThickness="0,0,0,1">
+                        <TextBox x:Name="SearchBox"
+                                 AutomationProperties.AutomationId="SearchBox"
+                                 FontSize="13"
+                                 Style="{DynamicResource SearchBoxStyle}"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="項目を検索 (Ctrl+F)"/>
+                    </Border>
+
+                    <TreeView Grid.Row="1"
+                              x:Name="CategoriesTree"
+                              AutomationProperties.AutomationId="CategoriesTree"
+                              ItemsSource="{Binding Categories}"
+                              SelectedItemChanged="TreeView_SelectedItemChanged"
+                              BorderThickness="0">
+                        <TreeView.Resources>
+                            <!-- 🐛 修正 2026-05-15：BasedOn でテーマ TreeViewItem スタイルを継承し、
+                                 Foreground=黒 のデフォルト挙動を防ぐ（黒地に黒文字バグ対策）。
+                                 🆕 Phase B-1（2026-05-20）：AutomationId="Category_<Type>" を動的バインド付与 -->
+                            <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                <Setter Property="Padding" Value="4,3"/>
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="AutomationProperties.AutomationId" Value="{Binding Type, StringFormat=Category_{0}}"/>
+                            </Style>
+                        </TreeView.Resources>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Icon}" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding Name}"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="4"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ShowsPreview="True"
+                          Background="Transparent"/>
+
+            <DataGrid Grid.Column="2"
+                      x:Name="ItemsGrid"
+                      AutomationProperties.AutomationId="ItemsGrid"
+                      ItemsSource="{Binding FilteredItems}"
+                      SelectedItem="{Binding SelectedItem}"
+                      MouseDoubleClick="ItemsGrid_MouseDoubleClick"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column"
+                      RowHeight="32"
+                      CanUserResizeRows="False"
+                      SelectionMode="Single"
+                      BorderThickness="0">
+                <DataGrid.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding OpenSelectedItemCommand}"/>
+                </DataGrid.InputBindings>
+                <!-- 🆕 Phase B-1（2026-05-20）：AutomationId="Item_<Id>" を動的バインド付与
+                     Themes/{Dark,Light}.xaml に DataGridRow スタイル定義なし → BasedOn 不要
+                     （WPF デフォルトの DataGridRow テンプレートをそのまま利用） -->
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="AutomationProperties.AutomationId" Value="{Binding Id, StringFormat=Item_{0}}"/>
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="" Binding="{Binding RiskMark}" Width="32" FontSize="14"/>
+                    <DataGridTextColumn Header="項目" Binding="{Binding Title}" Width="240"/>
+                    <DataGridTextColumn Header="説明" Binding="{Binding Description}" Width="*"/>
+                    <DataGridTextColumn Header="再起動" Binding="{Binding RestartMark}" Width="60"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+
+        <!-- =================== ステータスバー =================== -->
+        <StatusBar Grid.Row="2"
+                   Background="{DynamicResource Bg.Panel}"
+                   BorderBrush="{DynamicResource Border.Default}"
+                   BorderThickness="0,1,0,0">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusMessageText"
+                           AutomationProperties.AutomationId="StatusMessageText"
+                           Text="{Binding StatusMessage}" FontSize="12"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="WinKnobs v0.1.4-dev" FontSize="11"
+                           Foreground="{DynamicResource Fg.Subtle}"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

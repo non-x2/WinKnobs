@@ -1,0 +1,251 @@
+<Window x:Class="WinKnobs.Views.SettingDialog"
+        x:Name="SettingDialogRoot"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WinKnobs.ViewModels"
+        xmlns:conv="clr-namespace:WinKnobs.Converters"
+        d:DataContext="{d:DesignInstance Type=vm:SettingDialogViewModel}"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="{Binding Title}"
+        AutomationProperties.AutomationId="SettingDialog"
+        Height="600" Width="700"
+        MinHeight="480" MinWidth="560"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Bg.Window}"
+        Foreground="{DynamicResource Fg.Default}">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:EnumToVisibilityConverter x:Key="EnumToVis"/>
+        <conv:InvertBoolConverter x:Key="InvertBoolConv"/>
+        <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
+    </Window.Resources>
+
+    <DockPanel LastChildFill="True" Margin="0">
+
+        <!-- =================== ヘッダ：タイトル＋危険度＋説明 =================== -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource Bg.Panel}"
+                BorderBrush="{DynamicResource Border.Default}"
+                BorderThickness="0,0,0,1"
+                Padding="14,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding RiskMark}" FontSize="20" Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Fg.Default}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding Description}"
+                           TextWrapping="Wrap"
+                           Margin="0,8,0,0"
+                           FontSize="12"
+                           Foreground="{DynamicResource Fg.Muted}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- =================== フッター：操作ボタン =================== -->
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource Bg.Panel}"
+                BorderBrush="{DynamicResource Border.Default}"
+                BorderThickness="0,1,0,0"
+                Padding="10">
+            <UniformGrid Rows="1" Columns="7">
+                <Button x:Name="OkButton"      AutomationProperties.AutomationId="OkButton"      Content="OK"      Command="{Binding OkCommand}"            Margin="3" Padding="6,4" IsDefault="True"/>
+                <Button x:Name="CancelButton"  AutomationProperties.AutomationId="CancelButton"  Content="キャンセル" Command="{Binding CancelCommand}"        Margin="3" Padding="6,4" IsCancel="True"/>
+                <Button x:Name="ApplyButton"   AutomationProperties.AutomationId="ApplyButton"   Content="適用"    Command="{Binding ApplySettingCommand}"   Margin="3" Padding="6,4"/>
+                <Button x:Name="RestoreButton" AutomationProperties.AutomationId="RestoreButton" Content="戻す"    Command="{Binding RestoreSettingCommand}" Margin="3" Padding="6,4"/>
+                <Button x:Name="SaveButton"    AutomationProperties.AutomationId="SaveButton"    Content="保存"    Command="{Binding SaveSettingCommand}"    Margin="3" Padding="6,4"/>
+                <Button x:Name="LoadButton"    AutomationProperties.AutomationId="LoadButton"    Content="読込"    Command="{Binding LoadSettingCommand}"    Margin="3" Padding="6,4"/>
+                <Button x:Name="HelpButton"    AutomationProperties.AutomationId="HelpButton"    Content="ヘルプ"  Command="{Binding HelpCommand}"           Margin="3" Padding="6,4"/>
+            </UniformGrid>
+        </Border>
+
+        <!-- =================== ステータスバー =================== -->
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource Bg.Panel}"
+                BorderBrush="{DynamicResource Border.Subtle}"
+                BorderThickness="0,1,0,0"
+                Padding="10,6">
+            <TextBlock x:Name="DialogStatusText"
+                       AutomationProperties.AutomationId="DialogStatusText"
+                       Text="{Binding StatusMessage}"
+                       FontSize="12"
+                       Foreground="{DynamicResource Fg.Muted}"
+                       TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- =================== 中央：編集エリア =================== -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- レジストリパス（読み取り専用） -->
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="レジストリ" Margin="0,8,8,8" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Muted}"/>
+                <TextBox  Grid.Row="0" Grid.Column="1"
+                          Text="{Binding RegistryPathDisplay, Mode=OneWay}"
+                          ToolTip="{Binding RegistryPathDisplay}"
+                          IsReadOnly="True"
+                          Margin="0,4" Padding="6,4"
+                          FontFamily="Consolas"
+                          Background="{DynamicResource Bg.Alt}"
+                          BorderBrush="{DynamicResource Border.Default}"
+                          Foreground="{DynamicResource Fg.Default}"/>
+
+                <!-- ★A3-2-c：「値（クリックで変更）」インライン編集 -->
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="値（クリックで変更）" Margin="0,12,8,4" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Default}" FontWeight="SemiBold"/>
+
+                <Grid Grid.Row="1" Grid.Column="1" Margin="0,8,0,4">
+
+                    <!-- cross-reviewer U-2 対応：編集中/適用済みの枠色強調 Style を共通定義
+                         🐛 修正 2026-05-15（第3波）：BasedOn でテーマ ComboBox Style を継承
+                         （テーマ側で ControlTemplate を自前定義してダーク化しているため必須） -->
+                    <Grid.Resources>
+                        <!-- ComboBox 用 Style：テーマ ComboBox（Template含む）を継承 -->
+                        <Style x:Key="EditableComboStyle" TargetType="ComboBox"
+                               BasedOn="{StaticResource {x:Type ComboBox}}">
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsModified}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFE57700"/>
+                                    <Setter Property="BorderThickness" Value="3"/>
+                                </DataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsApplied}" Value="True"/>
+                                        <Condition Binding="{Binding IsModified}" Value="False"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="BorderBrush" Value="#FF4CAF50"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                        <!-- TextBox 用 Style（TextBox は Aero でも問題ないため Template 継承不要） -->
+                        <Style x:Key="EditableTextStyle" TargetType="TextBox">
+                            <Setter Property="Padding" Value="6,6"/>
+                            <Setter Property="FontFamily" Value="Consolas"/>
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+                            <Setter Property="CaretBrush" Value="{DynamicResource Fg.Default}"/>
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ValueType}" Value="DWord">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ValueType}" Value="String">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ValueType}" Value="ExpandString">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ValueType}" Value="Binary">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsModified}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFE57700"/>
+                                    <Setter Property="BorderThickness" Value="3"/>
+                                </DataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsApplied}" Value="True"/>
+                                        <Condition Binding="{Binding IsModified}" Value="False"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="BorderBrush" Value="#FF4CAF50"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Resources>
+
+                    <!-- Boolean 用 ComboBox（OFF/ON）-->
+                    <ComboBox x:Name="EditableBoolCombo"
+                              AutomationProperties.AutomationId="EditableBoolCombo"
+                              Visibility="{Binding ValueType, Converter={StaticResource EnumToVis}, ConverterParameter=Boolean}"
+                              ItemsSource="{Binding BooleanChoices}"
+                              SelectedIndex="{Binding EditableBoolIndex}"
+                              MinWidth="220"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center"
+                              Style="{StaticResource EditableComboStyle}"/>
+
+                    <!-- Command 型用 ComboBox（任意選択肢）-->
+                    <ComboBox x:Name="EditableCommandCombo"
+                              AutomationProperties.AutomationId="EditableCommandCombo"
+                              Visibility="{Binding ValueType, Converter={StaticResource EnumToVis}, ConverterParameter=Command}"
+                              ItemsSource="{Binding Choices}"
+                              SelectedIndex="{Binding EditableBoolIndex}"
+                              MinWidth="280"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center"
+                              Style="{StaticResource EditableComboStyle}"/>
+
+                    <!-- DWord/String/ExpandString/Binary 用 TextBox -->
+                    <TextBox x:Name="EditableValueBox"
+                             AutomationProperties.AutomationId="EditableValueBox"
+                             Text="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EditableTextStyle}"/>
+
+                </Grid>
+
+                <!-- ★A3-2-c：「元の値」（編集前のスナップショット）-->
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="元の値" Margin="0,8,8,8" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Muted}"/>
+                <TextBlock Grid.Row="2" Grid.Column="1"
+                           x:Name="OriginalValueText"
+                           AutomationProperties.AutomationId="OriginalValueText"
+                           Text="{Binding OriginalValueDisplay}"
+                           FontFamily="Consolas"
+                           FontSize="12"
+                           Margin="0,4" Padding="6,4"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           FontWeight="{Binding IsModified, Converter={StaticResource BoolToFontWeight}}"/>
+
+                <!-- 推奨値 -->
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="推奨値" Margin="0,8,8,8" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Muted}"/>
+                <TextBlock Grid.Row="3" Grid.Column="1"
+                           Text="{Binding RecommendedValue, Mode=OneWay}"
+                           FontFamily="Consolas"
+                           FontSize="12"
+                           Margin="0,4" Padding="6,4"
+                           Foreground="{DynamicResource Fg.Default}"/>
+
+                <!-- Windows 既定値 -->
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Windows既定値" Margin="0,8,8,8" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Muted}"/>
+                <TextBlock Grid.Row="4" Grid.Column="1"
+                           Text="{Binding DefaultValue, Mode=OneWay}"
+                           FontFamily="Consolas"
+                           FontSize="12"
+                           Margin="0,4" Padding="6,4"
+                           Foreground="{DynamicResource Fg.Muted}"/>
+
+                <!-- 反映タイミング（RestartScope） -->
+                <TextBlock Grid.Row="5" Grid.Column="1"
+                           Text="{Binding RestartHint}"
+                           Margin="0,12,0,0"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           FontSize="11"/>
+            </Grid>
+        </ScrollViewer>
+
+    </DockPanel>
+</Window>

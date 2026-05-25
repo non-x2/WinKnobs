@@ -1,0 +1,186 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 23:34:26",
+    "EndTime":  "2026-05-20 23:34:59",
+    "DurationSec":  33.42,
+    "TestCases":  [
+                      "smoke",
+                      "dialog_inputs"
+                  ],
+    "Counts":  {
+                   "OK":  21,
+                   "FAIL":  0,
+                   "INFO":  3,
+                   "Total":  24
+               },
+    "Results":  [
+                    {
+                        "Id":  "smoke.window_detected",
+                        "Status":  "OK",
+                        "Detail":  "WinKnobs window found",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:30.675"
+                    },
+                    {
+                        "Id":  "smoke.static.SearchBox",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:30.724"
+                    },
+                    {
+                        "Id":  "smoke.static.CategoriesTree",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:30.753"
+                    },
+                    {
+                        "Id":  "smoke.static.ItemsGrid",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:30.827"
+                    },
+                    {
+                        "Id":  "smoke.static.StatusMessageText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.202"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuFile",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.210"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuEdit",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.217"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuView",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.229"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuTools",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.244"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuHelp",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.260"
+                    },
+                    {
+                        "Id":  "smoke.category.Home",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.284"
+                    },
+                    {
+                        "Id":  "smoke.category.System",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.314"
+                    },
+                    {
+                        "Id":  "smoke.category.Privacy",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.387"
+                    },
+                    {
+                        "Id":  "smoke.category.Network",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.447"
+                    },
+                    {
+                        "Id":  "smoke.category.Kernel",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:31.495"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuOpenItem",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:32.093"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuExitApp",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:32.115"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuOpenBackupFolderFile",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:32.130"
+                    },
+                    {
+                        "Id":  "smoke.memory",
+                        "Status":  "INFO",
+                        "Detail":  "147.3 MB / PID 28352",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:32.464"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.current_is_numeric",
+                        "Status":  "OK",
+                        "Detail":  "現在値 \u00270\u0027 は数値",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:36.183"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.original_value",
+                        "Status":  "INFO",
+                        "Detail":  "OriginalValue: \u00270\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:36.219"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.set_invalid",
+                        "Status":  "OK",
+                        "Detail":  "不正値 \u0027abc\u0027 をセット・取得値 \u0027abc\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:36.751"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.binary_4byte_format",
+                        "Status":  "OK",
+                        "Detail":  "Binary 4 byte 形式 OK: \u002700 00 00 00\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:41.697"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.original_value",
+                        "Status":  "INFO",
+                        "Detail":  "OriginalValue: \u002700 00 00 00\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:34:41.725"
+                    }
+                ]
+}

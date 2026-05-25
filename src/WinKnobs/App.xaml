@@ -1,0 +1,15 @@
+<Application x:Class="WinKnobs.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!--
+                  ThemeService が起動時に Themes/Light.xaml または Themes/Dark.xaml で置換する。
+                  デザイン時はライトテーマを表示する初期値。
+                -->
+                <ResourceDictionary Source="Themes/Light.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

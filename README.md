@@ -1,0 +1,147 @@
+# WinKnobs
+
+> 🎛️ A modern Windows 11 tweaking tool, inspired by 「いじくるツール」(Ijikuru Tool) by Shinobu Takahashi.
+>
+> 🎛️ 高橋忍さん作「いじくるツール」にインスパイアされた、最新Windows 11対応の独自実装ツール。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Windows 11](https://img.shields.io/badge/Windows-11-blue?logo=windows)](https://www.microsoft.com/windows/windows-11)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-purple?logo=dotnet)](https://dotnet.microsoft.com/)
+
+---
+
+## 🌐 Languages / 言語
+
+- [日本語](#日本語)
+- [English](#english)
+
+---
+
+## 日本語
+
+### 概要
+
+WinKnobs は、Windows 11 の隠し設定や深い部分を、安全に・分かりやすく変更できる無料のチューニングツールです。
+
+「いじくるツール」（高橋忍さん作・2018年で開発停止）の使い勝手と項目分類を**リスペクト**しつつ、最新の Windows 11 / 10 に対応した完全独自実装です。
+
+### 特徴
+
+- 🔒 **安全第一**：レジストリ変更前に自動バックアップ（.regファイル出力）
+- 🛡️ **ワンクリック復元**：変更前の状態にすぐ戻せる
+- 📦 **システム復元ポイント自動作成**：重大な変更時に保険を作る
+- ⚠️ **危険度マーク**：項目ごとに緑（安全）／黄（注意）／赤（上級者向け）を表示
+- 📝 **日本語の親切な説明**：何が変わるか・どう影響するかを項目ごとに記載
+- 🎨 **モダンなWPF UI**：Windows 11デザインに馴染むネイティブGUI
+- 🔓 **オープンソース（MIT License）**：誰でも使える・改造できる・配布できる
+
+### スクリーンショット
+
+（v0.1.0 リリース時に追加予定）
+
+### 動作環境
+
+- Windows 11（推奨）/ Windows 10
+- .NET 10 ランタイム（exe同梱・別途インストール不要）
+- 管理者権限（一部機能で必要）
+
+### インストール
+
+1. [Releases](../../releases) ページから最新版の `WinKnobs.exe` をダウンロード
+2. 任意のフォルダに置く（インストーラ不要・ポータブル）
+3. ダブルクリックで起動
+
+### 使い方
+
+1. 起動したら、左メニューからカテゴリを選択
+2. 変更したい項目を見つけてクリック
+3. 説明文を読んで、推奨設定または独自値を選択
+4. 「適用」を押すと**自動でバックアップが取られて**から変更される
+5. 万一不具合が出たら「ツール」メニュー → 「変更を元に戻す」
+
+### 開発状況
+
+- ⏳ **v0.1.x**：開発中（28 項目実装完了・OSS 公開準備中）
+- 📋 詳細：[CHANGELOG.md](CHANGELOG.md) / [CONTRIBUTING.md](CONTRIBUTING.md)
+
+### ロードマップ
+
+| バージョン | 内容 | 状態 |
+|---|---|---|
+| v0.1.0 | コア機能・主要設定項目 | 🚧 開発中 |
+| v0.2.0 | プライバシー・通知・更新の制御 | 📅 予定 |
+| v0.3.0 | ダークモード・設定エクスポート | 📅 予定 |
+| v1.0.0 | 全項目完備・多言語対応 | 📅 将来 |
+
+### 謝辞
+
+このプロジェクトは、**高橋忍さん**が作られた「**いじくるツール**」の哲学とユーザー体験から大きなインスピレーションを受けています。
+何百項目もの Windows 設定を整理して、誰でも使えるようにしてくださった先駆者に深く感謝します。
+
+WinKnobs は完全独自実装であり、いじくるツールのソースコード・アイコン・固有のテキストは一切含みません。
+タブ構成や項目選定の**アイデア**を参考にしています。
+
+### ライセンス
+
+[MIT License](LICENSE)
+
+### 開発者向け
+
+開発に参加したい方は [CONTRIBUTING.md](CONTRIBUTING.md) をご覧ください。
+
+---
+
+## English
+
+### Overview
+
+WinKnobs is a free, modern Windows tweaking tool that lets you safely modify hidden Windows 11 settings.
+
+It is inspired by the legendary Japanese freeware **「いじくるツール」(Ijikuru Tool)** by Shinobu Takahashi, which stopped development around 2018. WinKnobs is a complete clean-room reimplementation with full Windows 11 support.
+
+### Features
+
+- 🔒 **Safety first**: Automatic registry backup before any change
+- 🛡️ **One-click restore**: Roll back any change instantly
+- 📦 **System restore point** auto-creation for critical changes
+- ⚠️ **Risk indicators**: Green (safe) / Yellow (caution) / Red (advanced) per setting
+- 📝 **Detailed descriptions**: What each tweak does and its impact
+- 🎨 **Modern WPF UI**: Native Windows 11 look and feel
+- 🔓 **Open source (MIT License)**
+
+### Requirements
+
+- Windows 11 (recommended) / Windows 10
+- .NET 10 Runtime (bundled with exe)
+- Administrator privileges (for some features)
+
+### Installation
+
+1. Download the latest `WinKnobs.exe` from [Releases](../../releases)
+2. Place in any folder (portable, no installer)
+3. Double-click to launch
+
+### Acknowledgments
+
+This project is deeply inspired by the philosophy and UX of **Ijikuru Tool** by Shinobu Takahashi, a pioneer in Windows tweaking utilities. WinKnobs is an independent clean-room implementation; it contains no original source code, icons, or proprietary text from Ijikuru Tool. Only the high-level concepts of category organization and setting selection serve as references.
+
+### License
+
+[MIT License](LICENSE)
+
+---
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution guidelines.
+
+## Author
+
+- のんラボ (nonlabo) - Project owner
+- Co-developed with Claude (Anthropic)
+
+## Disclaimer / 免責事項
+
+This software modifies Windows registry settings. While WinKnobs includes safety mechanisms (auto-backup, system restore points), the user is ultimately responsible for any system changes. Always create a system restore point before making significant changes.
+
+このソフトウェアは Windows のレジストリを変更します。自動バックアップ機能を備えていますが、最終的なシステム変更の責任はユーザー本人にあります。重要な変更前には必ずシステム復元ポイントを作成してください。

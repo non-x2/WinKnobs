@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 質問・議論 / Questions & Discussions
+    url: https://github.com/nonlabo/WinKnobs/discussions
+    about: バグ・機能要望以外の質問は Discussions へお願いします / Please use Discussions for general questions.
+  - name: 🔒 セキュリティ脆弱性の報告 / Security Vulnerabilities
+    url: https://github.com/nonlabo/WinKnobs/security/advisories/new
+    about: 脆弱性は Security Advisory（プライベート）で報告してください / Report security issues privately via Security Advisory.

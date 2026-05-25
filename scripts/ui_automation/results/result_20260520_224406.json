@@ -1,0 +1,159 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 22:44:06",
+    "EndTime":  "2026-05-20 22:46:32",
+    "DurationSec":  146.07,
+    "TestCases":  [
+                      "dialog_inputs",
+                      "dialog_open",
+                      "dialog_choices"
+                  ],
+    "Counts":  {
+                   "OK":  3,
+                   "FAIL":  17,
+                   "INFO":  0,
+                   "Total":  20
+               },
+    "Results":  [
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_inputs_20260520_224428337.png",
+                        "Timestamp":  "2026-05-20 22:44:20.220"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_inputs_20260520_224428628.png",
+                        "Timestamp":  "2026-05-20 22:44:28.321"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.select",
+                        "Status":  "OK",
+                        "Detail":  "PR1 Cortana",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:44:29.913"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_open_20260520_224452807.png",
+                        "Timestamp":  "2026-05-20 22:44:36.878"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.select",
+                        "Status":  "OK",
+                        "Detail":  "PR2 ActivityHistory",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:44:37.948"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_open_20260520_224453044.png",
+                        "Timestamp":  "2026-05-20 22:44:44.833"
+                    },
+                    {
+                        "Id":  "dialog_open.Network.network.tcpAutoTuning.select",
+                        "Status":  "OK",
+                        "Detail":  "N1 TCP Auto-Tuning",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:44:45.867"
+                    },
+                    {
+                        "Id":  "dialog_open.Network.network.tcpAutoTuning.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_open_20260520_224453258.png",
+                        "Timestamp":  "2026-05-20 22:44:52.803"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeApps.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224629942.png",
+                        "Timestamp":  "2026-05-20 22:45:02.228"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeSystem.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224630177.png",
+                        "Timestamp":  "2026-05-20 22:45:10.235"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.bingSearchDisabled.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224630404.png",
+                        "Timestamp":  "2026-05-20 22:45:18.070"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.cortanaDisabled.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224630633.png",
+                        "Timestamp":  "2026-05-20 22:45:26.153"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.activityHistoryDisabled.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224630857.png",
+                        "Timestamp":  "2026-05-20 22:45:34.330"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224631088.png",
+                        "Timestamp":  "2026-05-20 22:45:42.336"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.smartScreen.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224631338.png",
+                        "Timestamp":  "2026-05-20 22:45:50.279"
+                    },
+                    {
+                        "Id":  "dialog_choices.kernel.win32PrioritySeparation.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224631600.png",
+                        "Timestamp":  "2026-05-20 22:45:58.373"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224631827.png",
+                        "Timestamp":  "2026-05-20 22:46:06.155"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224632058.png",
+                        "Timestamp":  "2026-05-20 22:46:14.166"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224632286.png",
+                        "Timestamp":  "2026-05-20 22:46:22.030"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.open",
+                        "Status":  "FAIL",
+                        "Detail":  "SettingDialog Window 未検出（AutomationId=SettingDialog）",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_224632516.png",
+                        "Timestamp":  "2026-05-20 22:46:29.941"
+                    }
+                ]
+}

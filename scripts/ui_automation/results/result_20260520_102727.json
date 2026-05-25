@@ -1,0 +1,130 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 10:27:27",
+    "EndTime":  "2026-05-20 10:28:47",
+    "DurationSec":  79.79,
+    "TestCases":  [
+                      "visual_ui",
+                      "dialog_choices"
+                  ],
+    "Counts":  {
+                   "OK":  null,
+                   "FAIL":  12,
+                   "INFO":  3,
+                   "Total":  16
+               },
+    "Results":  [
+                    {
+                        "Id":  "visual_ui.exception",
+                        "Status":  "FAIL",
+                        "Detail":  "Cannot bind argument to parameter \u0027Value\u0027 because it is an empty string.",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:27:34.313"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeApps.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_desktop.darkModeApps not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102842913.png",
+                        "Timestamp":  "2026-05-20 10:27:40.296"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeSystem.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_desktop.darkModeSystem not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102843448.png",
+                        "Timestamp":  "2026-05-20 10:27:46.154"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.bingSearchDisabled.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_privacy.bingSearchDisabled not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102843806.png",
+                        "Timestamp":  "2026-05-20 10:27:51.950"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.cortanaDisabled.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_privacy.cortanaDisabled not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102844193.png",
+                        "Timestamp":  "2026-05-20 10:27:57.531"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.activityHistoryDisabled.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_privacy.activityHistoryDisabled not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102844631.png",
+                        "Timestamp":  "2026-05-20 10:28:03.254"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.count",
+                        "Status":  "OK",
+                        "Detail":  "W4 タスクバーサイズ: 3 択（期待値 3 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:28:06.857"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "小",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:28:06.864"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "中（既定）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:28:06.864"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "大",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:28:06.865"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.smartScreen.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_privacy.smartScreen not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102845059.png",
+                        "Timestamp":  "2026-05-20 10:28:13.829"
+                    },
+                    {
+                        "Id":  "dialog_choices.kernel.win32PrioritySeparation.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_kernel.win32PrioritySeparation not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102845376.png",
+                        "Timestamp":  "2026-05-20 10:28:19.712"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_system.ntfs8dot3 not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102845714.png",
+                        "Timestamp":  "2026-05-20 10:28:25.641"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_system.ntfsLastAccess not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102846074.png",
+                        "Timestamp":  "2026-05-20 10:28:31.402"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_login.prefetcher not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102846445.png",
+                        "Timestamp":  "2026-05-20 10:28:37.233"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.select",
+                        "Status":  "FAIL",
+                        "Detail":  "Step=find_item / Item_network.tcpAutoTuning not found",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_choices_20260520_102846829.png",
+                        "Timestamp":  "2026-05-20 10:28:42.894"
+                    }
+                ]
+}

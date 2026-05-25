@@ -1,0 +1,334 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 10:11:38",
+    "EndTime":  "2026-05-20 10:12:03",
+    "DurationSec":  24.48,
+    "TestCases":  [
+                      "smoke",
+                      "dialog_open",
+                      "bug2_regression"
+                  ],
+    "Counts":  {
+                   "OK":  39,
+                   "FAIL":  null,
+                   "INFO":  5,
+                   "Total":  45
+               },
+    "Results":  [
+                    {
+                        "Id":  "smoke.window_detected",
+                        "Status":  "OK",
+                        "Detail":  "WinKnobs window found",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.205"
+                    },
+                    {
+                        "Id":  "smoke.static.SearchBox",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.268"
+                    },
+                    {
+                        "Id":  "smoke.static.CategoriesTree",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.296"
+                    },
+                    {
+                        "Id":  "smoke.static.ItemsGrid",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.410"
+                    },
+                    {
+                        "Id":  "smoke.static.StatusMessageText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.950"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuFile",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.958"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuEdit",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.971"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuView",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:43.986"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuTools",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.005"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuHelp",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.031"
+                    },
+                    {
+                        "Id":  "smoke.category.Home",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.067"
+                    },
+                    {
+                        "Id":  "smoke.category.System",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.102"
+                    },
+                    {
+                        "Id":  "smoke.category.Privacy",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.187"
+                    },
+                    {
+                        "Id":  "smoke.category.Network",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.310"
+                    },
+                    {
+                        "Id":  "smoke.category.Kernel",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.364"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuOpenItem",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:44.983"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuExitApp",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:45.017"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuOpenBackupFolderFile",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:45.034"
+                    },
+                    {
+                        "Id":  "smoke.memory",
+                        "Status":  "INFO",
+                        "Detail":  "134.9 MB / PID 21676",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:45.370"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.select",
+                        "Status":  "OK",
+                        "Detail":  "PR1 Cortana",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:46.510"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.open",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.204"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.dialog.OkButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.313"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.dialog.ApplyButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.452"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.dialog.RestoreButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.593"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.dialog.CancelButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.716"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.dialog.OriginalValueText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.860"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.dialog.DialogStatusText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:48.989"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.cortanaDisabled.close",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:49.606"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.select",
+                        "Status":  "OK",
+                        "Detail":  "PR2 ActivityHistory",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:51.095"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.open",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:52.709"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.dialog.OkButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:52.743"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.dialog.ApplyButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:52.783"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.dialog.RestoreButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:52.821"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.dialog.CancelButton",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:52.916"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.dialog.OriginalValueText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:53.001"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.dialog.DialogStatusText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:53.066"
+                    },
+                    {
+                        "Id":  "dialog_open.Privacy.privacy.activityHistoryDisabled.close",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:53.641"
+                    },
+                    {
+                        "Id":  "dialog_open.Network.network.tcpAutoTuning.select",
+                        "Status":  "OK",
+                        "Detail":  "N1 TCP Auto-Tuning",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:11:55.169"
+                    },
+                    {
+                        "Id":  "dialog_open.Network.network.tcpAutoTuning.open",
+                        "Status":  "FAIL",
+                        "Detail":  "MenuOpenItem not found after expand",
+                        "ScreenshotPath":  "C:\\AI\\Claudo\\アプリ\\WinKnobs\\scripts\\ui_automation\\screenshots\\fail_dialog_open_20260520_101158941.png",
+                        "Timestamp":  "2026-05-20 10:11:58.895"
+                    },
+                    {
+                        "Id":  "bug2.k1_4choices.open",
+                        "Status":  "OK",
+                        "Detail":  "K1 dialog opened",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:12:02.099"
+                    },
+                    {
+                        "Id":  "bug2.k1_4choices.choice_count",
+                        "Status":  "OK",
+                        "Detail":  "4 択（BUG-2 fixed・4 択以上）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:12:02.779"
+                    },
+                    {
+                        "Id":  "bug2.k1_4choices.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "全ボリューム有効 (0)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:12:02.786"
+                    },
+                    {
+                        "Id":  "bug2.k1_4choices.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "全ボリューム無効 (1・推奨)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:12:02.787"
+                    },
+                    {
+                        "Id":  "bug2.k1_4choices.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "ボリューム単位 (2・既定)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:12:02.787"
+                    },
+                    {
+                        "Id":  "bug2.k1_4choices.choice[3]",
+                        "Status":  "INFO",
+                        "Detail":  "各ボリューム個別 (3)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:12:02.788"
+                    }
+                ]
+}

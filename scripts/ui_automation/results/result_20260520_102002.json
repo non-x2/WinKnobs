@@ -1,0 +1,150 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 10:20:02",
+    "EndTime":  "2026-05-20 10:20:10",
+    "DurationSec":  8.29,
+    "TestCases":  [
+                      "smoke"
+                  ],
+    "Counts":  {
+                   "OK":  18,
+                   "FAIL":  0,
+                   "INFO":  null,
+                   "Total":  19
+               },
+    "Results":  [
+                    {
+                        "Id":  "smoke.window_detected",
+                        "Status":  "OK",
+                        "Detail":  "WinKnobs window found",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:06.896"
+                    },
+                    {
+                        "Id":  "smoke.static.SearchBox",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:06.952"
+                    },
+                    {
+                        "Id":  "smoke.static.CategoriesTree",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:06.981"
+                    },
+                    {
+                        "Id":  "smoke.static.ItemsGrid",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.091"
+                    },
+                    {
+                        "Id":  "smoke.static.StatusMessageText",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.556"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuFile",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.561"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuEdit",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.571"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuView",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.583"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuTools",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.600"
+                    },
+                    {
+                        "Id":  "smoke.static.MenuHelp",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.619"
+                    },
+                    {
+                        "Id":  "smoke.category.Home",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.647"
+                    },
+                    {
+                        "Id":  "smoke.category.System",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.681"
+                    },
+                    {
+                        "Id":  "smoke.category.Privacy",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.743"
+                    },
+                    {
+                        "Id":  "smoke.category.Network",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.789"
+                    },
+                    {
+                        "Id":  "smoke.category.Kernel",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:07.839"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuOpenItem",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:10.464"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuExitApp",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:10.491"
+                    },
+                    {
+                        "Id":  "smoke.menu.MenuOpenBackupFolderFile",
+                        "Status":  "OK",
+                        "Detail":  "",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:10.506"
+                    },
+                    {
+                        "Id":  "smoke.memory",
+                        "Status":  "INFO",
+                        "Detail":  "132.9 MB / PID 23432",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 10:20:10.840"
+                    }
+                ]
+}

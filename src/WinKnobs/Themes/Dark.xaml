@@ -1,0 +1,372 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ダークテーマ共通ブラシ -->
+    <SolidColorBrush x:Key="Bg.Window"      Color="#1E1E1E"/>
+    <SolidColorBrush x:Key="Bg.Panel"       Color="#252526"/>
+    <SolidColorBrush x:Key="Bg.Hover"       Color="#333333"/>
+    <SolidColorBrush x:Key="Bg.Alt"         Color="#2A2A2A"/>
+    <SolidColorBrush x:Key="Bg.Selected"    Color="#264F78"/>
+    <SolidColorBrush x:Key="Bg.Disabled"    Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="Fg.Default"     Color="#E5E5E5"/>
+    <SolidColorBrush x:Key="Fg.Muted"       Color="#9A9A9A"/>
+    <SolidColorBrush x:Key="Fg.Subtle"      Color="#707070"/>
+    <SolidColorBrush x:Key="Fg.Disabled"    Color="#555555"/>
+    <SolidColorBrush x:Key="Border.Default" Color="#444444"/>
+    <SolidColorBrush x:Key="Border.Subtle"  Color="#333333"/>
+    <SolidColorBrush x:Key="Accent"         Color="#0098FF"/>
+    <SolidColorBrush x:Key="Accent.Hover"   Color="#1F9CFF"/>
+
+    <!-- 共通スタイル -->
+    <Style TargetType="Window" x:Key="WindowStyle.Themed">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+    </Style>
+
+    <Style TargetType="Menu">
+        <Setter Property="Background" Value="{DynamicResource Bg.Panel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}"/>
+    </Style>
+
+    <Style TargetType="StatusBar">
+        <Setter Property="Background" Value="{DynamicResource Bg.Panel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Muted}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+    </Style>
+
+    <Style TargetType="TextBox" x:Key="SearchBoxStyle">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource Fg.Default}"/>
+    </Style>
+
+    <Style TargetType="TreeView">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+    </Style>
+
+    <Style TargetType="TreeViewItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}"/>
+    </Style>
+
+    <Style TargetType="DataGrid">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="AlternatingRowBackground" Value="{DynamicResource Bg.Alt}"/>
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource Border.Subtle}"/>
+        <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource Border.Subtle}"/>
+        <Setter Property="RowBackground" Value="{DynamicResource Bg.Window}"/>
+    </Style>
+
+    <Style TargetType="DataGridColumnHeader">
+        <Setter Property="Background" Value="{DynamicResource Bg.Panel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+        <Setter Property="Padding" Value="6,4"/>
+    </Style>
+
+    <Style TargetType="Border" x:Key="Border.Sidebar">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+    </Style>
+
+    <!-- 🐛 修正 2026-05-15（第4波）：MenuItem ハイライト時に白文字＋白背景になる
+         WPF SystemColors.HighlightTextBrush（白）に強制切替される問題。
+         ControlTemplate 完全置換でシステム色を排除し、ダーク UI に統一。 -->
+    <Style TargetType="MenuItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Grid>
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Margin="2,1"
+                                SnapsToDevicePixels="True">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <!-- チェックマーク列は固定 18px で常にスペース確保（テキスト位置ブレ防止 2026-05-15 第6波） -->
+                                    <ColumnDefinition Width="18"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- ✓ チェックマーク（IsChecked=True のとき表示）2026-05-15 -->
+                                <Path x:Name="CheckMark"
+                                      Grid.Column="0"
+                                      Data="M 0 4 L 3 7 L 8 0"
+                                      Stroke="{TemplateBinding Foreground}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      Width="10" Height="8"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Visibility="Hidden"/>
+                                <!-- アイコン領域（あれば表示） -->
+                                <ContentPresenter x:Name="IconHost"
+                                                  Grid.Column="1"
+                                                  ContentSource="Icon"
+                                                  Margin="0,0,8,0"
+                                                  VerticalAlignment="Center"/>
+                                <!-- ヘッダー（テキスト） -->
+                                <ContentPresenter x:Name="HeaderHost"
+                                                  Grid.Column="2"
+                                                  ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                <!-- ショートカット表示（InputGestureText） -->
+                                <TextBlock x:Name="GestureText"
+                                           Grid.Column="3"
+                                           Text="{TemplateBinding InputGestureText}"
+                                           Margin="24,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource Fg.Subtle}"/>
+                                <!-- サブメニュー矢印（Role=SubmenuHeader のみ表示） -->
+                                <Path x:Name="SubArrow"
+                                      Grid.Column="4"
+                                      Data="M 0 0 L 4 4 L 0 8 Z"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Margin="8,0,0,0"
+                                      VerticalAlignment="Center"
+                                      Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="PART_Popup"
+                               IsOpen="{TemplateBinding IsSubmenuOpen}"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               PopupAnimation="Fade"
+                               Placement="Right"
+                               VerticalOffset="-1">
+                            <Border Background="{DynamicResource Bg.Panel}"
+                                    BorderBrush="{DynamicResource Border.Default}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="4"
+                                    Margin="2"
+                                    SnapsToDevicePixels="True">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.5" Color="Black"/>
+                                </Border.Effect>
+                                <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- トップレベル（メインメニュー）：Popup を下に配置 -->
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter TargetName="PART_Popup" Property="Placement" Value="Bottom"/>
+                            <Setter TargetName="PART_Popup" Property="VerticalOffset" Value="2"/>
+                        </Trigger>
+                        <!-- サブメニューを持つ項目：右矢印を表示 -->
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="SubArrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <!-- IsChecked=True：チェックマーク表示（2026-05-15 復活） -->
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <!-- ハイライト（ホバー・キーボード選択）：Bg.Hover ＋ Foreground は Fg.Default 固定（白色化防止） -->
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.Hover}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+                        </Trigger>
+                        <!-- 無効化：Subtle 色＋ジェスチャテキストも追従 -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Fg.Subtle}"/>
+                            <Setter TargetName="GestureText" Property="Foreground" Value="{DynamicResource Fg.Disabled}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- メニュー内の区切り線（Claude UI 風に薄く） -->
+    <Style TargetType="Separator">
+        <Setter Property="Background" Value="{DynamicResource Border.Subtle}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="8,4"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- ContextMenu の Background も明示（メニュー周辺の白枠対策） -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource Bg.Panel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- 🐛 修正 2026-05-15（第3波）：ComboBox 真っ白問題は ControlTemplate 完全置換で解決
+         WPF Aero デフォルト Template 内の ToggleButton/ContentPresenter が白背景を持つため、
+         Background プロパティ設定だけでは効かない。自前 Template で確実にダーク化。 -->
+    <Style TargetType="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="6,4"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="20"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 全体クリック領域：ToggleButton（ChromeStyle 無効化・自前 Border） -->
+                        <ToggleButton x:Name="ToggleButton"
+                                      Grid.ColumnSpan="2"
+                                      Focusable="False"
+                                      ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+
+                        <!-- 選択中項目の表示エリア -->
+                        <ContentPresenter Grid.Column="0"
+                                          Margin="{TemplateBinding Padding}"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          TextElement.Foreground="{DynamicResource Fg.Default}"/>
+
+                        <!-- ドロップダウン矢印（自前パス） -->
+                        <Path Grid.Column="1"
+                              Data="M 0 0 L 5 5 L 10 0 Z"
+                              Fill="{DynamicResource Fg.Default}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              IsHitTestVisible="False"/>
+
+                        <!-- ドロップダウンリスト -->
+                        <Popup x:Name="Popup"
+                               Placement="Bottom"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               PopupAnimation="Slide">
+                            <Grid MinWidth="{TemplateBinding ActualWidth}"
+                                  MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                  SnapsToDevicePixels="True">
+                                <Border Background="{DynamicResource Bg.Window}"
+                                        BorderBrush="{DynamicResource Border.Default}"
+                                        BorderThickness="1"/>
+                                <ScrollViewer Margin="1" SnapsToDevicePixels="True">
+                                    <StackPanel IsItemsHost="True"
+                                                KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Background" Value="{DynamicResource Bg.Disabled}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Fg.Disabled}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Background" Value="{DynamicResource Bg.Window}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.Selected}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 🐛 修正 2026-05-15（第3波）：Button 無効化状態のスタイル明示
+         指摘「白いボタンがチェックマークみたい」→ 無効化を地味な色＋透明度で識別しやすく -->
+    <Style TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource Bg.Panel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Fg.Default}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Default}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.Selected}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg.Disabled}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Fg.Disabled}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border.Subtle}"/>
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.6"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

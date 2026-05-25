@@ -1,0 +1,389 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 23:08:50",
+    "EndTime":  "2026-05-20 23:13:41",
+    "DurationSec":  290.28,
+    "TestCases":  [
+                      "dialog_inputs",
+                      "dialog_choices"
+                  ],
+    "Counts":  {
+                   "OK":  15,
+                   "FAIL":  0,
+                   "INFO":  38,
+                   "Total":  53
+               },
+    "Results":  [
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.current_is_numeric",
+                        "Status":  "OK",
+                        "Detail":  "現在値 \u00270\u0027 は数値",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:00.972"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.original_value",
+                        "Status":  "INFO",
+                        "Detail":  "OriginalValue: \u00270\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:01.019"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.set_invalid",
+                        "Status":  "OK",
+                        "Detail":  "不正値 \u0027abc\u0027 をセット・取得値 \u0027abc\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:01.558"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.binary_4byte_format",
+                        "Status":  "OK",
+                        "Detail":  "Binary 4 byte 形式 OK: \u002700 00 00 00\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:06.410"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.original_value",
+                        "Status":  "INFO",
+                        "Detail":  "OriginalValue: \u002700 00 00 00\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:06.438"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeApps.count",
+                        "Status":  "OK",
+                        "Detail":  "W1 ダークモード（アプリ）: 2 択（期待値 2 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:28.999"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeApps.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "OFF（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:29.006"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeApps.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "ON（有効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:29.007"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeSystem.count",
+                        "Status":  "OK",
+                        "Detail":  "W2 ダークモード（システム）: 2 択（期待値 2 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:53.101"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeSystem.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "OFF（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:53.102"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.darkModeSystem.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "ON（有効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:09:53.103"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.bingSearchDisabled.count",
+                        "Status":  "OK",
+                        "Detail":  "W6 Bing 検索無効化: 2 択（期待値 2 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:14.839"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.bingSearchDisabled.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "OFF（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:14.841"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.bingSearchDisabled.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "ON（有効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:14.843"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.cortanaDisabled.count",
+                        "Status":  "OK",
+                        "Detail":  "PR1 Cortana 無効化: 2 択（期待値 2 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:36.414"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.cortanaDisabled.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "OFF（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:36.415"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.cortanaDisabled.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "ON（有効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:36.416"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.activityHistoryDisabled.count",
+                        "Status":  "OK",
+                        "Detail":  "PR2 Activity History 無効化: 2 択（期待値 2 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:58.195"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.activityHistoryDisabled.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "OFF（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:58.195"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.activityHistoryDisabled.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "ON（有効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:10:58.196"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.count",
+                        "Status":  "OK",
+                        "Detail":  "W4 タスクバーサイズ: 3 択（期待値 3 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:19.991"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "小",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:19.991"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "中（既定）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:19.992"
+                    },
+                    {
+                        "Id":  "dialog_choices.desktop.taskbarSize.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "大",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:19.993"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.smartScreen.count",
+                        "Status":  "OK",
+                        "Detail":  "PR3 SmartScreen: 3 択（期待値 3 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:41.168"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.smartScreen.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "Off（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:41.168"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.smartScreen.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "Prompt（既定・確認のみ）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:41.169"
+                    },
+                    {
+                        "Id":  "dialog_choices.privacy.smartScreen.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "RequireAdmin（管理者承認必須）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:11:41.169"
+                    },
+                    {
+                        "Id":  "dialog_choices.kernel.win32PrioritySeparation.count",
+                        "Status":  "OK",
+                        "Detail":  "P1 Win32PrioritySeparation: 3 択（期待値 3 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:02.237"
+                    },
+                    {
+                        "Id":  "dialog_choices.kernel.win32PrioritySeparation.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "バックグラウンド優先（18・サーバー向け）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:02.237"
+                    },
+                    {
+                        "Id":  "dialog_choices.kernel.win32PrioritySeparation.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "標準フォアグラウンド（2・既定）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:02.238"
+                    },
+                    {
+                        "Id":  "dialog_choices.kernel.win32PrioritySeparation.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "高フォアグラウンド（26・ゲーミング最適）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:02.238"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.count",
+                        "Status":  "OK",
+                        "Detail":  "K1 NTFS 8.3 名（BUG-2 fixed）: 4 択（期待値 4 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:23.198"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "全ボリューム有効 (0)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:23.199"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "全ボリューム無効 (1・推奨)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:23.199"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "ボリューム単位 (2・既定)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:23.199"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfs8dot3.choice[3]",
+                        "Status":  "INFO",
+                        "Detail":  "各ボリューム個別 (3)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:23.200"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.count",
+                        "Status":  "OK",
+                        "Detail":  "K2 NTFS LastAccess: 4 択（期待値 4 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:44.658"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "ユーザー設定・更新する (0)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:44.660"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "ユーザー設定・更新しない (1)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:44.661"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "システム設定・更新する (2)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:44.661"
+                    },
+                    {
+                        "Id":  "dialog_choices.system.ntfsLastAccess.choice[3]",
+                        "Status":  "INFO",
+                        "Detail":  "システム設定・更新しない (3・既定)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:12:44.662"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.count",
+                        "Status":  "OK",
+                        "Detail":  "L2 Prefetcher: 4 択（期待値 4 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:05.083"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "無効 (0)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:05.083"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "アプリ起動のみ (1)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:05.084"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "ブート時のみ (2)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:05.084"
+                    },
+                    {
+                        "Id":  "dialog_choices.login.prefetcher.choice[3]",
+                        "Status":  "INFO",
+                        "Detail":  "両方有効 (3・既定)",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:05.085"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.count",
+                        "Status":  "OK",
+                        "Detail":  "N1 TCP Auto-Tuning: 5 択（期待値 5 一致）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:24.548"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.choice[0]",
+                        "Status":  "INFO",
+                        "Detail":  "disabled（無効）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:24.549"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.choice[1]",
+                        "Status":  "INFO",
+                        "Detail":  "highlyrestricted（高制限）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:24.549"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.choice[2]",
+                        "Status":  "INFO",
+                        "Detail":  "restricted（制限）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:24.550"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.choice[3]",
+                        "Status":  "INFO",
+                        "Detail":  "normal（既定・推奨）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:24.550"
+                    },
+                    {
+                        "Id":  "dialog_choices.network.tcpAutoTuning.choice[4]",
+                        "Status":  "INFO",
+                        "Detail":  "experimental（実験的）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 23:13:24.551"
+                    }
+                ]
+}

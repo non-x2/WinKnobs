@@ -1,0 +1,52 @@
+﻿{
+    "Mode":  "Local",
+    "StartTime":  "2026-05-20 22:49:58",
+    "EndTime":  "2026-05-20 22:50:12",
+    "DurationSec":  13.83,
+    "TestCases":  [
+                      "dialog_inputs"
+                  ],
+    "Counts":  {
+                   "OK":  2,
+                   "FAIL":  0,
+                   "INFO":  3,
+                   "Total":  5
+               },
+    "Results":  [
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.current_is_numeric",
+                        "Status":  "OK",
+                        "Detail":  "現在値 \u00270\u0027 は数値",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:50:06.354"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.original_value",
+                        "Status":  "INFO",
+                        "Detail":  "OriginalValue: \u00270\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:50:06.413"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W3.menu_show_delay.set_invalid",
+                        "Status":  "OK",
+                        "Detail":  "不正値 \u0027abc\u0027 をセット・取得値 \u0027abc\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:50:06.965"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.binary_4byte_format",
+                        "Status":  "INFO",
+                        "Detail":  "現在値 \u0027abc\u0027（4byte 形式と一致しない・但しレジストリ未設定なら空欄）",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:50:11.030"
+                    },
+                    {
+                        "Id":  "dialog_inputs.T-W8.link_binary.original_value",
+                        "Status":  "INFO",
+                        "Detail":  "OriginalValue: \u00270\u0027",
+                        "ScreenshotPath":  "",
+                        "Timestamp":  "2026-05-20 22:50:11.075"
+                    }
+                ]
+}
