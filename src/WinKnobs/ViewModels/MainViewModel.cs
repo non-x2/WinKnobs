@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WinKnobs.Models;
 using WinKnobs.Services;
+using WinKnobs.ViewModels.Startup;
 
 // .NET 10 で WPF に System.Windows.ThemeMode が追加されたため別名で衝突回避
 using ThemeMode = WinKnobs.Services.ThemeMode;
@@ -44,9 +45,23 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private ThemeMode _currentThemeMode;
 
+    /// <summary>
+    /// スタートアップ系カテゴリ（Run キー族）が選択中か。
+    /// MainWindow.xaml で右ペインを既存 DataGrid と StartupListView で Visibility 切替するために使用。
+    /// 設計書 5-1（plan-validator #1 反映）。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isStartupCategorySelected;
+
     public ObservableCollection<SettingCategory> Categories { get; } = new();
     public ObservableCollection<SettingItem> Items { get; } = new();
     public ICollectionView FilteredItems { get; }
+
+    /// <summary>
+    /// スタートアップ系リスト用 ViewModel（DI で取得）。
+    /// MainWindow.xaml の StartupListView の DataContext にバインドされる。
+    /// </summary>
+    public StartupListViewModel StartupListVM { get; }
 
     public MainViewModel(
         DialogService dialogs,
@@ -55,7 +70,8 @@ public partial class MainViewModel : ObservableObject
         EnvironmentInfoService envInfo,
         BackupService backup,
         RestorePointService restore,
-        RegistryService registry)
+        RegistryService registry,
+        StartupListViewModel startupListVM)
     {
         _dialogs = dialogs;
         _theme = theme;
@@ -65,6 +81,7 @@ public partial class MainViewModel : ObservableObject
         _restore = restore;
         _registry = registry;
         _launcherForCommands = launcher;
+        StartupListVM = startupListVM;
 
         // テーマ初期化＋変更追従（2026-05-16：MenuItem IsChecked 連動）
         _currentThemeMode = _theme.CurrentMode;
@@ -106,6 +123,17 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedCategoryChanged(SettingCategory? value)
     {
         FilteredItems?.Refresh();
+
+        // スタートアップ系カテゴリへの切替検出（設計書 5-1）
+        var isStartup = value?.Type == CategoryType.Startup;
+        IsStartupCategorySelected = isStartup;
+
+        if (isStartup)
+        {
+            // Startup に切り替わるたびに読み直し（regedit 外部変更が反映されるように）
+            StartupListVM.Load();
+        }
+
         StatusMessage = value == null
             ? "カテゴリを選択してください。"
             : $"カテゴリ「{value.Name}」を選択中。";
@@ -114,6 +142,12 @@ public partial class MainViewModel : ObservableObject
     partial void OnSearchTextChanged(string value)
     {
         FilteredItems?.Refresh();
+
+        // Startup ペイン時は StartupListVM の検索にも転送（設計書 9 リスク表 #7）
+        if (IsStartupCategorySelected)
+        {
+            StartupListVM.SearchText = value;
+        }
     }
 
     partial void OnSelectedItemChanged(SettingItem? value)
@@ -148,6 +182,14 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Refresh()
     {
+        // Startup ペイン時はスタートアップ項目を再読込（設計書 9 リスク表 #8）
+        if (IsStartupCategorySelected)
+        {
+            StartupListVM.Load();
+            StatusMessage = "🔄 スタートアップ項目を最新の状態に更新しました。";
+            return;
+        }
+
         FilteredItems?.Refresh();
         StatusMessage = "🔄 最新の状態に更新しました。";
     }
@@ -676,6 +718,44 @@ public partial class MainViewModel : ObservableObject
 
         // S2：BagMRU クリア（CommandAction・実行系）
         Items.Add(BuildBagMRUClearItem());
+
+        // ====================== v0.2.0 追加項目（2026-05-25 AI代行会社） ======================
+
+        // V1：透明効果 ON/OFF（夜暗室向け・GPU 負荷軽減・既存ダーク UI のメリハリ向上）
+        // HKCU・Boolean・1=ON / 0=OFF（InvertDisplay なし＝ユーザー視点とレジストリ一致）
+        Items.Add(new SettingItem
+        {
+            Id = "desktop.transparencyEffects",
+            Title = "透明効果（タスクバー・スタートメニュー）",
+            Description = "Windows の透明エフェクトの有効/無効。OFF にすると暗室で UI のコントラストが上がり、GPU 負荷も軽減します。即時反映。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            RegistryValueName = "EnableTransparency",
+            ValueType = SettingValueType.Boolean,
+            InvertDisplay = false,        // 1=ON（透明）・0=OFF
+            RecommendedValue = false,     // 暗室向け推奨：OFF
+            DefaultValue = true           // Windows デフォルト：ON
+        });
+
+        // V2：クリップボード履歴 ON/OFF（Win+V で履歴呼び出し）
+        // HKCU・Boolean・1=履歴有効 / 0=無効
+        Items.Add(new SettingItem
+        {
+            Id = "system.clipboardHistory",
+            Title = "クリップボード履歴（Win+V）",
+            Description = "Windows のクリップボード履歴機能を有効にします。Win+V で過去にコピーした内容を一覧から選んで貼り付けできます。即時反映。",
+            Category = CategoryType.System,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            RegistryPath = @"HKCU\Software\Microsoft\Clipboard",
+            RegistryValueName = "EnableClipboardHistory",
+            ValueType = SettingValueType.Boolean,
+            InvertDisplay = false,        // 1=有効・0=無効
+            RecommendedValue = true,      // 推奨：ON
+            DefaultValue = false          // Windows デフォルト：OFF
+        });
     }
 
     // ====================== PR3 SmartScreen（Command 3択） ======================

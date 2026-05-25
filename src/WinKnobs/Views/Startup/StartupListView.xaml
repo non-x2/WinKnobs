@@ -1,0 +1,95 @@
+<UserControl x:Class="WinKnobs.Views.Startup.StartupListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:WinKnobs.ViewModels.Startup"
+             d:DataContext="{d:DesignInstance Type=vm:StartupListViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Background="{DynamicResource Bg.Window}"
+             Foreground="{DynamicResource Fg.Default}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ヘッダ注記（plan-validator #3：Run キーのみ対象であることを明示） -->
+        <Border Grid.Row="0"
+                Padding="8,6"
+                Background="{DynamicResource Bg.Panel}"
+                BorderBrush="{DynamicResource Border.Default}"
+                BorderThickness="0,0,0,1">
+            <TextBlock FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Fg.Subtle}">
+                <Run Text="ⓘ"/>
+                <Run Text=" Run キー（レジストリ）のみ対象です。タスクスケジューラ・スタートアップフォルダ（shell:startup）はこのツールでは表示・編集できません（タスクマネージャーで操作してください）。"/>
+            </TextBlock>
+        </Border>
+
+        <!-- ツールバー枠（R-2 以降で「+追加」「✏編集」「🗑削除」「💾保存」「↺戻す」を入れる） -->
+        <Border Grid.Row="1"
+                Padding="8,4"
+                Background="{DynamicResource Bg.Panel}"
+                BorderBrush="{DynamicResource Border.Default}"
+                BorderThickness="0,0,0,1">
+            <TextBlock FontSize="11"
+                       Foreground="{DynamicResource Fg.Subtle}"
+                       Text="（Phase R-1：閲覧のみ。編集・有効化トグルは R-2 で実装予定）"/>
+        </Border>
+
+        <!-- メインリスト -->
+        <DataGrid Grid.Row="2"
+                  x:Name="StartupItemsGrid"
+                  AutomationProperties.AutomationId="StartupItemsGrid"
+                  ItemsSource="{Binding FilteredEntries}"
+                  SelectedItem="{Binding SelectedEntry}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  RowHeight="28"
+                  CanUserResizeRows="False"
+                  SelectionMode="Single"
+                  BorderThickness="0">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="AutomationProperties.AutomationId"
+                            Value="{Binding RawName, StringFormat=StartupEntry_{0}}"/>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+                <!-- 有効/無効 CheckBox（R-1 は IsEnabled=False でロック表示） -->
+                <DataGridTemplateColumn Header="有効" Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                      IsEnabled="False"
+                                      HorizontalAlignment="Center"
+                                      ToolTip="Phase R-2 で編集可能化"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="" Binding="{Binding RiskMark}" Width="32" FontSize="14"/>
+                <DataGridTextColumn Header="名前" Binding="{Binding Name}" Width="200"/>
+                <DataGridTextColumn Header="コマンド" Binding="{Binding Command}" Width="*"/>
+                <DataGridTextColumn Header="ハイブ" Binding="{Binding HiveDisplay}" Width="140"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- ステータス -->
+        <Border Grid.Row="3"
+                Padding="8,4"
+                Background="{DynamicResource Bg.Panel}"
+                BorderBrush="{DynamicResource Border.Default}"
+                BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StartupStatusText"
+                       AutomationProperties.AutomationId="StartupStatusText"
+                       Text="{Binding StatusMessage}"
+                       FontSize="11"
+                       Foreground="{DynamicResource Fg.Subtle}"/>
+        </Border>
+    </Grid>
+</UserControl>

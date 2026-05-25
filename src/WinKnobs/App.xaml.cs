@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WinKnobs.Services;
 using WinKnobs.ViewModels;
+using WinKnobs.ViewModels.Items;
+using WinKnobs.ViewModels.Startup;
 using WinKnobs.Views;
 
 namespace WinKnobs;
@@ -39,6 +41,10 @@ public partial class App : Application
                 services.AddSingleton<DialogService>();
                 services.AddSingleton<PrivilegeService>();   // v0.1.4 BUG-3 対応
                 services.AddSingleton<WindowStateService>(); // 2026-05-20 ウィンドウ位置記憶
+
+                // スタートアップ系（Phase R-1〜R-3）：状態保持＋シングルトン共有
+                services.AddSingleton<StartupItemsProvider>();
+                services.AddSingleton<StartupListViewModel>();
 
                 // ViewModel
                 services.AddTransient<MainViewModel>();

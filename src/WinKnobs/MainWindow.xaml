@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:WinKnobs.ViewModels"
         xmlns:conv="clr-namespace:WinKnobs.Converters"
+        xmlns:startup="clr-namespace:WinKnobs.Views.Startup"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -16,6 +17,9 @@
 
     <Window.Resources>
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
+        <!-- スタートアップ系（R-1）：Visibility 切替方式（plan-validator #1 反映） -->
+        <conv:BoolToCollapsedVisibilityConverter x:Key="BoolToCollapsedVis"/>
+        <conv:BoolToVisibleVisibilityConverter   x:Key="BoolToVisibleVis"/>
     </Window.Resources>
 
     <Window.InputBindings>
@@ -165,38 +169,58 @@
                           ShowsPreview="True"
                           Background="Transparent"/>
 
-            <DataGrid Grid.Column="2"
-                      x:Name="ItemsGrid"
-                      AutomationProperties.AutomationId="ItemsGrid"
-                      ItemsSource="{Binding FilteredItems}"
-                      SelectedItem="{Binding SelectedItem}"
-                      MouseDoubleClick="ItemsGrid_MouseDoubleClick"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column"
-                      RowHeight="32"
-                      CanUserResizeRows="False"
-                      SelectionMode="Single"
-                      BorderThickness="0">
-                <DataGrid.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding OpenSelectedItemCommand}"/>
-                </DataGrid.InputBindings>
-                <!-- 🆕 Phase B-1（2026-05-20）：AutomationId="Item_<Id>" を動的バインド付与
-                     Themes/{Dark,Light}.xaml に DataGridRow スタイル定義なし → BasedOn 不要
-                     （WPF デフォルトの DataGridRow テンプレートをそのまま利用） -->
-                <DataGrid.RowStyle>
-                    <Style TargetType="DataGridRow">
-                        <Setter Property="AutomationProperties.AutomationId" Value="{Binding Id, StringFormat=Item_{0}}"/>
-                    </Style>
-                </DataGrid.RowStyle>
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="" Binding="{Binding RiskMark}" Width="32" FontSize="14"/>
-                    <DataGridTextColumn Header="項目" Binding="{Binding Title}" Width="240"/>
-                    <DataGridTextColumn Header="説明" Binding="{Binding Description}" Width="*"/>
-                    <DataGridTextColumn Header="再起動" Binding="{Binding RestartMark}" Width="60"/>
-                </DataGrid.Columns>
-            </DataGrid>
+            <!-- =================== 右ペイン（Grid 重ね合わせ・Visibility 切替）===================
+                 plan-validator #1 致命指摘反映（設計書 5-1）：
+                 既存 DataGrid (ItemsGrid) と新規 StartupListView を Grid で重ね、
+                 IsStartupCategorySelected で表示切替。既存 DataGrid の AutomationId="ItemsGrid"
+                 は触らず、UIA 既存 52 件 PASS を保証する。
+            -->
+            <Grid Grid.Column="2">
+                <!-- 既存：標準カテゴリ用 DataGrid（変更最小・Visibility 追加のみ） -->
+                <DataGrid x:Name="ItemsGrid"
+                          AutomationProperties.AutomationId="ItemsGrid"
+                          Visibility="{Binding IsStartupCategorySelected, Converter={StaticResource BoolToCollapsedVis}}"
+                          ItemsSource="{Binding FilteredItems}"
+                          SelectedItem="{Binding SelectedItem}"
+                          MouseDoubleClick="ItemsGrid_MouseDoubleClick"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          GridLinesVisibility="Horizontal"
+                          HeadersVisibility="Column"
+                          RowHeight="32"
+                          CanUserResizeRows="False"
+                          SelectionMode="Single"
+                          BorderThickness="0">
+                    <DataGrid.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding OpenSelectedItemCommand}"/>
+                    </DataGrid.InputBindings>
+                    <!-- 🆕 Phase B-1（2026-05-20）：AutomationId="Item_<Id>" を動的バインド付与
+                         Themes/{Dark,Light}.xaml に DataGridRow スタイル定義なし → BasedOn 不要
+                         （WPF デフォルトの DataGridRow テンプレートをそのまま利用） -->
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="AutomationProperties.AutomationId" Value="{Binding Id, StringFormat=Item_{0}}"/>
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="" Binding="{Binding RiskMark}" Width="32" FontSize="14"/>
+                        <DataGridTextColumn Header="項目" Binding="{Binding Title}" Width="240"/>
+                        <DataGridTextColumn Header="説明" Binding="{Binding Description}" Width="*"/>
+                        <DataGridTextColumn Header="再起動" Binding="{Binding RestartMark}" Width="60"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- 新規：スタートアップ系 UserControl（Startup カテゴリ選択時のみ表示）
+                     ※ DataContext を StartupListVM に切替えるため、Visibility の
+                       IsStartupCategorySelected は Window.DataContext (=MainViewModel)
+                       から RelativeSource で再取得する。 -->
+                <startup:StartupListView
+                    DataContext="{Binding StartupListVM}"
+                    Visibility="{Binding Path=DataContext.IsStartupCategorySelected,
+                                         RelativeSource={RelativeSource AncestorType=Window},
+                                         Converter={StaticResource BoolToVisibleVis}}"
+                    AutomationProperties.AutomationId="StartupListView"/>
+            </Grid>
         </Grid>
 
         <!-- =================== ステータスバー =================== -->

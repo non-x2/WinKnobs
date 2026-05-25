@@ -103,6 +103,11 @@ docs/apply_test_result.json
 scripts/*.ps1
 scripts/*.bat
 
+# Phase R-1（2026-05-25）：スタートアップ系 UI Automation テストケース明示許可
+# 上の `scripts/*.ps1` は直下のみだが、将来パターンが広がっても
+# tc_startup_*.ps1 を確実にコミット可能にするため明示的に除外解除しておく。
+!scripts/ui_automation/testcases/tc_startup_*.ps1
+
 # テスト結果・引き継ぎメモ（個人開発ログ・ホスト名含む）
 docs/テスト結果_*.md
 docs/引き継ぎメモ_*.md
