@@ -131,9 +131,14 @@ public partial class StartupEntryEditViewModel : ObservableObject
     {
         if (_source == null || !IsValid) return;
 
-        _source.Command   = EditableCommand;
-        _source.ValueKind = IsRegSz ? RegistryValueKind.String : RegistryValueKind.ExpandString;
-        _source.IsDirty   = true;
+        // R-2 hotfix（VM E2E 検証 2026-05-26）：変更なしで OK 押下時に IsDirty=true 残留する問題への対策。
+        // 元エントリと差分がある時のみ書戻し＋IsDirty 化、無変更時は no-op で閉じる。
+        if (IsModified)
+        {
+            _source.Command   = EditableCommand;
+            _source.ValueKind = IsRegSz ? RegistryValueKind.String : RegistryValueKind.ExpandString;
+            _source.IsDirty   = true;
+        }
 
         DialogResult = true;
     }

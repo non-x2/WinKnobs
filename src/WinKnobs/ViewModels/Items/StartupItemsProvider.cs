@@ -234,7 +234,10 @@ public class StartupItemsProvider
         if (!forceOverwrite)
         {
             var (currentCommand, _) = ReadCurrentValue(entry);
-            if (currentCommand != null && currentCommand != entry.Command)
+            // R-2 hotfix（VM/ホスト E2E 検証 2026-05-26）：
+            //   旧コードは entry.Command（編集後の値）と比較していたため、編集→保存で必ず ConflictDetected になっていた。
+            //   楽観ロックの本来の意図は「Load 時の値（OriginalCommand）と現在のレジストリ値が違う = 外部変更」を検出すること。
+            if (currentCommand != null && currentCommand != entry.OriginalCommand)
             {
                 return new SaveResult
                 {

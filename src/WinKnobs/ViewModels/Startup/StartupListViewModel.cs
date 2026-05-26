@@ -163,8 +163,17 @@ public partial class StartupListViewModel : ObservableObject
         var result = _dialogs.OpenStartupEdit(SelectedEntry);
         if (result == true)
         {
-            StatusMessage = $"✏️ {SelectedEntry.Name} を編集しました。💾保存 ボタンで永続化してください。";
-            NotifyDirtyChanged();
+            // R-2 hotfix（VM E2E 検証 2026-05-26）：StartupEntryEditViewModel.Ok() が無変更 no-op になったので、
+            // ステータス／HasDirtyEntries 通知も IsDirty 連動にする（誤検出メッセージ防止）。
+            if (SelectedEntry.IsDirty)
+            {
+                StatusMessage = $"✏️ {SelectedEntry.Name} を編集しました。💾保存 ボタンで永続化してください。";
+                NotifyDirtyChanged();
+            }
+            else
+            {
+                StatusMessage = $"（{SelectedEntry.Name} は変更なし）";
+            }
         }
     }
 
