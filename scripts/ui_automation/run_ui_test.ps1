@@ -381,6 +381,13 @@ $totalOk   = ($allResults | Where-Object { $_.Status -eq "OK" }).Count
 $totalFail = ($allResults | Where-Object { $_.Status -eq "FAIL" }).Count
 $totalInfo = ($allResults | Where-Object { $_.Status -eq "INFO" }).Count
 
+# 🆕 2026-05-27：CI 緑化副作用防止（plan-validator 指摘 1 対応）
+# INFO の Detail に "limitation" を含む結果は「構造的に検証できないがテストランナーは PASS 扱い」のもの。
+# FAIL=0 だけで安心せず、limitation 件数を明示的に集計・警告ヘッダで可視化する。
+# 詳細：docs/UI_Automation_CheckBox制約_2026-05-27.md
+$limitations = @($allResults | Where-Object { $_.Status -eq "INFO" -and $_.Detail -like "*limitation*" })
+$totalLimitations = $limitations.Count
+
 $summary = [PSCustomObject]@{
     Mode = $Mode
     StartTime = $startTime.ToString("yyyy-MM-dd HH:mm:ss")
@@ -391,8 +398,12 @@ $summary = [PSCustomObject]@{
         OK = $totalOk
         FAIL = $totalFail
         INFO = $totalInfo
+        LimitationsFlagged = $totalLimitations
         Total = $allResults.Count
     }
+    Limitations = @($limitations | ForEach-Object {
+        [PSCustomObject]@{ Id = $_.Id; Detail = $_.Detail }
+    })
     Results = $allResults
 }
 
@@ -403,14 +414,29 @@ Write-Log ("Total: " + $allResults.Count)
 Write-Log ("OK   : " + $totalOk)
 Write-Log ("FAIL : " + $totalFail)
 Write-Log ("INFO : " + $totalInfo)
+if ($totalLimitations -gt 0) {
+    Write-Log ("LimitationsFlagged : " + $totalLimitations + "（UIA Pattern 構造制約・実機マウス操作では別途検証必要）")
+}
 Write-Log ("Duration: " + [math]::Round($duration, 2) + " sec")
 Write-Log ""
 Write-Log ("Result JSON: " + $ResultJson)
 Write-Log ("Result Log : " + $logPath)
 
 if ($totalFail -eq 0) {
-    Write-Log "✅ ALL PASS"
-    exit 0
+    if ($totalLimitations -gt 0) {
+        # CI 緑化副作用防止：「全 PASS」と即断せず、UIA Pattern では検証不可な箇所が
+        # 残っていることを警告ヘッダで明示する。
+        # 詳細：docs/UI_Automation_CheckBox制約_2026-05-27.md
+        Write-Log "⚠️  ALL PASS（ただし limitation $totalLimitations 件あり：UIA Pattern では検証不可）"
+        Write-Log "   → 該当箇所は実機マウス操作で別途検証必須："
+        foreach ($lim in $limitations) {
+            Write-Log ("     - " + $lim.Id)
+        }
+        exit 0
+    } else {
+        Write-Log "✅ ALL PASS"
+        exit 0
+    }
 } else {
     Write-Log "❌ FAIL: $totalFail 件"
     exit 1

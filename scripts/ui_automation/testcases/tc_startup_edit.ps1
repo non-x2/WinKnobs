@@ -164,7 +164,25 @@ function Invoke-StartupEdit {
         $saveOk = ($afterRun.Exists -and $afterRun.Value -eq $newCmd)
         $results += New-TestResult -Id "startup_edit.save.verify" -Status $(if ($saveOk) { "OK" } else { "FAIL" }) -Detail "Run value = $($afterRun.Value)（期待 $newCmd）"
 
-        # ─── 11. CheckBox トグル ───
+        # ─── 11. CheckBox トグル（UIA Pattern 限定検証） ───
+        #
+        # ⚠️ 既知制約（2026-05-27 調査確定・docs/UI_Automation_CheckBox制約_2026-05-27.md）：
+        #   WPF CheckBox は UIA `InvokePattern` を実装しない（WPF 標準仕様）。
+        #   `TogglePattern.Toggle()` は IsChecked を反転するのみで、WPF Command (ToggleEnabledCommand)
+        #   を発火させない。`LegacyIAccessiblePattern` は .NET Framework System.Windows.Automation に
+        #   含まれない型。→ **UIA Pattern では CheckBox の Command を発火できない**。
+        #
+        #   実機マウスクリック（ButtonBase.OnClick 経由）では Command 確実発火し SetEnabled →
+        #   StartupApproved 書込まで全て PASS（vm_r2_e2e_result.md 3-1〜3-3 で実証済）。
+        #
+        #   このため toggle 系 3 件は OK / FAIL ではなく **INFO** で記録：
+        #   - toggle.click       : ToggleState 遷移のみ確認・Command 発火は未検証
+        #   - toggle.verify_byte : 構造的に書込発生せず（UIA テストの制約）
+        #   - toggle.revert      : ToggleState 遷移のみ確認・Command 発火は未検証
+        #
+        #   将来課題：マウス座標経由クリック（mouse_event API）or FlaUI 導入
+        #   → docs/UI_Automation_対応計画書_第1版.md 末尾「将来課題」セクション参照
+        #
         # 行を Name 検索で再取得（DataGridRow 動的 AutomationId 非対応のため）
         $rowAfter = $null
         $grid2 = Find-ById $Win "StartupItemsGrid" 3
@@ -188,24 +206,30 @@ function Invoke-StartupEdit {
             )
             $checkbox = $rowAfter.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cbCond)
             if ($checkbox) {
+                # 制約明示（必ず最後に履歴に残す）
+                $results += New-TestResult -Id "startup_edit.toggle.uia_limitation" -Status "INFO" `
+                    -Detail "limitation: WPF CheckBox は UIA InvokePattern 非実装・TogglePattern.Toggle は Command 非発火（docs/UI_Automation_CheckBox制約_2026-05-27.md）。実機マウスクリックでは PASS（vm_r2_e2e_result.md 3-1〜3-3）"
+
                 try {
                     $togglePattern = $checkbox.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
                     $beforeState = $togglePattern.Current.ToggleState
 
-                    # TogglePattern.Toggle() は WPF + UIA で "Unrecognized error" を返すケースがある
-                    # → Click と等価な InvokePattern.Invoke() で代替（CheckBox は ToggleButton 派生で両方実装）
+                    # TogglePattern.Toggle() は IsChecked を反転するが、WPF Command は発火しない（既知制約）。
+                    # InvokePattern.Invoke は WPF CheckBox では Unsupported Pattern（実機調査済）。
+                    # → ToggleState の遷移のみ計測し、Command 発火・StartupApproved 書込は実機マウス操作で検証する前提。
                     $invokeOk = Invoke-Element $checkbox
                     if (-not $invokeOk) {
-                        # フォールバック：TogglePattern.Toggle() を試す
+                        # フォールバック：TogglePattern.Toggle() で IsChecked のみ反転（Command 非発火）
                         $togglePattern.Toggle()
                     }
                     Start-Sleep -Milliseconds 1000
 
                     $togglePattern2 = $checkbox.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
                     $afterState = $togglePattern2.Current.ToggleState
-                    $results += New-TestResult -Id "startup_edit.toggle.click" -Status "OK" -Detail "ToggleState: $beforeState → $afterState (Invoke 経由)"
+                    $results += New-TestResult -Id "startup_edit.toggle.click" -Status "INFO" `
+                        -Detail "limitation: ToggleState 遷移のみ確認: $beforeState → $afterState / Command 発火は UIA Pattern では不可（実機マウスクリックは PASS：vm_r2_e2e_result.md 3-1）"
 
-                    # StartupApproved\Run のバイナリ確認
+                    # StartupApproved\Run のバイナリ確認（参考計測・UIA Pattern 経由では書込発生しない前提）
                     $approvedBytes = $null
                     if (Test-Path $approvedPath) {
                         try {
@@ -215,19 +239,21 @@ function Invoke-StartupEdit {
                     }
 
                     if ($approvedBytes -and $approvedBytes.Length -ge 12) {
+                        # 想定外：UIA Pattern 経由で書込発生（mouse_event 等の他経路が動いた？）
                         $firstByte = "{0:X2}" -f $approvedBytes[0]
-                        $expectedByte = if ($afterState -eq [System.Windows.Automation.ToggleState]::Off) { "03" } else { "02" }
-                        $byteOk = ($firstByte -eq $expectedByte)
-                        $results += New-TestResult -Id "startup_edit.toggle.verify_byte" -Status $(if ($byteOk) { "OK" } else { "FAIL" }) -Detail "byte[0]=0x$firstByte（期待 0x$expectedByte / 12byte length OK）"
+                        $results += New-TestResult -Id "startup_edit.toggle.verify_byte" -Status "INFO" `
+                            -Detail "limitation+unexpected: byte[0]=0x$firstByte（UIA Pattern 経由で書込発生・要再調査）"
                     } else {
                         $len = if ($approvedBytes) { $approvedBytes.Length } else { 0 }
-                        $results += New-TestResult -Id "startup_edit.toggle.verify_byte" -Status "FAIL" -Detail "StartupApproved entry not found or length=$len（期待 12）"
+                        $results += New-TestResult -Id "startup_edit.toggle.verify_byte" -Status "INFO" `
+                            -Detail "limitation: StartupApproved 未書込 (length=$len) / UIA Pattern の構造的制約・実機マウスクリックでは PASS（vm_r2_e2e_result.md 3-2）"
                     }
 
-                    # 再度トグル（元に戻す）：Invoke 経由
+                    # 再度トグル（元に戻す）：UIA Pattern 経由なので Command 非発火（ToggleState のみ反転）
                     Invoke-Element $checkbox | Out-Null
                     Start-Sleep -Milliseconds 1000
-                    $results += New-TestResult -Id "startup_edit.toggle.revert" -Status "OK" -Detail "状態を戻した（Invoke 経由）"
+                    $results += New-TestResult -Id "startup_edit.toggle.revert" -Status "INFO" `
+                        -Detail "limitation: ToggleState 遷移のみ・Command 発火は UIA Pattern では不可"
                 } catch {
                     $results += New-TestResult -Id "startup_edit.toggle.exception" -Status "FAIL" -Detail $_.Exception.Message
                 }
