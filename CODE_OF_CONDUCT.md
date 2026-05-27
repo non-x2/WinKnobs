@@ -63,7 +63,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
    - Use Issues with `[CoC]` prefix in the title for publicly-known violations.
 
 2. **GitHub Security Advisory（プライベート・機密報告）** / GitHub Security Advisory (private)
-   - URL: [https://github.com/nonlabo/WinKnobs/security/advisories/new](https://github.com/nonlabo/WinKnobs/security/advisories/new)
+   - URL: [https://github.com/non-x2/WinKnobs/security/advisories/new](https://github.com/non-x2/WinKnobs/security/advisories/new)
    - 件名に `[CoC違反]` または `[CoC Report]` を明記してください
    - 非公開のやり取り・関係者の氏名等センシティブな情報を含む場合に使用
    - **本来はセキュリティ脆弱性専用窓口ですが、CoC 違反のプライベート報告経路として併用を許可しています**
@@ -71,7 +71,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
    - Although designed for security vulnerabilities, we also accept private CoC reports here as a fallback.
 
 3. **GitHub Discussions（議論・確認）** / GitHub Discussions (discussion)
-   - URL: [https://github.com/nonlabo/WinKnobs/discussions](https://github.com/nonlabo/WinKnobs/discussions)
+   - URL: [https://github.com/non-x2/WinKnobs/discussions](https://github.com/non-x2/WinKnobs/discussions)
    - CoC ポリシー自体への質問・議論はこちらへ
    - For questions about the CoC policy itself.
 

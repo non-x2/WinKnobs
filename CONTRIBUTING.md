@@ -36,11 +36,11 @@ but review may take time.
 - ユースケース・既存機能との比較を明記
 
 ### 質問・議論
-- バグ・機能要望以外は [GitHub Discussions](https://github.com/nonlabo/WinKnobs/discussions) へ
+- バグ・機能要望以外は [GitHub Discussions](https://github.com/non-x2/WinKnobs/discussions) へ
 
 ### セキュリティ脆弱性
 - **Issue では報告しないでください**
-- [Security Advisory](https://github.com/nonlabo/WinKnobs/security/advisories/new)（プライベート）から報告
+- [Security Advisory](https://github.com/non-x2/WinKnobs/security/advisories/new)（プライベート）から報告
 
 ---
 
@@ -175,7 +175,7 @@ WinKnobs は **「安全に Windows 設定を変更できる」** が最優先�
 ### 脆弱性報告
 - [SECURITY.md](SECURITY.md) を参照
 - **Issue では報告しないでください**
-- [Security Advisory](https://github.com/nonlabo/WinKnobs/security/advisories/new) で報告
+- [Security Advisory](https://github.com/non-x2/WinKnobs/security/advisories/new) で報告
 
 ### PR レビュー時の機密情報チェック
 - パスワード・APIキー・トークンが含まれていないか
@@ -206,6 +206,6 @@ While it is a complete clean-room reimplementation, we maintain deep respect for
 
 ## 📬 質問
 
-開発に関する質問は [GitHub Discussions](https://github.com/nonlabo/WinKnobs/discussions) へお願いします。
+開発に関する質問は [GitHub Discussions](https://github.com/non-x2/WinKnobs/discussions) へお願いします。
 
-For development questions, please use [GitHub Discussions](https://github.com/nonlabo/WinKnobs/discussions).
+For development questions, please use [GitHub Discussions](https://github.com/non-x2/WinKnobs/discussions).

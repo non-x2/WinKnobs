@@ -10,16 +10,16 @@
     <!-- アプリ情報 -->
     <AssemblyTitle>WinKnobs</AssemblyTitle>
     <AssemblyDescription>Modern Windows 11 tweaking tool inspired by Ijikuru Tool</AssemblyDescription>
-    <AssemblyCompany>のんラボ (nonlabo)</AssemblyCompany>
+    <AssemblyCompany>のんラボ</AssemblyCompany>
     <AssemblyProduct>WinKnobs</AssemblyProduct>
     <Authors>nonlabo</Authors>
-    <Copyright>Copyright (c) 2026 のんラボ (nonlabo)</Copyright>
+    <Copyright>Copyright (c) 2026 のんラボ</Copyright>
     <AssemblyVersion>0.1.5.0</AssemblyVersion>
     <FileVersion>0.1.5.0</FileVersion>
     <Version>0.1.5-dev</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/nonlabo/WinKnobs</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/nonlabo/WinKnobs</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/non-x2/WinKnobs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/non-x2/WinKnobs</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
 
     <!-- マニフェスト（HiDPI・UAC設定） -->

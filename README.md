@@ -137,7 +137,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for the
 
 ## Author
 
-- のんラボ (nonlabo) - Project owner
+- のんラボ - Project owner
 - Co-developed with Claude (Anthropic)
 
 ## Disclaimer / 免責事項

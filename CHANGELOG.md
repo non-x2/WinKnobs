@@ -230,4 +230,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [README.md](README.md)：プロジェクト概要
 - [CONTRIBUTING.md](CONTRIBUTING.md)：貢献ガイド
 - [SECURITY.md](SECURITY.md)：脆弱性報告
-- [GitHub Releases](https://github.com/nonlabo/WinKnobs/releases)：バイナリ配布（リリース後）
+- [GitHub Releases](https://github.com/non-x2/WinKnobs/releases)：バイナリ配布（リリース後）

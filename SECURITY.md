@@ -24,7 +24,7 @@ Until a stable release (v1.0.0+) is published, only the latest dev version recei
 ### ✅ するべきこと / What to Do
 
 1. **GitHub Security Advisory（プライベート）から報告**
-   - [https://github.com/nonlabo/WinKnobs/security/advisories/new](https://github.com/nonlabo/WinKnobs/security/advisories/new)
+   - [https://github.com/non-x2/WinKnobs/security/advisories/new](https://github.com/non-x2/WinKnobs/security/advisories/new)
    - GitHub アカウント保有者であれば誰でも報告可能
    - 報告内容は管理者にのみ通知される
 

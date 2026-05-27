@@ -40,4 +40,4 @@ Closes #
 
 ---
 
-> 🔐 **セキュリティに関する変更**は Issue ではなく [Security Advisory](https://github.com/nonlabo/WinKnobs/security/advisories/new) で報告してください。
+> 🔐 **セキュリティに関する変更**は Issue ではなく [Security Advisory](https://github.com/non-x2/WinKnobs/security/advisories/new) で報告してください。
