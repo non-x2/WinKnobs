@@ -96,7 +96,10 @@ if ($Mode -eq "VM") {
         @{ Source = "$scriptRoot\testcases\tc_apply_fsutil.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_fsutil.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_apply_v2.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_v2.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_startup_smoke.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_smoke.ps1" },
-        @{ Source = "$scriptRoot\testcases\tc_startup_edit.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_edit.ps1" }
+        @{ Source = "$scriptRoot\testcases\tc_startup_edit.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_edit.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_startup_add.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_add.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_startup_delete.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_delete.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_startup_admin.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_admin.ps1" }
     )
     foreach ($f in $filesToCopy) {
         Copy-VMFile -Name $VMName -SourcePath $f.Source -DestinationPath $f.Dest -FileSource Host -Force
@@ -216,6 +219,9 @@ $tcFiles = @{
     "apply_v2"         = "tc_apply_v2.ps1"
     "startup_smoke"    = "tc_startup_smoke.ps1"  # R-2 閲覧UI 動作確認（書込なし）
     "startup_edit"     = "tc_startup_edit.ps1"   # R-2 編集・保存・トグル（HKCU 書込発生・cleanup あり）
+    "startup_add"      = "tc_startup_add.ps1"    # R-3 新規追加（HKCU 書込・cleanup あり・GUID 8 文字でユニーク化）
+    "startup_delete"   = "tc_startup_delete.ps1" # R-3 削除（HKCU 事前作成→削除・cleanup あり）
+    "startup_admin"    = "tc_startup_admin.ps1"  # R-3 HKLM 編集の昇格ダイアログ起動確認（管理者時は INFO スキップ）
 }
 
 foreach ($tc in $TestCase) {
@@ -319,6 +325,9 @@ foreach ($tc in $TestCase) {
         "apply_v2"         { "Invoke-ApplyV2" }
         "startup_smoke"    { "Invoke-StartupSmoke" }
         "startup_edit"     { "Invoke-StartupEdit" }
+        "startup_add"      { "Invoke-StartupAdd" }
+        "startup_delete"   { "Invoke-StartupDelete" }
+        "startup_admin"    { "Invoke-StartupAdmin" }
     }
 
     Write-Log ("===== TestCase: " + $tc + " =====")

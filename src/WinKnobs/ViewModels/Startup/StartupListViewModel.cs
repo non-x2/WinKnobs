@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Security;
 using System.Windows.Data;
@@ -28,6 +29,7 @@ public partial class StartupListViewModel : ObservableObject
     private readonly StartupItemsProvider _provider;
     private readonly DialogService _dialogs;
     private readonly PrivilegeService _privilege;
+    private readonly BackupService _backup;  // R-3 追加
 
     public ObservableCollection<StartupEntryItem> Entries { get; } = new();
     public ICollectionView FilteredEntries { get; }
@@ -44,17 +46,27 @@ public partial class StartupListViewModel : ObservableObject
     /// <summary>編集済みエントリが 1 件以上あるか（保存ボタンの有効化判定）。</summary>
     public bool HasDirtyEntries => Entries.Any(e => e.IsDirty);
 
+    /// <summary>選択中エントリがあるか（削除/編集ボタンの有効化判定・R-3 追加）。</summary>
+    public bool HasSelectedEntry => SelectedEntry != null;
+
     public StartupListViewModel(
         StartupItemsProvider provider,
         DialogService dialogs,
-        PrivilegeService privilege)
+        PrivilegeService privilege,
+        BackupService backup)  // R-3 追加
     {
         _provider  = provider;
         _dialogs   = dialogs;
         _privilege = privilege;
+        _backup    = backup;
 
         FilteredEntries = CollectionViewSource.GetDefaultView(Entries);
         FilteredEntries.Filter = FilterEntry;
+    }
+
+    partial void OnSelectedEntryChanged(StartupEntryItem? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedEntry));
     }
 
     /// <summary>
@@ -129,6 +141,9 @@ public partial class StartupListViewModel : ObservableObject
                     return;
             }
         }
+
+        // R-3 plan-validator 致命中4 反映：Modify 直前 snapshot（毎回・専用ローテで軽量）
+        EnsureSnapshot();
 
         try
         {
@@ -211,6 +226,9 @@ public partial class StartupListViewModel : ObservableObject
                     return;
             }
         }
+
+        // R-3 plan-validator 致命中4 反映：SaveDirty 直前 snapshot（毎回・専用ローテで軽量）
+        EnsureSnapshot();
 
         // R-2 cross-reviewer 致命11 ズレB 対応：foreach の内側で try-catch することで
         //   「1 件目失敗で残全件スキップ」を回避。権限不足は全件失敗するので早期 return。
@@ -304,7 +322,7 @@ public partial class StartupListViewModel : ObservableObject
     /// <summary>
     /// 編集中（IsDirty=true）の全エントリをメモリ上で破棄し、Original の値に戻す。
     /// R-2 cross-reviewer 致命15 対応：rollback 手段の提供。
-    /// レジストリには触らない（永続化された値の復元は R-3 BackupSnapshot で別実装予定）。
+    /// レジストリには触らない（永続化された値の復元は R-3 RestoreSnapshot コマンド）。
     /// </summary>
     [RelayCommand]
     private void RevertAll()
@@ -327,6 +345,265 @@ public partial class StartupListViewModel : ObservableObject
         foreach (var e in dirtyList) e.RevertChanges();
         StatusMessage = $"↺ {dirtyList.Count} 件の編集を破棄しました。";
         NotifyDirtyChanged();
+    }
+
+    // =================== R-3 コマンド ===================
+
+    /// <summary>
+    /// R-3：新規エントリを追加（Add ダイアログ起動）。
+    /// HKCU_Run 既定 + 他ハイブ選択時は権限フォールバック。
+    /// 他ハイブ Name 重複は警告のみ（plan-validator 致命中5）。
+    /// </summary>
+    [RelayCommand]
+    private void Add()
+    {
+        if (_privilege.IsShutdownPending) return;
+
+        // R-3 cross-reviewer 致命高1 対応：ダイアログ内でリアルタイム重複チェック。
+        // 同一ハイブ重複は OK ボタン無効化・他ハイブ重複は警告表示のみ（事後 Confirm は不要に）。
+        Func<StartupHive, string, (bool sameHiveDup, string? otherHiveDup)> checker = (hive, name) =>
+        {
+            bool same = Entries.Any(e =>
+                e.Hive == hive
+                && string.Equals(e.RawName, name, StringComparison.OrdinalIgnoreCase));
+            var otherEntry = Entries.FirstOrDefault(e =>
+                e.Hive != hive
+                && string.Equals(e.RawName, name, StringComparison.OrdinalIgnoreCase));
+            return (same, otherEntry?.HiveDisplay);
+        };
+
+        var (result, created) = _dialogs.OpenStartupAdd(StartupHive.HKCU_Run, checker);
+        if (result != true || created == null) return;
+
+        // HKLM 系 + 非管理者 → 事前 3 択
+        if (IsHklm(created.Hive) && !_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation(created.Name, isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin:
+                    RequestRestartAsAdministrator();
+                    return;
+                case ElevationChoice.ContinueAnyway:
+                    break;
+                case ElevationChoice.Cancel:
+                default:
+                    return;
+            }
+        }
+
+        // R-3 plan-validator 致命中4 反映：Modify 直前 snapshot（毎回・専用ローテで軽量）
+        EnsureSnapshot();
+
+        try
+        {
+            _provider.AddNew(created);
+
+            created.IsNew = false;        // 永続化済
+            created.SnapshotOriginal();   // OriginalCommand を確定
+            created.PropertyChanged += Entry_PropertyChanged;
+            Entries.Add(created);
+
+            SelectedEntry = created;
+            StatusMessage = $"🆕 {created.Name} を {created.HiveDisplay} に追加しました。";
+            NotifyDirtyChanged();
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded(created.Name)) { return; }
+        catch (SecurityException)             when (HandleElevationNeeded(created.Name)) { return; }
+        catch (InvalidOperationException ex)  when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded(created.Name)) { return; }
+        catch (InvalidOperationException ex)
+        {
+            // 同名重複等
+            _dialogs.Error($"追加に失敗しました：\n{ex.Message}", "追加失敗");
+            StatusMessage = $"❌ 追加失敗: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            _dialogs.Error($"値名が無効です：\n{ex.Message}", "値名エラー");
+            StatusMessage = $"❌ 追加失敗: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"追加に失敗しました：\n{ex.Message}", "追加失敗");
+            StatusMessage = $"❌ 追加失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// R-3：選択中エントリを削除（Run キー + StartupApproved 両方）。
+    /// 削除前 Confirm + Modify 直前 snapshot 自動取得。
+    /// </summary>
+    [RelayCommand]
+    private void Delete()
+    {
+        if (SelectedEntry == null)
+        {
+            _dialogs.Info("削除するエントリを一覧から選択してください。", "未選択");
+            return;
+        }
+        if (_privilege.IsShutdownPending) return;
+
+        var target = SelectedEntry;
+
+        var ok = _dialogs.Confirm(
+            $"以下のスタートアップエントリを削除しますか？\n\n" +
+            $"  名前：{target.Name}\n" +
+            $"  ハイブ：{target.HiveDisplay}\n" +
+            $"  コマンド：{target.Command}\n\n" +
+            "※ レジストリ値と StartupApproved の両方から削除されます。\n" +
+            "※ 削除直前の snapshot から「🔄 復元」で戻せます。",
+            "削除確認");
+        if (!ok) return;
+
+        // HKLM 系 + 非管理者 → 事前 3 択
+        if (IsHklm(target.Hive) && !_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation(target.Name, isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin:
+                    RequestRestartAsAdministrator();
+                    return;
+                case ElevationChoice.ContinueAnyway:
+                    break;
+                case ElevationChoice.Cancel:
+                default:
+                    return;
+            }
+        }
+
+        // R-3 plan-validator 致命中4 反映：Modify 直前 snapshot
+        EnsureSnapshot();
+
+        try
+        {
+            _provider.Delete(target);
+
+            // 購読解除 → 一覧から削除（メモリリーク防止）
+            target.PropertyChanged -= Entry_PropertyChanged;
+            Entries.Remove(target);
+
+            StatusMessage = $"🗑 {target.Name} を {target.HiveDisplay} から削除しました。";
+            NotifyDirtyChanged();
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded(target.Name)) { return; }
+        catch (SecurityException)             when (HandleElevationNeeded(target.Name)) { return; }
+        catch (InvalidOperationException ex)  when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded(target.Name)) { return; }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"削除に失敗しました：\n{ex.Message}", "削除失敗");
+            StatusMessage = $"❌ 削除失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// R-3：最新スタートアップ snapshot から復元（reg.exe import）。
+    /// IsDirty 中エントリがあれば事前確認（plan-validator 致命高2）。
+    /// HKLM 系を含むため、復元自体に管理者権限が必要。
+    /// </summary>
+    [RelayCommand]
+    private void RestoreSnapshot()
+    {
+        if (_privilege.IsShutdownPending) return;
+
+        // R-3 plan-validator 致命高2 反映：IsDirty 中エントリ保護
+        var dirtyCount = Entries.Count(e => e.IsDirty);
+        if (dirtyCount > 0)
+        {
+            var okDirty = _dialogs.Confirm(
+                $"未保存の編集が {dirtyCount} 件あります。\n" +
+                "スナップショット復元で全て破棄されます。\n\n続行しますか？",
+                "未保存の編集あり");
+            if (!okDirty) return;
+        }
+
+        var latest = _backup.GetLatestStartupSnapshotPath();
+        if (latest == null)
+        {
+            _dialogs.Info(
+                "スタートアップ snapshot がまだ取得されていません。\n" +
+                "（追加・削除・編集・トグル操作の直前に自動取得されます）",
+                "snapshot なし");
+            return;
+        }
+
+        var confirm = _dialogs.Confirm(
+            $"最新のスタートアップ snapshot から復元しますか？\n\n" +
+            $"  ファイル：{Path.GetFileName(latest)}\n" +
+            $"  作成日時：{File.GetLastWriteTime(latest):yyyy-MM-dd HH:mm:ss}\n\n" +
+            "※ レジストリの全 6 Run キー + 3 StartupApproved キーが\n" +
+            "  snapshot 時点の状態に上書きされます。\n" +
+            "※ HKLM 系の上書きは管理者権限が必要です。",
+            "スナップショット復元");
+        if (!confirm) return;
+
+        // snapshot は HKLM 系を含むため非管理者なら事前 3 択
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation("スナップショット復元", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin:
+                    RequestRestartAsAdministrator();
+                    return;
+                case ElevationChoice.ContinueAnyway:
+                    break;
+                case ElevationChoice.Cancel:
+                default:
+                    return;
+            }
+        }
+
+        try
+        {
+            _backup.ImportKey(latest);
+
+            // R-3 plan-validator 致命高2 既知分対応：復元後は Load() で Entries 全入替（購読も張り直し）
+            Load();
+
+            StatusMessage = $"🔄 snapshot から復元しました：{Path.GetFileName(latest)}";
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded("snapshot 復元")) { return; }
+        catch (SecurityException)             when (HandleElevationNeeded("snapshot 復元")) { return; }
+        catch (InvalidOperationException ex)  when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("snapshot 復元")) { return; }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"snapshot 復元に失敗しました：\n{ex.Message}", "復元失敗");
+            StatusMessage = $"❌ 復元失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>R-3 cross-reviewer 致命中4：直近 snapshot 取得時刻（10 秒スロットル用）。</summary>
+    private DateTime _lastSnapshotTime = DateTime.MinValue;
+
+    /// <summary>R-3 cross-reviewer 致命中4：snapshot スロットル間隔（連続 Modify で 9 プロセス起動の体感固まりを回避）。</summary>
+    private static readonly TimeSpan SnapshotThrottle = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// R-3：Modify 直前の snapshot 自動取得（plan-validator 致命中4：毎回方式 + cross-reviewer 致命中4：10 秒スロットル）。
+    /// 専用サブディレクトリ + 独自ローテーション 10 件で軽量化（既存個別バックアップへの影響なし）。
+    /// 連続 Modify では 1 回目だけ取得し、以降 10 秒は skip（reg.exe 9 連発による UI 固まり回避）。
+    /// 失敗時は warn のみ・Modify は止めない（破壊操作を中断しない選択）。
+    /// </summary>
+    private void EnsureSnapshot()
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastSnapshotTime < SnapshotThrottle)
+        {
+            Debug.WriteLine($"[Startup] snapshot スロットル（前回から {(now - _lastSnapshotTime).TotalSeconds:F1}秒・skip）");
+            return;
+        }
+
+        try
+        {
+            _backup.BackupStartupSnapshot();
+            _lastSnapshotTime = now;
+        }
+        catch (Exception ex)
+        {
+            // ログ出力のみ（StatusMessage は上書きすると本来の Modify 結果が見えなくなるので避ける）
+            Debug.WriteLine($"[Startup] snapshot 取得失敗（Modify は続行）: {ex.Message}");
+        }
     }
 
     // =================== R-2 内部ヘルパー（BUG-3 パターン複製） ===================

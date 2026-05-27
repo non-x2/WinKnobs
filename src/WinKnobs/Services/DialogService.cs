@@ -146,6 +146,27 @@ public class DialogService
     }
 
     /// <summary>
+    /// R-3：スタートアップエントリ追加ダイアログを開く（Add モード）。
+    /// 戻り値：(DialogResult, CreatedEntry)。DialogResult==true なら CreatedEntry に新規エントリが入る。
+    /// R-3 cross-reviewer 致命高1：Name 重複チェック関数を受け取り、ダイアログ内でリアルタイム警告を出す。
+    /// </summary>
+    public (bool? dialogResult, StartupEntryItem? createdEntry) OpenStartupAdd(
+        StartupHive defaultHive,
+        Func<StartupHive, string, (bool sameHiveDup, string? otherHiveDup)>? nameConflictChecker = null)
+    {
+        var vm = _services.GetRequiredService<StartupEntryEditViewModel>();
+        vm.LoadNew(defaultHive, nameConflictChecker);
+
+        var dlg = _services.GetRequiredService<StartupEntryEditDialog>();
+        dlg.DataContext = vm;
+        dlg.Owner = Owner;
+
+        var result = dlg.ShowDialog();
+        var created = (result == true) ? vm.CreateNewEntry() : null;
+        return (result, created);
+    }
+
+    /// <summary>
     /// SettingDialog を開く。既に開いていれば前面化のみ（E-3 対策）。
     /// </summary>
     public bool? OpenSettingItem(SettingItem item)

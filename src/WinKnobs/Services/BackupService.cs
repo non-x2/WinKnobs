@@ -18,7 +18,12 @@ namespace WinKnobs.Services;
 public class BackupService
 {
     private const int MaxKeepCount = 10;
+
+    // R-3 plan-validator 致命高1 対応：スタートアップ snapshot 専用カウンター（既存個別バックアップと独立）
+    private const int MaxStartupSnapshotCount = 10;
+
     private readonly string _backupDir;
+    private readonly string _startupBackupDir;
     private readonly string _regExePath;
 
     public BackupService()
@@ -28,12 +33,20 @@ public class BackupService
         _backupDir = Path.Combine(appData, "WinKnobs", "backup");
         Directory.CreateDirectory(_backupDir);
 
+        // R-3 plan-validator 致命高1 対応：スタートアップ snapshot 専用サブディレクトリ。
+        // 既存の個別バックアップ（PR1 等）と保存先を分離し、ローテーション 10 件枠を独立確保。
+        _startupBackupDir = Path.Combine(_backupDir, "startup");
+        Directory.CreateDirectory(_startupBackupDir);
+
         // E-4：reg.exe はフルパス指定
         _regExePath = Path.Combine(Environment.SystemDirectory, "reg.exe");
     }
 
-    /// <summary>バックアップ保存先ディレクトリ。</summary>
+    /// <summary>バックアップ保存先ディレクトリ（個別バックアップ用）。</summary>
     public string BackupDirectory => _backupDir;
+
+    /// <summary>スタートアップ snapshot 専用ディレクトリ。</summary>
+    public string StartupBackupDirectory => _startupBackupDir;
 
     /// <summary>
     /// 指定したレジストリキーを .reg ファイルにエクスポート。
@@ -246,6 +259,244 @@ public class BackupService
         var invalid = Path.GetInvalidFileNameChars();
         var safe = string.Concat(label.Where(c => !invalid.Contains(c)));
         return string.IsNullOrWhiteSpace(safe) ? "backup" : safe;
+    }
+
+    // ─── R-3 実装：スタートアップ snapshot ───
+
+    /// <summary>
+    /// R-3：スタートアップ系の全 9 キー（6 Run + 3 StartupApproved）を 1 つの統合 .reg にエクスポート。
+    ///
+    /// 対象キー：
+    ///   - HKLM/HKCU の Run / RunOnce / WOW6432Node\Run / WOW6432Node\RunOnce
+    ///   - HKLM/HKCU の Explorer\StartupApproved\Run / Run32
+    ///
+    /// 出力先：%APPDATA%\WinKnobs\backup\startup\startup_full_YYYYMMDD_HHmmss.reg
+    /// ローテーション：MaxStartupSnapshotCount（10 件）を超えたら古い順に削除（独自カウンター）。
+    ///
+    /// R-3 plan-validator 致命高1 対応：既存 ExportKey（共通 10 件ローテ）とは保存先を分離。
+    /// </summary>
+    /// <returns>統合 .reg ファイルのフルパス</returns>
+    public string BackupStartupSnapshot()
+    {
+        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var finalPath = Path.Combine(_startupBackupDir, $"startup_full_{timestamp}.reg");
+
+        // 9 キーをフルパスで列挙（reg.exe 互換の HKEY_* 形式）
+        var keys = new[]
+        {
+            @"HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run",
+            @"HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+            @"HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
+            @"HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce",
+            @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run",
+            @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+            @"HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+            @"HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32",
+            @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+        };
+
+        // 一時ディレクトリで各キーをエクスポート → 統合（途中失敗時は中間ファイル削除）
+        var tempDir = Path.Combine(_startupBackupDir, $".tmp_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var sections = new List<string>();
+
+            for (int i = 0; i < keys.Length; i++)
+            {
+                var keyPath = keys[i];
+                var tempFile = Path.Combine(tempDir, $"part_{i:D2}.reg");
+
+                if (!RegistryKeyExistsFullPath(keyPath))
+                {
+                    // キー不在：[-FullKeyPath] 削除マーカーセクションを生成（個別 ExportKey と同じ仕様）
+                    sections.Add(BuildMissingKeyMarkerSection(keyPath));
+                    continue;
+                }
+
+                // reg.exe export で一時ファイルに保存
+                var psi = new ProcessStartInfo(_regExePath)
+                {
+                    ArgumentList = { "export", keyPath, tempFile, "/y" },
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var p = Process.Start(psi)
+                    ?? throw new InvalidOperationException("Failed to start reg.exe");
+                p.WaitForExit();
+
+                if (p.ExitCode != 0)
+                {
+                    var err = p.StandardError.ReadToEnd();
+                    throw new InvalidOperationException($"reg export failed for {keyPath}: {err}");
+                }
+
+                // 一時ファイルからヘッダ除いた本文を取得（2 つ目以降はヘッダ重複させない）
+                var body = ReadRegBodyExceptHeader(tempFile);
+
+                // R-3 cross-reviewer 致命高2 対応：空 section / 無効 section を統合 .reg に混入させない。
+                // 正常 section は `[HKEY_...]` か `[-HKEY_...]` を含むはず。
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    throw new InvalidOperationException(
+                        $"reg.exe export が空の本文を返しました（key={keyPath}）。" +
+                        "snapshot 整合性を保つため中止します。");
+                }
+                if (!body.Contains("[HKEY_", StringComparison.OrdinalIgnoreCase)
+                    && !body.Contains("[-HKEY_", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"reg.exe export の本文に有効な reg セクションが含まれません（key={keyPath}）。");
+                }
+                sections.Add(body);
+            }
+
+            // R-3 cross-reviewer 致命高2 対応：section 数の最終検証（途中 break や break loop の検知）
+            if (sections.Count != keys.Length)
+            {
+                throw new InvalidOperationException(
+                    $"snapshot section 数の不整合（期待 {keys.Length} / 実際 {sections.Count}）。");
+            }
+
+            // 統合 .reg を書き出し（UTF-16 LE BOM + 共通ヘッダ + 各セクション）
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Windows Registry Editor Version 5.00\r\n\r\n");
+            sb.Append("; WinKnobs Startup snapshot (R-3)\r\n");
+            sb.Append($"; Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r\n");
+            sb.Append($"; Keys: {keys.Length} (6 Run + 3 StartupApproved)\r\n\r\n");
+            foreach (var sec in sections)
+            {
+                sb.Append(sec);
+                if (!sec.EndsWith("\r\n\r\n", StringComparison.Ordinal))
+                    sb.Append("\r\n");
+            }
+
+            File.WriteAllText(finalPath, sb.ToString(), new System.Text.UnicodeEncoding(false, true));
+            ValidateBackupFile(finalPath);
+
+            CleanupOldStartupSnapshots();
+            return finalPath;
+        }
+        catch
+        {
+            // 失敗時：中間ファイル削除（部分バックアップ残存回避）
+            try
+            {
+                if (File.Exists(finalPath)) File.Delete(finalPath);
+            }
+            catch { /* 無視 */ }
+            throw;
+        }
+        finally
+        {
+            // 一時ディレクトリは必ず掃除
+            try
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            }
+            catch { /* 無視 */ }
+        }
+    }
+
+    /// <summary>スタートアップ snapshot 一覧を新しい順で取得。</summary>
+    public IReadOnlyList<FileInfo> ListStartupSnapshots()
+    {
+        return Directory.GetFiles(_startupBackupDir, "startup_full_*.reg")
+            .Select(f => new FileInfo(f))
+            .OrderByDescending(f => f.LastWriteTime)
+            .ToList();
+    }
+
+    /// <summary>最新のスタートアップ snapshot ファイルのパス（無ければ null）。</summary>
+    public string? GetLatestStartupSnapshotPath()
+    {
+        return ListStartupSnapshots().FirstOrDefault()?.FullName;
+    }
+
+    /// <summary>スタートアップ snapshot 専用の独自ローテーション（10 件まで保持）。</summary>
+    private void CleanupOldStartupSnapshots()
+    {
+        var files = Directory.GetFiles(_startupBackupDir, "startup_full_*.reg")
+            .Select(f => new FileInfo(f))
+            .OrderByDescending(f => f.LastWriteTime)
+            .ToList();
+
+        foreach (var old in files.Skip(MaxStartupSnapshotCount))
+        {
+            try { old.Delete(); }
+            catch { /* 削除失敗は無視 */ }
+        }
+    }
+
+    /// <summary>フルパス（HKEY_LOCAL_MACHINE\... 形式）でキー存在チェック。</summary>
+    private static bool RegistryKeyExistsFullPath(string fullKeyPath)
+    {
+        var parts = fullKeyPath.Split('\\', 2);
+        var hiveName = parts[0].ToUpperInvariant();
+        var subKey = parts.Length > 1 ? parts[1] : string.Empty;
+
+        var hive = hiveName switch
+        {
+            "HKEY_LOCAL_MACHINE" => RegistryHive.LocalMachine,
+            "HKEY_CURRENT_USER" => RegistryHive.CurrentUser,
+            "HKEY_CLASSES_ROOT" => RegistryHive.ClassesRoot,
+            "HKEY_USERS" => RegistryHive.Users,
+            "HKEY_CURRENT_CONFIG" => RegistryHive.CurrentConfig,
+            _ => RegistryHive.LocalMachine
+        };
+
+        try
+        {
+            // WOW6432Node を含むパスは Registry32 ビューを使う（64bit OS でも 32bit ハイブ）
+            var view = subKey.Contains("WOW6432Node", StringComparison.OrdinalIgnoreCase)
+                ? RegistryView.Registry32
+                : RegistryView.Registry64;
+
+            using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+            if (string.IsNullOrEmpty(subKey)) return true;
+            using var key = baseKey.OpenSubKey(subKey, writable: false);
+            return key != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>不在キーの削除マーカーセクションを生成（reg import で [-FullKeyPath] 解釈）。</summary>
+    private static string BuildMissingKeyMarkerSection(string fullKeyPath)
+    {
+        return
+            $"; --- key not present at snapshot time ---\r\n" +
+            $"; KeyPath={fullKeyPath}\r\n" +
+            $"[-{fullKeyPath}]\r\n\r\n";
+    }
+
+    /// <summary>
+    /// 一時 .reg ファイルからヘッダ行（"Windows Registry Editor Version 5.00" + 直後の空行）を除いた本文を返す。
+    /// reg.exe は UTF-16 LE BOM 付きで出力するため、UTF-16 として読み込み。
+    /// </summary>
+    private static string ReadRegBodyExceptHeader(string regFilePath)
+    {
+        var fullText = File.ReadAllText(regFilePath, System.Text.Encoding.Unicode);
+        const string headerLine = "Windows Registry Editor Version 5.00";
+        var idx = fullText.IndexOf(headerLine, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+        {
+            // ヘッダなし：そのまま返す（reg.exe 出力形式が変わった場合のフォールバック）
+            return fullText.TrimStart('﻿');
+        }
+
+        // ヘッダ後の最初の改行までを飛ばし、その後の空行も飛ばす
+        var startSearch = idx + headerLine.Length;
+        var newlineIdx = fullText.IndexOf('\n', startSearch);
+        if (newlineIdx < 0) return string.Empty;
+
+        var body = fullText.Substring(newlineIdx + 1).TrimStart('\r', '\n');
+        return body;
     }
 
     /// <summary>

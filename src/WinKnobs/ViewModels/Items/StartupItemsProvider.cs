@@ -257,10 +257,91 @@ public class StartupItemsProvider
         return new SaveResult { Success = true };
     }
 
-    /// <summary>Run と StartupApproved 両方から削除（Phase R-3 で実装）。</summary>
+    /// <summary>
+    /// Run キーと StartupApproved 両方からエントリを削除（Phase R-3 実装）。
+    ///
+    /// - Run キー側：DeleteValue（値が存在しなければ no-op）
+    /// - StartupApproved 側：Run 系（HKLM_Run/HKLM_Wow64_Run/HKCU_Run）のみ連動削除
+    ///   ・RunOnce 系は StartupApproved 連動非対応のためスキップ（SetEnabled と同じ判定）
+    /// - HKLM 系は管理者権限必須（呼び元で UnauthorizedAccessException を捕捉してフォールバック）
+    /// - R-3 plan-validator 致命中6 対応：StartupApproved 側の削除に失敗しても Run キー削除は完了済なので例外は投げない（best-effort）。
+    /// </summary>
     public void Delete(StartupEntryItem entry)
     {
-        throw new NotImplementedException("Phase R-3 で実装予定");
+        // 1. Run キーから削除
+        var (hive, view, runSubKey) = GetRunLocation(entry.Hive);
+        using (var baseKey = RegistryKey.OpenBaseKey(hive, view))
+        using (var key = baseKey.OpenSubKey(runSubKey, writable: true)
+                ?? throw new InvalidOperationException($"Run キーを開けません：{runSubKey}"))
+        {
+            key.DeleteValue(entry.RawName, throwOnMissingValue: false);
+        }
+
+        // 2. StartupApproved 側を連動削除（Run 系のみ）
+        //    RunOnce 系は SetEnabled と同様に StartupApproved 非対応なのでスキップ
+        if (entry.Hive is StartupHive.HKLM_Run
+                       or StartupHive.HKLM_Wow64_Run
+                       or StartupHive.HKCU_Run)
+        {
+            try
+            {
+                var (ahive, aview, approvedSubKey) = GetApprovedLocation(entry.Hive);
+                using var abase = RegistryKey.OpenBaseKey(ahive, aview);
+                using var akey = abase.OpenSubKey(approvedSubKey, writable: true);
+                akey?.DeleteValue(entry.RawName, throwOnMissingValue: false);
+            }
+            catch
+            {
+                // best-effort: StartupApproved 側の削除失敗は無視（Run キー削除は完了済）
+            }
+        }
+    }
+
+    /// <summary>
+    /// 新規エントリを Run キーに追加（Phase R-3 実装）。
+    ///
+    /// - 同一ハイブ内 Name 重複：InvalidOperationException（R-3 plan-validator 致命中5）
+    /// - Name バリデーション：空文字・予約名等は ArgumentException（R-3 エッジ#2）
+    /// - ValueKind は entry に従う（REG_SZ または REG_EXPAND_SZ）
+    /// - IsEnabled=false の時のみ StartupApproved 側に 0x03 書込・true なら未登録のまま（Windows デフォルト＝有効扱い）
+    /// - HKLM 系は管理者権限必須（呼び元で UnauthorizedAccessException を捕捉してフォールバック）
+    /// </summary>
+    public void AddNew(StartupEntryItem entry)
+    {
+        // バリデーション（R-3 plan-validator エッジ#2）
+        if (string.IsNullOrWhiteSpace(entry.RawName))
+            throw new ArgumentException("値名が空です。", nameof(entry));
+
+        if (entry.RawName.Length > 255)
+            throw new ArgumentException($"値名が長すぎます（{entry.RawName.Length} 文字・最大 255）。", nameof(entry));
+
+        var (hive, view, runSubKey) = GetRunLocation(entry.Hive);
+
+        using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+        // CreateSubKey：Run キー自体が無い環境（クリーン Windows 11 等）でも作成する
+        using var key = baseKey.CreateSubKey(runSubKey, writable: true)
+            ?? throw new InvalidOperationException($"Run キーを開けません：{runSubKey}");
+
+        // 同一ハイブ内 Name 重複チェック
+        if (key.GetValueNames().Any(n => string.Equals(n, entry.RawName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"値名 '{entry.RawName}' は既に {entry.HiveDisplay} に存在します。");
+        }
+
+        // Run キー書込
+        key.SetValue(entry.RawName, entry.Command, entry.ValueKind);
+
+        // StartupApproved 側：IsEnabled=false の時のみ明示的に 0x03 書込
+        // IsEnabled=true（既定）の場合は未登録のまま＝Windows デフォルトで有効扱い
+        // RunOnce 系は SetEnabled が NotSupportedException を投げるのでスキップ
+        if (entry.IsEnabled == false
+            && entry.Hive is StartupHive.HKLM_Run
+                          or StartupHive.HKLM_Wow64_Run
+                          or StartupHive.HKCU_Run)
+        {
+            SetEnabled(entry, false);
+        }
     }
 
     // ─── R-2 内部ヘルパー ───

@@ -50,10 +50,15 @@ public partial class StartupEntryEditDialog : Window
     /// 確実に更新されないケースがある（特に UpdateSourceTrigger=PropertyChanged + Hidden モード時）。
     /// Click 時に明示的に BindingExpression.UpdateSource() を呼び、その後 OkCommand に渡す。
     /// R-2 UIA テスト save.verify FAIL の対策。
+    /// R-3：Name TextBox（Add モード）にも同様の対策を適用。
     /// </summary>
     private void StartupEditOkButton_Click(object sender, RoutedEventArgs e)
     {
-        var binding = StartupEditCommandBox.GetBindingExpression(TextBox.TextProperty);
-        binding?.UpdateSource();
+        var cmdBinding = StartupEditCommandBox.GetBindingExpression(TextBox.TextProperty);
+        cmdBinding?.UpdateSource();
+
+        // R-3：Name TextBox は Add モード時のみ表示（Visibility=Collapsed なら GetBindingExpression は null を返す）
+        var nameBinding = StartupEditNameBox.GetBindingExpression(TextBox.TextProperty);
+        nameBinding?.UpdateSource();
     }
 }

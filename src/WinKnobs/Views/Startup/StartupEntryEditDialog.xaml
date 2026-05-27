@@ -3,29 +3,37 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:WinKnobs.ViewModels.Startup"
+        xmlns:conv="clr-namespace:WinKnobs.Converters"
         d:DataContext="{d:DesignInstance Type=vm:StartupEntryEditViewModel}"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="スタートアップエントリの編集"
         AutomationProperties.AutomationId="StartupEntryEditDialog"
-        Height="320" Width="620"
-        MinHeight="280" MinWidth="520"
+        Height="400" Width="640"
+        MinHeight="360" MinWidth="540"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource Bg.Window}"
         Foreground="{DynamicResource Fg.Default}">
 
+    <Window.Resources>
+        <conv:BoolToCollapsedVisibilityConverter x:Key="BoolToCollapsed"/>
+        <conv:BoolToVisibleVisibilityConverter x:Key="BoolToVisible"/>
+    </Window.Resources>
+
     <DockPanel LastChildFill="True" Margin="0">
 
-        <!-- ヘッダ：エントリ名＋ハイブ -->
+        <!-- ヘッダ：エントリ名＋ハイブ（Edit / Add でアイコンとタイトル切替） -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource Bg.Panel}"
                 BorderBrush="{DynamicResource Border.Default}"
                 BorderThickness="0,0,0,1"
                 Padding="14,12">
             <StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <!-- Edit モード時のヘッダ -->
+                <StackPanel Orientation="Horizontal"
+                            Visibility="{Binding IsNewMode, Converter={StaticResource BoolToCollapsed}}">
                     <TextBlock Text="🚀" FontSize="18" Margin="0,0,8,0"/>
                     <TextBlock x:Name="EntryNameText"
                                AutomationProperties.AutomationId="EntryNameText"
@@ -33,15 +41,21 @@
                                FontSize="15" FontWeight="SemiBold"
                                Foreground="{DynamicResource Fg.Default}"/>
                 </StackPanel>
-                <TextBlock Text="{Binding HiveDisplay}"
-                           Margin="26,4,0,0"
-                           FontSize="11"
-                           Foreground="{DynamicResource Fg.Muted}"/>
-                <TextBlock Text="※ Name 変更は R-3 で対応予定です（現在は Command と種別のみ編集可能）。"
-                           Margin="0,6,0,0"
+                <!-- Add モード時のヘッダ -->
+                <StackPanel Orientation="Horizontal"
+                            Visibility="{Binding IsNewMode, Converter={StaticResource BoolToVisible}}">
+                    <TextBlock Text="🆕" FontSize="18" Margin="0,0,8,0"/>
+                    <TextBlock Text="新規スタートアップエントリ"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Fg.Default}"/>
+                </StackPanel>
+                <TextBlock Margin="0,6,0,0"
                            FontSize="11"
                            Foreground="{DynamicResource Fg.Subtle}"
-                           TextWrapping="Wrap"/>
+                           TextWrapping="Wrap">
+                    <Run Text="ⓘ"/>
+                    <Run Text=" 新規追加は HKCU\Run（自分のユーザーのみ）が安全です。HKLM 系を選ぶと管理者再起動が必要です。"/>
+                </TextBlock>
             </StackPanel>
         </Border>
 
@@ -86,34 +100,84 @@
         <!-- 中央：編集エリア -->
         <Grid Margin="14,12">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>  <!-- ハイブ -->
+                <RowDefinition Height="Auto"/>  <!-- 名前 -->
+                <RowDefinition Height="Auto"/>  <!-- コマンド -->
+                <RowDefinition Height="Auto"/>  <!-- 種別 -->
+                <RowDefinition Height="*"/>     <!-- 注記 -->
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
+            <!-- ハイブ：Edit 時は読取専用 / Add 時は ComboBox -->
             <TextBlock Grid.Row="0" Grid.Column="0"
+                       Text="ハイブ："
+                       VerticalAlignment="Center" Margin="0,0,10,8"
+                       FontSize="12"
+                       Foreground="{DynamicResource Fg.Default}"/>
+            <Grid Grid.Row="0" Grid.Column="1" Margin="0,0,0,8">
+                <!-- Edit モード：HiveDisplay を読取専用 TextBlock で表示 -->
+                <TextBlock Text="{Binding HiveDisplay}"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           FontFamily="Consolas"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           Visibility="{Binding IsNewMode, Converter={StaticResource BoolToCollapsed}}"/>
+                <!-- Add モード：ComboBox で選択可 -->
+                <ComboBox x:Name="StartupEditHiveCombo"
+                          AutomationProperties.AutomationId="StartupEditHiveCombo"
+                          ItemsSource="{Binding SelectableHives}"
+                          SelectedItem="{Binding SelectedHive, Mode=TwoWay}"
+                          Padding="6,3"
+                          Visibility="{Binding IsNewMode, Converter={StaticResource BoolToVisible}}"/>
+            </Grid>
+
+            <!-- 名前：Edit 時は読取専用 / Add 時は TextBox -->
+            <TextBlock Grid.Row="1" Grid.Column="0"
+                       Text="名前："
+                       VerticalAlignment="Center" Margin="0,0,10,8"
+                       FontSize="12"
+                       Foreground="{DynamicResource Fg.Default}"/>
+            <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,0,8">
+                <!-- Edit モード：名前を読取専用 TextBlock -->
+                <TextBlock Text="{Binding DisplayName}"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           FontFamily="Consolas"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           Visibility="{Binding IsNewMode, Converter={StaticResource BoolToCollapsed}}"/>
+                <!-- Add モード：TextBox で入力可 -->
+                <TextBox x:Name="StartupEditNameBox"
+                         AutomationProperties.AutomationId="StartupEditNameBox"
+                         Text="{Binding EditableName, UpdateSourceTrigger=PropertyChanged}"
+                         VerticalAlignment="Center"
+                         Padding="6,4" FontFamily="Consolas"
+                         MaxLength="255"
+                         Visibility="{Binding IsNewMode, Converter={StaticResource BoolToVisible}}"/>
+            </Grid>
+
+            <!-- コマンド：常に編集可 -->
+            <TextBlock Grid.Row="2" Grid.Column="0"
                        Text="コマンド："
                        VerticalAlignment="Center" Margin="0,0,10,8"
                        FontSize="12"
                        Foreground="{DynamicResource Fg.Default}"/>
-            <TextBox Grid.Row="0" Grid.Column="1"
+            <TextBox Grid.Row="2" Grid.Column="1"
                      x:Name="StartupEditCommandBox"
                      AutomationProperties.AutomationId="StartupEditCommandBox"
                      Text="{Binding EditableCommand, UpdateSourceTrigger=PropertyChanged}"
                      VerticalAlignment="Center" Margin="0,0,0,8"
                      Padding="6,4" FontFamily="Consolas"/>
 
-            <TextBlock Grid.Row="1" Grid.Column="0"
+            <!-- 種別：常に編集可 -->
+            <TextBlock Grid.Row="3" Grid.Column="0"
                        Text="種別："
                        VerticalAlignment="Center" Margin="0,0,10,8"
                        FontSize="12"
                        Foreground="{DynamicResource Fg.Default}"/>
-            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
                 <RadioButton x:Name="StartupEditRegSzRadio"
                              AutomationProperties.AutomationId="StartupEditRegSzRadio"
                              GroupName="ValueKind"
@@ -128,7 +192,8 @@
                              VerticalAlignment="Center"/>
             </StackPanel>
 
-            <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+            <!-- 注記 -->
+            <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
                        Margin="0,8,0,0"
                        FontSize="11"
                        Foreground="{DynamicResource Fg.Subtle}"

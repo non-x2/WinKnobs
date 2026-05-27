@@ -12,21 +12,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Notes
+- 次の候補：snapshot 改ざん対策（SHA256 / 復元前プレビュー）/ HKLM 3 択フォールバックのヘルパー化（M-1 リファクタ）/ 世代またぎ復元の差分件数警告 / v0.2 候補項目
+
+---
+
+## [0.1.5-dev] - 2026-05-27
+
 ### Added
-- OSS化 Week 3 完遂：CONTRIBUTING.md / SECURITY.md / CODE_OF_CONDUCT.md / CHANGELOG.md
-- .github/ ディレクトリ整備：ISSUE_TEMPLATE / PR テンプレ / FUNDING.yml
-- LICENSE Copyright を「のんラボ (nonlabo)」に統一
-- csproj メタデータ更新（AssemblyCompany / Authors / Copyright / Version / RepositoryUrl）
+- **Phase R-3：スタートアップ系の追加・削除・snapshot 完成**
+  - `StartupItemsProvider.Delete()`：Run キーと StartupApproved 両方からエントリ削除（RunOnce 系は StartupApproved スキップ・best-effort）
+  - `StartupItemsProvider.AddNew()`：新規 Run 値書込 + 同一ハイブ名重複ブロック + Name 長さバリデーション（255 文字上限）
+  - `BackupService.BackupStartupSnapshot()`：全 6 Run ハイブ + 3 StartupApproved を 1 つの統合 .reg にエクスポート
+  - `BackupService.GetLatestStartupSnapshotPath()` / `ListStartupSnapshots()`：snapshot 一覧 / 最新パス取得
+  - StartupListViewModel に `AddCommand` / `DeleteCommand` / `RestoreSnapshotCommand` 追加
+  - StartupListView：「+ 追加」「🗑 削除」を enable + 新規「🔄 復元」ボタン追加（AutomationId 整備）
+  - StartupEntryEditViewModel：`IsNewMode` / `EditableName` / `SelectableHives` / `SelectedHive` / `LoadNew()` / `CreateNewEntry()` で Add モード対応
+  - StartupEntryEditDialog：Hive ComboBox / Name TextBox を Visibility 切替で Add/Edit モード分岐
+  - UI Automation テスト 3 件追加：`tc_startup_add.ps1` / `tc_startup_delete.ps1` / `tc_startup_admin.ps1`（GUID 8 文字でユニーク化・try/finally cleanup）
+- **Phase R-2：スタートアップ系の編集・トグル・楽観ロック完成**（commit 75d0c75）
+  - CheckBox 即時トグル + 編集ダイアログ + 保存ボタン + 楽観ロック
+  - StartupEntryEditViewModel / StartupEntryEditDialog 新規実装
+  - 致命 6 件 + 依存 UX バグの対応反映（HKLM_Wow64 View 統一・列ヘッダ「即時」明示・SaveDirty ループ内 try-catch・Original 保持と RevertChanges・CanToggleEnabled で IsDirty 中 disable）
+  - UI Automation テスト 2 件追加（tc_startup_smoke / tc_startup_edit）
+- **R-2 hotfix 3 件**（commit 5391ec6）
+  - IsDirty 残留バグ（無変更 OK で IsDirty=true 残留）→ StartupEntryEditViewModel.Ok() で IsModified=true 時のみ書戻し
+  - 楽観ロック比較対象バグ → StartupItemsProvider.Save() の比較対象を `entry.Command` → `entry.OriginalCommand`
+  - StartupListViewModel.Edit() で IsDirty 連動ステータス文言
+- **UIA × WPF CheckBox 制約調査**（commit 6731b66）
+  - 真因確定：WPF CheckBox は UIA `InvokePattern` 非実装・`TogglePattern.Toggle` は WPF Command 非発火
+  - 本体コード問題なし（実機マウスクリックでは PASS）
+  - tc_startup_edit.ps1 の toggle 3 件を INFO 化（誤検知の塗り重ね回避）
+  - run_ui_test.ps1 に `LimitationsFlagged` カウンタ追加（CI 緑化副作用防止）
+- **OSS化 Week 3 完遂**：CONTRIBUTING.md / SECURITY.md / CODE_OF_CONDUCT.md / CHANGELOG.md / .github/ ディレクトリ整備
+- バージョン bump：v0.1.4-dev → v0.1.5-dev（csproj AssemblyVersion=0.1.5.0 / MainWindow ステータスバー / MainViewModel 環境情報）
 
 ### Changed
-- .gitignore 拡張：VM 認証情報・ホスト固有ログ・引き継ぎメモを除外
-- README.md Author 表記を「のんラボ (nonlabo)」に統一
+- BackupService にスタートアップ snapshot 専用サブディレクトリ `%APPDATA%\WinKnobs\backup\startup\` + 独自ローテーション 10 件（既存 28 項目バックアップの 10 件枠と完全分離）
+- EnsureSnapshot に 10 秒スロットル（連続 Modify で reg.exe 9 連発による UI 固まり回避）
+- StartupListViewModel コンストラクタに BackupService 追加（DI）
+- DialogService.OpenStartupAdd 追加（Name 重複チェックコールバック受領）
+
+### Fixed
+- plan-validator 致命高1：snapshot 専用サブディレクトリ分離で個別バックアップ瞬殺リスク解消
+- plan-validator 致命高2：RestoreSnapshot 前に IsDirty 中エントリ Confirm（編集中作業消失防止）
+- cross-reviewer 致命高1：Add Name 重複をダイアログ内リアルタイム警告化（同一ハイブ重複は IsValid=false で OK 無効化・他ハイブ重複は StatusMessage 警告）
+- cross-reviewer 致命高2：BackupStartupSnapshot の空 section / 無効 section 混入を検証強化（`[HKEY_` / `[-HKEY_` 含有 + section 数チェック）
+- cross-reviewer 致命中4：EnsureSnapshot 10 秒スロットルで連続 Modify の体感固まり回避
+- cross-reviewer 致命中7：tc_startup_delete の「はい」「Yes」ボタン検出をパターンマッチ強化（Windows 11 24H2 アクセスキー OFF 対応）
 
 ### Security
-- パスワード生平文を含む VM セットアップログを .gitignore 除外
-- VM 認証情報（SecureString）ファイルを .gitignore 除外
-- 開発者固有のホスト名・ユーザー名を含むスクリプト・テスト結果を除外
-- 公開対象外のテスト結果ログ・引き継ぎメモを除外
+- パスワード生平文・VM 認証情報・ホスト固有ログ・引き継ぎメモを .gitignore 除外（OSS化 Week 3）
 
 ---
 

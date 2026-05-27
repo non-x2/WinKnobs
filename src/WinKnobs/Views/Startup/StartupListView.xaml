@@ -29,7 +29,7 @@
             </TextBlock>
         </Border>
 
-        <!-- ツールバー（Phase R-2：編集・保存。追加・削除は R-3 で実装予定） -->
+        <!-- ツールバー（Phase R-3：追加・削除・スナップショット復元も enable） -->
         <Border Grid.Row="1"
                 Padding="8,4"
                 Background="{DynamicResource Bg.Panel}"
@@ -39,8 +39,8 @@
                 <Button x:Name="StartupAddButton"
                         AutomationProperties.AutomationId="StartupAddButton"
                         Content="+ 追加"
-                        IsEnabled="False"
-                        ToolTip="Phase R-3 で実装予定"
+                        Command="{Binding AddCommand}"
+                        ToolTip="新規スタートアップエントリを追加します（既定: HKCU\Run / 自分のユーザーのみ）"
                         MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
                 <Button x:Name="StartupEditButton"
                         AutomationProperties.AutomationId="StartupEditButton"
@@ -51,8 +51,9 @@
                 <Button x:Name="StartupDeleteButton"
                         AutomationProperties.AutomationId="StartupDeleteButton"
                         Content="🗑 削除"
-                        IsEnabled="False"
-                        ToolTip="Phase R-3 で実装予定"
+                        Command="{Binding DeleteCommand}"
+                        IsEnabled="{Binding HasSelectedEntry}"
+                        ToolTip="選択中のエントリを Run キー + StartupApproved から削除します（HKLM 系は管理者権限要）"
                         MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
                 <Button x:Name="StartupSaveButton"
                         AutomationProperties.AutomationId="StartupSaveButton"
@@ -66,12 +67,18 @@
                         Content="↺ 戻す"
                         Command="{Binding RevertAllCommand}"
                         IsEnabled="{Binding HasDirtyEntries}"
-                        ToolTip="編集中の変更を破棄して元の値に戻します（レジストリは触らない・R-3 でバックアップ復元と差別化）"
+                        ToolTip="編集中の変更を破棄して元の値に戻します（レジストリは触らず・メモリ編集のみ破棄）"
+                        MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
+                <Button x:Name="StartupRestoreSnapshotButton"
+                        AutomationProperties.AutomationId="StartupRestoreSnapshotButton"
+                        Content="🔄 復元"
+                        Command="{Binding RestoreSnapshotCommand}"
+                        ToolTip="最新のスタートアップ snapshot からレジストリを復元します（管理者権限要・破壊操作直前に自動取得）"
                         MinWidth="80" Margin="0,0,6,0" Padding="6,3"/>
                 <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
                            FontSize="11" FontWeight="SemiBold"
                            Foreground="{DynamicResource Fg.Default}"
-                           Text="⚠ 操作モード：CheckBox は即時反映 ／ ✏編集 は 💾保存 で永続化（2モード混在）"/>
+                           Text="⚠ CheckBox は即時反映 ／ ✏編集 は 💾保存 で永続化 ／ 🔄 復元 は snapshot から戻す"/>
             </StackPanel>
         </Border>
 

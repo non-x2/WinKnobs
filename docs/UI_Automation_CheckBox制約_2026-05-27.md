@@ -31,7 +31,7 @@ Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupAppro
 (Get-ItemProperty $path).Count  # → 10 件のエントリ既存
 ```
 
-ホスト環境で StartupApproved\Run キーは **既に存在し 10 件のエントリ**（LINE / Discord / Steam / Chrome / Edge 等）が登録済。`StartupItemsProvider.SetEnabled` 内部の `CreateSubKey` は **既存キーなら開くだけ**で正常動作するはずなのに、UIA テストでは書込が発生していない。
+テスト環境で StartupApproved\Run キーは **既に存在し 10 件程度のエントリが登録済**（プライバシー配慮で具体的なアプリ名は省略）。`StartupItemsProvider.SetEnabled` 内部の `CreateSubKey` は **既存キーなら開くだけ**で正常動作するはずなのに、UIA テストでは書込が発生していない。
 
 → **キー自体の問題ではない**。
 
