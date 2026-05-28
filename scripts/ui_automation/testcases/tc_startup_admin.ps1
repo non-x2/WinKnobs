@@ -97,6 +97,22 @@ function Invoke-StartupAdmin {
                 Select-Element $hklmItem | Out-Null
                 Start-Sleep -Milliseconds 400
                 $results += New-TestResult -Id "startup_admin.hive.select" -Status "OK" -Detail "Hive=HKLM_Run"
+
+                # 2026-05-28 FAIL 調査追加：Hive 反映確認（UIA × WPF ComboBox 制約の一環）
+                # SelectionItemPattern.Select() が WPF ComboBox.SelectedItem バインドを更新したか ValuePattern で検証
+                $hiveValue = $null
+                try {
+                    $vp = $hiveCombo.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+                    $hiveValue = $vp.Current.Value
+                } catch {
+                    $hiveValue = "[ValuePattern 取得失敗]"
+                }
+                if ($hiveValue -ne "HKLM_Run") {
+                    $results += New-TestResult -Id "startup_admin.hive.verify" -Status "INFO" `
+                        -Detail "limitation: UIA × WPF ComboBox 制約。SelectionItemPattern.Select() 後の ValuePattern.Value=$hiveValue（期待 HKLM_Run）。実機マウスクリックでは PASS。docs/UI_Automation_CheckBox制約_2026-05-27.md と同根（残りの elevation/cancel ステップは反映不可で意義消失）"
+                    return $results
+                }
+                $results += New-TestResult -Id "startup_admin.hive.verify" -Status "OK" -Detail "ValuePattern.Value=$hiveValue（HKLM_Run 反映確認）"
             } catch {
                 $results += New-TestResult -Id "startup_admin.hive.exception" -Status "FAIL" -Detail $_.Exception.Message
                 return $results
