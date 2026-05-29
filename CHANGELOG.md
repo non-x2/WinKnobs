@@ -12,8 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Notes
-- 次の候補：snapshot 改ざん対策（SHA256 / 復元前プレビュー）/ HKLM 3 択フォールバックのヘルパー化（M-1 リファクタ）/ 世代またぎ復元の差分件数警告 / v0.2 候補項目
+### Planning
+- **v0.1.6 候補**（cross-reviewer 中 3 件持ち越し・[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)）：
+  - A: snapshot SHA256 改ざん対策（メイン）+ ACL（任意）
+  - B: 世代またぎ復元の差分件数警告（先行実装推奨）
+  - C: snapshot 復元前プレビュー UI（3 ペイン構造）
+  - 推奨実装順：B → A → C（合計 9-12h）
+- **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
+  - v0.2.0：Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）
+  - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目
+  - v0.2.2：IME / 音声 / Network 完成 6 項目
+  - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
+- **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
+- **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.5 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
 
 ---
 
