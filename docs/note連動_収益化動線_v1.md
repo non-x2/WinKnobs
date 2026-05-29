@@ -154,7 +154,7 @@ README.md 末尾に追加（v0.2.0 で）：
 - 📝 [のんラボ note](https://note.com/nonlabo) — WinKnobs 解説記事・Win11 カスタマイズ記事
 - 🎁 [GitHub Sponsors](https://github.com/sponsors/non-x2) — プロジェクト継続のための支援
 - 🛒 [BOOTH BOOST](https://nonlabo.booth.pm/) — 国内向け任意金額支援
-- 🐦 [X (Twitter) @men_canvas](https://x.com/men_canvas) — 開発進捗・小ネタ
+- 🐦 [X (Twitter) @tama_x2x2](https://x.com/tama_x2x2) — 開発進捗・小ネタ
 ```
 
 **注意**：X アカウントは memory `user_x_accounts.md` に従い：

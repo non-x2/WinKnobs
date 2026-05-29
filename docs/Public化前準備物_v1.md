@@ -215,8 +215,10 @@ Documentation: Japanese + English / 日本語＋英語
 |---|---|---|
 | ☕ Coffee | $3 | Help fuel late-night coding sessions. Your name in `SPONSORS.md`. |
 | 🍕 Pizza | $10 | Above + early access to v0.2 betas (Discord channel access). |
-| 🚀 Booster | $30 | Above + monthly status update video / blog post. Vote on next features. |
+| 🚀 Booster | $30 | Above + vote on next features + name in README credits. |
 | 💎 Custom | Custom | Above + 1-on-1 30 min consultation on Windows tweaking. |
+
+> ⚠️ 運営コスト注記（v1.1・2026-05-29）：当初の Booster 特典「月次動画/ブログ」は撤回（ソロ運営では月 2-4h の機会費用が課金額 $30≒¥4,500 を上回るため）。Booster/Pizza の継続提供物は **v0.2 以降に再評価**（Sponsor 1 名のための定例労働を約束しない方針）。
 
 ### 3-3. 申請前チェック
 
