@@ -103,6 +103,13 @@ docs/apply_test_result.json
 scripts/*.ps1
 scripts/*.bat
 
+# 2026-05-31 追加：VM-UIA 自動実行（★2方式）の実行時テンポラリ。
+# scripts/ 直下の `_` プレフィックスはランナーが書く進捗マーカー・中間出力の規約
+# （_schtest.txt / _vm_session_check.txt / _vm_test_done.marker / _vm_test_cmd.ps1 等）。
+# vm_diag.txt は VM 実行の診断出力（個人 PC 固有・公開対象外）。
+scripts/_*
+scripts/ui_automation/vm_diag*.txt
+
 # Phase R-1（2026-05-25）：スタートアップ系 UI Automation テストケース明示許可
 # 上の `scripts/*.ps1` は直下のみだが、将来パターンが広がっても
 # tc_startup_*.ps1 を確実にコミット可能にするため明示的に除外解除しておく。

@@ -106,38 +106,108 @@ if ($Mode -eq "VM") {
     }
     Write-Host "    投入完了：$($filesToCopy.Count) ファイル"
 
-    # 2. VM 内でテスト実行（Mode=Local として実行・WinKnobs.exe は VM 内 C:\WinKnobs\ に既に投入済前提）
-    Write-Host "`n[2/4] VM 内でテスト実行中..."
+    # 2. VM 内のセッション1(対話デスクトップ)でテスト実行（2026-05-30 大改造）
+    #    PowerShell Direct はセッション0(非対話・デスクトップ無し)で動くため、そこで Start-Process した GUI は
+    #    WinHandle=0 となり UIA が窓に到達できない（診断で確定：PSDirect=Session0 / explorer=Session1）。
+    #    → スケジュールタスク(/it=対話・/ru=ログオンユーザー)で run_ui_test を「セッション1」で実行させる。
+    Write-Host "`n[2/4] VM 内(対話セッション1)でテスト実行中..."
+    $vmUser = $cred.UserName
+    $vmPass = $cred.GetNetworkCredential().Password
     $vmResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-        param($scriptsDir, $testCases, $autoLaunch)
-        $args = @("-Mode", "Local", "-TestCase") + $testCases
-        if ($autoLaunch) { $args += "-AutoLaunch" }
+        param($scriptsDir, $testCases, $vmUser, $vmPass)
+        try { Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction Stop } catch { }
 
-        # WinKnobs.exe の VM 内パス
-        $vmExe = "C:\WinKnobs\WinKnobs.exe"
-        if ($autoLaunch -and (Test-Path $vmExe)) {
-            $proc = Get-Process WinKnobs -ErrorAction SilentlyContinue
-            if (-not $proc) {
-                Start-Process $vmExe
-                Start-Sleep -Seconds 4
-            }
+        # --- 切断(Disc)セッションを console へ再接続して Active 化（vmconnect を開かなくても UIA が効くように・2026-05-30）---
+        $sessInfo = ""
+        try {
+            $before = (quser 2>&1 | Out-String)
+            $line = ($before -split "`n") | Where-Object { $_ -match '\s(\d+)\s+(Active|Disc)' } | Select-Object -First 1
+            if ($line -and ($line -match '\s(\d+)\s+(Active|Disc)')) {
+                $sid = $matches[1]; $st = $matches[2]
+                if ($st -ne 'Active') { tscon $sid /dest:console 2>&1 | Out-Null; Start-Sleep -Seconds 3 }
+                $sessInfo = "session=$sid before=$st after=`n" + ((quser 2>&1 | Out-String).Trim())
+            } else { $sessInfo = "ユーザーセッション未検出:`n" + $before.Trim() }
+        } catch { $sessInfo = "session活性化 例外: $($_.Exception.Message)" }
+
+        $taskName  = "WinKnobsUiaTest"
+        $resultDir = Join-Path $scriptsDir "results"
+        if (-not (Test-Path $resultDir)) { New-Item -ItemType Directory -Path $resultDir -Force | Out-Null }
+        # 完了判定のため古い結果・マーカー・エラーログを掃除
+        Get-ChildItem "$resultDir\result_*.json" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        $doneMarker = Join-Path $scriptsDir "uia_done.marker"
+        $errLog     = Join-Path $scriptsDir "uia_task_error.log"
+        Remove-Item $doneMarker,$errLog -Force -ErrorAction SilentlyContinue
+        $tcArg = ($testCases -join ",")
+
+        # セッション1で走るタスク本体スクリプトを生成（テスト → 成否問わず必ず完了マーカー）
+        $runnerPath  = Join-Path $scriptsDir "_uia_task_runner.ps1"
+        $runnerLines = @(
+            'Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue',
+            "try { & '$scriptsDir\run_ui_test.ps1' -Mode Local -Force -AutoLaunch -TestCase $tcArg } catch { `$_ | Out-File -Encoding utf8 '$errLog' } finally { New-Item -ItemType File -Path '$doneMarker' -Force | Out-Null }"
+        )
+        Set-Content -Path $runnerPath -Value $runnerLines -Encoding UTF8
+
+        # Session 1(対話デスクトップ)でタスク実行：ScheduledTasks モジュール(LogonType=Interactive)で確実に。
+        # schtasks CLI の /it は「要素が見つかりません」で /run 不可だった → cmdlet で session=1 実行を実証済（2026-05-30）
+        $ErrorActionPreference = 'Continue'
+        $vmLocalUser = "$env:COMPUTERNAME\$env:USERNAME"
+        try {
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            $taskAction    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runnerPath`""
+            $taskPrincipal = New-ScheduledTaskPrincipal -UserId $vmLocalUser -LogonType Interactive -RunLevel Limited
+            Register-ScheduledTask -TaskName $taskName -Action $taskAction -Principal $taskPrincipal -Force -ErrorAction Stop | Out-Null
+            $createOut = "Register-ScheduledTask OK (UserId=$vmLocalUser LogonType=Interactive RunLevel=Limited)"
+            Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+            $runOut = "Start-ScheduledTask OK"
+        } catch {
+            $createOut = "ScheduledTask 失敗: $($_.Exception.Message)"
+            $runOut = "(create失敗のためスキップ)"
         }
 
-        # ローカル実行
-        & "$scriptsDir\run_ui_test.ps1" @args
-        $jsonFiles = Get-ChildItem "$scriptsDir\results\result_*.json" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($jsonFiles) {
-            return @{
-                ExitCode = $LASTEXITCODE
-                JsonPath = $jsonFiles.FullName
-                JsonContent = Get-Content -Raw -Encoding UTF8 $jsonFiles.FullName
-            }
-        } else {
-            return @{ ExitCode = $LASTEXITCODE; JsonPath = $null; JsonContent = $null }
+        # 完了待ち（マーカー出現を最大 300 秒ポーリング・30 秒毎に進捗）
+        $waited = 0
+        while ($waited -lt 300 -and -not (Test-Path $doneMarker)) {
+            Start-Sleep -Seconds 5; $waited += 5
+            if ($waited % 30 -eq 0) { Write-Host "    ...VM内テスト実行中（$waited 秒経過 / 最大300秒）" }
         }
-    } -ArgumentList $VMScriptsDir, $TestCase, $AutoLaunch.IsPresent
+        $finished = Test-Path $doneMarker
 
-    Write-Host "    VM 内実行完了（ExitCode=$($vmResult.ExitCode)）"
+        $jsonFile = Get-ChildItem "$resultDir\result_*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $jsonPath = if ($jsonFile) { $jsonFile.FullName } else { $null }
+        $content  = if ($jsonFile) { Get-Content -Raw -Encoding UTF8 $jsonFile.FullName } else { $null }
+        $errTxt   = if (Test-Path $errLog) { Get-Content -Raw -Encoding UTF8 $errLog } else { $null }
+        $exitCode = if ($finished -and $jsonFile) { 0 } else { 1 }
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+
+        return @{
+            ExitCode    = $exitCode
+            Finished    = $finished
+            WaitedSec   = $waited
+            JsonPath    = $jsonPath
+            JsonContent = $content
+            CreateOut   = $createOut
+            RunOut      = $runOut
+            ErrText     = $errTxt
+            SessInfo    = $sessInfo
+            DiagUser    = "vmLocalUser=$vmLocalUser / vmUser(host)=$vmUser"
+        }
+    } -ArgumentList $VMScriptsDir, $TestCase, $vmUser, $vmPass
+
+    # VM 診断をクリーンな utf8 ファイルに保存（Claude が直接読む・文字化け回避・2026-05-30）
+    @(
+        "Finished=$($vmResult.Finished) WaitedSec=$($vmResult.WaitedSec) ExitCode=$($vmResult.ExitCode)",
+        "User: $($vmResult.DiagUser)",
+        "--- SessInfo ---", $vmResult.SessInfo,
+        "--- CreateOut ---", $vmResult.CreateOut,
+        "--- RunOut ---", $vmResult.RunOut,
+        "--- ErrText ---", $vmResult.ErrText
+    ) | Out-File -Encoding utf8 "$scriptRoot\vm_diag.txt"
+
+    if ($vmResult.SessInfo) { Write-Host ("    [session活性化]`n" + $vmResult.SessInfo) }
+    Write-Host "    VM 内実行完了（Finished=$($vmResult.Finished) / 待機 $($vmResult.WaitedSec)秒 / ExitCode=$($vmResult.ExitCode)）"
+    if ($vmResult.CreateOut) { Write-Host ("    [schtasks create] " + ($vmResult.CreateOut.Trim())) }
+    if ($vmResult.RunOut)    { Write-Host ("    [schtasks run]    " + ($vmResult.RunOut.Trim())) }
+    if ($vmResult.ErrText)   { Write-Host ("    [タスク内エラー] " + $vmResult.ErrText) }
 
     # 3. 結果 JSON をホストに保存
     Write-Host "`n[3/4] 結果を回収中..."
@@ -270,13 +340,18 @@ if ($AutoLaunch) {
         Start-Sleep -Seconds 2
     }
 
-    $exe = "C:\AI\Claudo\アプリ\WinKnobs\src\WinKnobs\bin\Release\net10.0-windows\WinKnobs.exe"
-    if (Test-Path $exe) {
-        Write-Log "AutoLaunch: WinKnobs.exe を起動します"
+    $exeCandidates = @(
+        "C:\WinKnobs\WinKnobs.exe",                                                                            # VM 配備先（最優先）
+        "C:\AI\Claudo\アプリ\WinKnobs\src\WinKnobs\bin\Release\net10.0-windows\win-x64\publish\WinKnobs.exe",  # ホスト publish（単一ファイル）
+        "C:\AI\Claudo\アプリ\WinKnobs\src\WinKnobs\bin\Release\net10.0-windows\WinKnobs.exe"                   # ホスト build
+    )
+    $exe = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($exe) {
+        Write-Log "AutoLaunch: WinKnobs.exe を起動します（$exe）"
         Start-Process $exe
         Start-Sleep -Seconds 4
     } else {
-        Write-Log "ERROR: $exe が見つかりません。dotnet build -c Release してください"
+        Write-Log "ERROR: WinKnobs.exe が見つかりません（VM:C:\WinKnobs\ もホスト publish/build も無し）。dotnet publish してください"
         exit 1
     }
 }
