@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **v0.1.6 機能 C：スタートアップ snapshot 復元前プレビュー UI（3 ペイン）**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md) §C 実装・2026-05-31）
+  - `Views/Startup/RestorePreviewDialog.xaml(.cs)` + `ViewModels/Startup/RestorePreviewViewModel.cs`（新規）：🗑 削除予定 / ✏ 変更予定 / ➕ 追加予定 を 3 ペイン（DataGrid・ダークテーマ適用・各ペイン AutomationId 付与）で表示し、「内容を確認しました」チェック後のみ復元ボタンを有効化
+  - `StartupListViewModel.RestoreSnapshot()`：機能 B のテキスト Confirm をプレビューダイアログに置換（差分 0 件→案内して終了 / 解析失敗→既定いいえの ConfirmDestructive）。機能 A の整合性検証（差分算出の前）と import 直前の再 Verify は維持
+  - `Services/StartupSnapshotDiffer.cs`：変更予定エントリに種別タグ（コマンド変更 / 有効⇔無効 / コマンド・状態変更）を付与（名前だけでは機能 B の件数警告と情報量が変わらないため）
+  - `DialogService.OpenRestorePreview(path, diff)`（新規）：DI で VM/Dialog を構築・Init 後注入
+  - **テスト**：`RestorePreviewViewModelTests`（チェック連動の OK enable・差分反映・OK/Cancel の 10 ケース）+ Differ 変更種別タグ 3 ケース追加（計 **42 PASS**）
+  - plan-validator 反映：ListView→DataGrid（ダーク未定義による白地白文字を回避）/ Modified に変更種別タグ / DialogResult プロパティ方式に統一 / `NotifyPropertyChangedFor(CanRestore)`
+  - cross-reviewer 反映：キャンセル時の StatusMessage 更新（重要1）/ Init の空振り通知を除去し順序契約をコメント化（重要2）。見送り項目は設計ドラフト §C 実装後レビューに記録
 - **v0.1.6 機能 A：スタートアップ snapshot 改ざん対策（SHA256 + ACL）**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md) §A 実装・2026-05-31）
   - `Services/StartupSnapshotIntegrity.cs`（新規・純粋静的クラス）：SHA256 サイドカー（`<snapshot>.sha256`・sha256sum 互換）の生成・検証・ACL 保護。`ComputeSha256(Stream)` オーバーロードでファイル無しの単体テストも可能（機能 B の StartupSnapshotDiffer と同じ流儀）
   - `BackupService.BackupStartupSnapshot()`：snapshot 作成時に SHA256 サイドカーを自動生成（失敗しても snapshot 自体は止めない）。ファイル名をミリ秒精度（`_fff`）化し管理者版/非管理者版の同名衝突を回避
@@ -34,10 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - cross-reviewer 反映：算出失敗時の誤表示回避（重要1）/ プレフィックス・Wow64・Empty テスト追加（重要2）/ 同期実行コメント明示（重要3）/ 閾値 const 化（軽微）
 
 ### Planning
-- **v0.1.6 候補**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)・推奨実装順 B → A → C）：
+- **v0.1.6 候補**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)・推奨実装順 B → A → C）：**A/B/C すべて実装完了（2026-05-31）**
   - A: snapshot SHA256 改ざん対策 + ACL → ✅ 実装済（2026-05-31）
   - B: 世代またぎ復元の差分件数警告 → ✅ 実装済（2026-05-30）
-  - C: snapshot 復元前プレビュー UI（3 ペイン構造）→ ⬜ 未着手（残り 3.5-5h）
+  - C: snapshot 復元前プレビュー UI（3 ペイン構造）→ ✅ 実装済（2026-05-31）
+  - 残：VM 統合検証 + v0.1.6 全体のバージョン bump 判定（v0.1.5-dev → v0.1.6）
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
   - v0.2.0：Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）
   - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目
