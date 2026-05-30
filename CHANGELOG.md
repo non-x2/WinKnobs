@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **v0.1.6 機能 B：スタートアップ snapshot 復元前の差分件数警告**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md) §B 実装・2026-05-30）
+  - `Services/StartupSnapshotDiffer.cs`（新規・純粋関数）：snapshot(.reg) と現在のレジストリ状態を比較し追加/削除/変更件数を算出（snapshot は読込のみ＝副作用なし）
+  - `Models/StartupDiffResult.cs`（新規 record）：差分結果（件数 + エントリ内訳・将来の C プレビュー UI で再利用）
+  - `StartupListViewModel.RestoreSnapshot()`：復元確認ダイアログに差分サマリ（追加N/削除N/変更N・10 件以上で大規模警告・解析失敗時は「差分なし」誤表示を回避）を表示
+  - 設計改善：設計書の `BackupService.AnalyzeSnapshotDiff(path)` を現在エントリ引数の純粋関数化（I/O 層→VM 層の逆依存を回避・StartupApprovedCodec と同じ static 流儀）
+  - 突合は `StartupItemsProvider.MergeApprovedState` と整合（RawName OrdinalIgnoreCase・StartupApproved\Run→HKLM_Run / Run32→Wow64_Run / HKCU→HKCU_Run・RunOnce 系と未登録は有効扱い）
+  - **テスト基盤新設**：`tests/WinKnobs.Tests`（xUnit・本リポジトリ初の Unit test プロジェクト）+ `StartupSnapshotDifferTests`（差分 0/1/5/10+・REG_EXPAND_SZ・hex 継続行・削除マーカー・プレフィックス・Wow64・破損 reg の **15 ケース全 PASS**）
+  - cross-reviewer 反映：算出失敗時の誤表示回避（重要1）/ プレフィックス・Wow64・Empty テスト追加（重要2）/ 同期実行コメント明示（重要3）/ 閾値 const 化（軽微）
+
 ### Planning
 - **v0.1.6 候補**（cross-reviewer 中 3 件持ち越し・[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)）：
   - A: snapshot SHA256 改ざん対策（メイン）+ ACL（任意）

@@ -527,10 +527,40 @@ public partial class StartupListViewModel : ObservableObject
             return;
         }
 
+        // B（v0.1.6）：復元前に差分件数を算出して Confirm に提示する。
+        // snapshot は読込のみ（ImportKey せず）＝副作用なし。算出に失敗しても復元自体は止めない。
+        // NOTE（cross-reviewer 重要3）：差分算出は _provider.LoadAll()（6 Run + 3 StartupApproved キーを
+        //   レジストリ Open）を 1 回呼ぶ同期処理。通常エントリ数（数十件）で体感数十 ms。
+        //   Confirm 提示が主目的で非同期化の効果が薄いため、意図的に同期実行する。
+        StartupDiffResult diff;
+        bool analyzeOk;
+        try
+        {
+            diff = StartupSnapshotDiffer.AnalyzeFile(latest, _provider.LoadAll());
+            analyzeOk = true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Startup] 差分算出失敗（復元は継続可）: {ex.Message}");
+            diff = StartupDiffResult.Empty;
+            analyzeOk = false;
+        }
+
+        // cross-reviewer 重要1：算出失敗を「差分なし」と誤表示しない（壊れた snapshot を安全と誤認させない）。
+        var diffSummary = !analyzeOk
+            ? "⚠️ 差分を確認できませんでした（snapshot の解析に失敗）。中身を確認のうえ慎重に判断してください。"
+            : diff.TotalCount switch
+            {
+                0                      => "差分なし（snapshot と現在の状態は一致しています）",
+                < LargeChangeThreshold => $"追加 {diff.AddedCount} / 削除 {diff.RemovedCount} / 変更 {diff.ModifiedCount}（計 {diff.TotalCount} 件）",
+                _                      => $"⚠️ 大規模変更：追加 {diff.AddedCount} / 削除 {diff.RemovedCount} / 変更 {diff.ModifiedCount}（計 {diff.TotalCount} 件）"
+            };
+
         var confirm = _dialogs.Confirm(
             $"最新のスタートアップ snapshot から復元しますか？\n\n" +
             $"  ファイル：{Path.GetFileName(latest)}\n" +
-            $"  作成日時：{File.GetLastWriteTime(latest):yyyy-MM-dd HH:mm:ss}\n\n" +
+            $"  作成日時：{File.GetLastWriteTime(latest):yyyy-MM-dd HH:mm:ss}\n" +
+            $"  差分：{diffSummary}\n\n" +
             "※ レジストリの全 6 Run キー + 3 StartupApproved キーが\n" +
             "  snapshot 時点の状態に上書きされます。\n" +
             "※ HKLM 系の上書きは管理者権限が必要です。",
@@ -578,6 +608,9 @@ public partial class StartupListViewModel : ObservableObject
 
     /// <summary>R-3 cross-reviewer 致命中4：snapshot スロットル間隔（連続 Modify で 9 プロセス起動の体感固まりを回避）。</summary>
     private static readonly TimeSpan SnapshotThrottle = TimeSpan.FromSeconds(10);
+
+    /// <summary>v0.1.6 B / cross-reviewer 軽微：大規模変更とみなす差分件数の閾値（これ以上で警告強調）。</summary>
+    private const int LargeChangeThreshold = 10;
 
     /// <summary>
     /// R-3：Modify 直前の snapshot 自動取得（plan-validator 致命中4：毎回方式 + cross-reviewer 致命中4：10 秒スロットル）。

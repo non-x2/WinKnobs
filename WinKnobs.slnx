@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/WinKnobs/WinKnobs.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WinKnobs.Tests/WinKnobs.Tests.csproj" />
+  </Folder>
 </Solution>
