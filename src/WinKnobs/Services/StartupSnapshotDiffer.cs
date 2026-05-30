@@ -76,7 +76,18 @@ public static class StartupSnapshotDiffer
                 var commandDiff = !string.Equals(snap.Command, cur.Command, StringComparison.Ordinal);
                 var enabledDiff = snap.IsEnabled != curEnabled;
                 if (commandDiff || enabledDiff)
-                    modified.Add(Format(snap.Hive, snap.RawName));
+                {
+                    // C（v0.1.6）：プレビュー UI の「✏変更予定」ペインで「何が変わるか」を見せるため、
+                    // 名前だけでなく変更種別タグを付ける（名前のみだと機能 B の件数警告と情報量が変わらない）。
+                    var tag = (commandDiff, enabledDiff) switch
+                    {
+                        (true, true)  => "コマンド・状態変更",
+                        (true, false) => "コマンド変更",
+                        (false, true) => snap.IsEnabled ? "無効→有効" : "有効→無効",
+                        _             => "変更"
+                    };
+                    modified.Add(Format(snap.Hive, snap.RawName) + $"（{tag}）");
+                }
             }
         }
 

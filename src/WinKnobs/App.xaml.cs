@@ -51,11 +51,13 @@ public partial class App : Application
                 services.AddTransient<MainViewModel>();
                 services.AddTransient<SettingDialogViewModel>();
                 services.AddTransient<StartupEntryEditViewModel>(); // Phase R-2
+                services.AddTransient<RestorePreviewViewModel>();   // v0.1.6 機能 C
 
                 // View
                 services.AddTransient<MainWindow>();
                 services.AddTransient<SettingDialog>();
                 services.AddTransient<StartupEntryEditDialog>();    // Phase R-2
+                services.AddTransient<RestorePreviewDialog>();      // v0.1.6 機能 C
             })
             .Build();
     }

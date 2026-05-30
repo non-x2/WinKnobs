@@ -514,7 +514,7 @@ public partial class StartupListViewModel : ObservableObject
                 $"未保存の編集が {dirtyCount} 件あります。\n" +
                 "スナップショット復元で全て破棄されます。\n\n続行しますか？",
                 "未保存の編集あり");
-            if (!okDirty) return;
+            if (!okDirty) { StatusMessage = "🔄 復元をキャンセルしました。"; return; }
         }
 
         var latest = _backup.GetLatestStartupSnapshotPath();
@@ -525,6 +525,29 @@ public partial class StartupListViewModel : ObservableObject
                 "（追加・削除・編集・トグル操作の直前に自動取得されます）",
                 "snapshot なし");
             return;
+        }
+
+        // A（v0.1.6）：差分算出・復元より「前」に SHA256 整合性を検証する。
+        // 壊れた／改ざんされた snapshot を差分解析や reg import に通さないため、ここが最初の関門。
+        //   IsValid==false（改ざんの疑い or サイドカー破損）→ 赤色警告で明示確認（既定いいえ）。
+        //   IsValid==null（サイドカーなし＝v0.1.5 以前の古い snapshot）→ 警告なしで通常フロー。
+        var (integrityValid, expectedHash, actualHash) = _backup.VerifyStartupSnapshotIntegrity(latest);
+        if (integrityValid == false)
+        {
+            var expShort = ShortenHash(expectedHash);
+            var actShort = ShortenHash(actualHash);
+            // cross-reviewer 軽微1：破壊側に倒れてはいけないので「既定＝いいえ」の ConfirmDestructive を使う。
+            var continueAnyway = _dialogs.ConfirmDestructive(
+                "⚠️ スナップショットの整合性チェックに失敗しました。\n\n" +
+                $"  ファイル：{Path.GetFileName(latest)}\n" +
+                $"  期待ハッシュ：{expShort}\n" +
+                $"  実ハッシュ　：{actShort}\n\n" +
+                "snapshot が改ざんされている可能性があります。\n" +
+                "※ これはファイルの改ざん有無のみの確認です\n" +
+                "　（内容の新しさは上の作成日時で判断してください）。\n\n" +
+                "それでも復元しますか？（推奨：いいえ）",
+                "整合性エラー");
+            if (!continueAnyway) { StatusMessage = "🔄 復元をキャンセルしました（整合性エラー）。"; return; }
         }
 
         // B（v0.1.6）：復元前に差分件数を算出して Confirm に提示する。
@@ -546,26 +569,34 @@ public partial class StartupListViewModel : ObservableObject
             analyzeOk = false;
         }
 
-        // cross-reviewer 重要1：算出失敗を「差分なし」と誤表示しない（壊れた snapshot を安全と誤認させない）。
-        var diffSummary = !analyzeOk
-            ? "⚠️ 差分を確認できませんでした（snapshot の解析に失敗）。中身を確認のうえ慎重に判断してください。"
-            : diff.TotalCount switch
-            {
-                0                      => "差分なし（snapshot と現在の状態は一致しています）",
-                < LargeChangeThreshold => $"追加 {diff.AddedCount} / 削除 {diff.RemovedCount} / 変更 {diff.ModifiedCount}（計 {diff.TotalCount} 件）",
-                _                      => $"⚠️ 大規模変更：追加 {diff.AddedCount} / 削除 {diff.RemovedCount} / 変更 {diff.ModifiedCount}（計 {diff.TotalCount} 件）"
-            };
-
-        var confirm = _dialogs.Confirm(
-            $"最新のスタートアップ snapshot から復元しますか？\n\n" +
-            $"  ファイル：{Path.GetFileName(latest)}\n" +
-            $"  作成日時：{File.GetLastWriteTime(latest):yyyy-MM-dd HH:mm:ss}\n" +
-            $"  差分：{diffSummary}\n\n" +
-            "※ レジストリの全 6 Run キー + 3 StartupApproved キーが\n" +
-            "  snapshot 時点の状態に上書きされます。\n" +
-            "※ HKLM 系の上書きは管理者権限が必要です。",
-            "スナップショット復元");
-        if (!confirm) return;
+        // C（v0.1.6）：差分の内訳を 3 ペインプレビューで見せる（cross-reviewer 重要1 の「算出失敗を
+        //   安全と誤表示しない」精神を踏襲）。
+        if (!analyzeOk)
+        {
+            // 解析失敗＝プレビュー不可。壊れた snapshot を安全と誤認させないため、既定いいえの破壊的確認。
+            var goAnyway = _dialogs.ConfirmDestructive(
+                "⚠️ 差分を確認できませんでした（snapshot の解析に失敗）。\n\n" +
+                $"  ファイル：{Path.GetFileName(latest)}\n" +
+                $"  作成日時：{File.GetLastWriteTime(latest):yyyy-MM-dd HH:mm:ss}\n\n" +
+                "中身を確認できないまま復元するのは危険です。\n" +
+                "それでも全 6 Run + 3 StartupApproved キーを snapshot 時点に上書きしますか？（推奨：いいえ）",
+                "復元（差分確認不可）");
+            if (!goAnyway) { StatusMessage = "🔄 復元をキャンセルしました。"; return; }
+        }
+        else if (diff.TotalCount == 0)
+        {
+            // EC-1：差分 0 件＝復元しても無変化 → プレビュー不要・案内して終了。
+            _dialogs.Info(
+                "snapshot と現在の状態は一致しています。\n復元する変更がありません。",
+                "差分なし");
+            return;
+        }
+        else
+        {
+            // 3 ペインプレビュー（🗑削除 / ✏変更 / ➕追加）で内訳を確認 → 承認なければ中止。
+            var approved = _dialogs.OpenRestorePreview(latest, diff);
+            if (!approved) { StatusMessage = "🔄 復元をキャンセルしました。"; return; }
+        }
 
         // snapshot は HKLM 系を含むため非管理者なら事前 3 択
         if (!_privilege.IsRunningAsAdministrator())
@@ -582,6 +613,22 @@ public partial class StartupListViewModel : ObservableObject
                 default:
                     return;
             }
+        }
+
+        // A（v0.1.6・cross-reviewer 重要3）：TOCTOU 対策。
+        // 最初の Verify〜AnalyzeFile〜ここまでの間に、外部プロセスが .reg を差し替える窓がある
+        // （ComputeFileSha256 は FileShare.Read で書込ロックしない）。import 直前にもう一度検証し、
+        // 差し替えを検知したら復元を中止する（脅威モデル シナリオ2 のすり抜け防止）。
+        var (recheckValid, _, _) = _backup.VerifyStartupSnapshotIntegrity(latest);
+        if (recheckValid == false)
+        {
+            _dialogs.Error(
+                "復元直前の再チェックで snapshot の整合性エラーを検出しました。\n" +
+                "他のプロセスがファイルを書き換えた可能性があります。\n\n" +
+                "安全のため復元を中止しました。",
+                "整合性エラー（復元中止）");
+            StatusMessage = "❌ 復元中止：整合性エラー（import 直前の再チェック）";
+            return;
         }
 
         try
@@ -609,9 +656,6 @@ public partial class StartupListViewModel : ObservableObject
     /// <summary>R-3 cross-reviewer 致命中4：snapshot スロットル間隔（連続 Modify で 9 プロセス起動の体感固まりを回避）。</summary>
     private static readonly TimeSpan SnapshotThrottle = TimeSpan.FromSeconds(10);
 
-    /// <summary>v0.1.6 B / cross-reviewer 軽微：大規模変更とみなす差分件数の閾値（これ以上で警告強調）。</summary>
-    private const int LargeChangeThreshold = 10;
-
     /// <summary>
     /// R-3：Modify 直前の snapshot 自動取得（plan-validator 致命中4：毎回方式 + cross-reviewer 致命中4：10 秒スロットル）。
     /// 専用サブディレクトリ + 独自ローテーション 10 件で軽量化（既存個別バックアップへの影響なし）。
@@ -637,6 +681,13 @@ public partial class StartupListViewModel : ObservableObject
             // ログ出力のみ（StatusMessage は上書きすると本来の Modify 結果が見えなくなるので避ける）
             Debug.WriteLine($"[Startup] snapshot 取得失敗（Modify は続行）: {ex.Message}");
         }
+    }
+
+    /// <summary>A（v0.1.6）：整合性エラー表示用にハッシュを先頭 16 桁＋… に短縮（null/短い場合も安全）。</summary>
+    private static string ShortenHash(string? hash)
+    {
+        if (string.IsNullOrEmpty(hash)) return "(取得不可)";
+        return hash.Length <= 16 ? hash : hash.Substring(0, 16) + "...";
     }
 
     // =================== R-2 内部ヘルパー（BUG-3 パターン複製） ===================

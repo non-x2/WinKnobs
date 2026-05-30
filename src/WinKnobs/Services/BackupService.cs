@@ -278,7 +278,9 @@ public class BackupService
     /// <returns>統合 .reg ファイルのフルパス</returns>
     public string BackupStartupSnapshot()
     {
-        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        // ミリ秒まで含める（plan-validator 指摘：秒精度だと管理者版/非管理者版が 1 秒以内に
+        // 同時取得した際に同名衝突 → .reg と .sha256 が別プロセスの組合せになり Verify が常に false になる）。
+        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
         var finalPath = Path.Combine(_startupBackupDir, $"startup_full_{timestamp}.reg");
 
         // 9 キーをフルパスで列挙（reg.exe 互換の HKEY_* 形式）
@@ -377,6 +379,17 @@ public class BackupService
             File.WriteAllText(finalPath, sb.ToString(), new System.Text.UnicodeEncoding(false, true));
             ValidateBackupFile(finalPath);
 
+            // A（v0.1.6）：改ざん検知用の SHA256 サイドカー（+ ACL 保護）を生成。
+            // 失敗してもメインの snapshot 作成は止めない（EnsureSnapshot の「Modify を止めない」思想に合わせる）。
+            try
+            {
+                StartupSnapshotIntegrity.WriteSidecar(finalPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[BackupService] SHA256 サイドカー生成失敗（snapshot 自体は有効）: {ex.Message}");
+            }
+
             CleanupOldStartupSnapshots();
             return finalPath;
         }
@@ -401,12 +414,17 @@ public class BackupService
         }
     }
 
-    /// <summary>スタートアップ snapshot 一覧を新しい順で取得。</summary>
+    /// <summary>
+    /// スタートアップ snapshot 一覧を新しい順で取得。
+    /// 並びキーは LastWriteTime ではなくファイル名（cross-reviewer 軽微3）。
+    /// ファイル名は startup_full_yyyyMMdd_HHmmss_fff（ミリ秒まで一意）なので、
+    /// 序数降順＝時系列降順で決定的。手動コピー等で LastWriteTime が変わっても順序が安定する。
+    /// </summary>
     public IReadOnlyList<FileInfo> ListStartupSnapshots()
     {
         return Directory.GetFiles(_startupBackupDir, "startup_full_*.reg")
             .Select(f => new FileInfo(f))
-            .OrderByDescending(f => f.LastWriteTime)
+            .OrderByDescending(f => f.Name, StringComparer.Ordinal)
             .ToList();
     }
 
@@ -416,17 +434,43 @@ public class BackupService
         return ListStartupSnapshots().FirstOrDefault()?.FullName;
     }
 
-    /// <summary>スタートアップ snapshot 専用の独自ローテーション（10 件まで保持）。</summary>
+    /// <summary>
+    /// A（v0.1.6）：スタートアップ snapshot の SHA256 整合性を検証（StartupSnapshotIntegrity に委譲）。
+    /// </summary>
+    /// <returns>
+    ///   IsValid: true=一致 / false=不一致 or サイドカー破損（改ざんの疑い）/ null=サイドカーなし（v0.1.5 以前の古い snapshot）。
+    ///   ExpectedHash / ActualHash: 照合に使った各ハッシュ（取得不可なら null）。
+    /// </returns>
+    public (bool? IsValid, string? ExpectedHash, string? ActualHash) VerifyStartupSnapshotIntegrity(string snapshotRegPath)
+        => StartupSnapshotIntegrity.Verify(snapshotRegPath);
+
+    /// <summary>
+    /// スタートアップ snapshot 専用の独自ローテーション（10 件まで保持）。
+    /// 並びキーはファイル名（ListStartupSnapshots と統一・cross-reviewer 軽微3）。
+    /// 注意（cross-reviewer 重要1）：.sha256 は ACL で継承遮断しているため、ローミングプロファイルや
+    /// 別マシンへのコピー等で SID が食い違うと削除に失敗し得る（管理者なら可）。その場合は孤児 .sha256 が
+    /// 残るが、削除失敗は握り潰す設計（snapshot 運用自体は継続）。
+    /// </summary>
     private void CleanupOldStartupSnapshots()
     {
         var files = Directory.GetFiles(_startupBackupDir, "startup_full_*.reg")
             .Select(f => new FileInfo(f))
-            .OrderByDescending(f => f.LastWriteTime)
+            .OrderByDescending(f => f.Name, StringComparer.Ordinal)
             .ToList();
 
         foreach (var old in files.Skip(MaxStartupSnapshotCount))
         {
+            // A（v0.1.6）：.reg 本体と対の .sha256 サイドカーを「個別に」try-catch で削除。
+            // 個別にするのは、どちらか片方の削除に失敗しても他方を確実に試して孤児化を防ぐため
+            // （.reg だけ消えて .sha256 が残る／その逆 の両方を回避）。
             try { old.Delete(); }
+            catch { /* 削除失敗は無視 */ }
+
+            try
+            {
+                var sidecar = StartupSnapshotIntegrity.GetSidecarPath(old.FullName);
+                if (File.Exists(sidecar)) File.Delete(sidecar);
+            }
             catch { /* 削除失敗は無視 */ }
         }
     }

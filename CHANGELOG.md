@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **v0.1.6 機能 A：スタートアップ snapshot 改ざん対策（SHA256 + ACL）**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md) §A 実装・2026-05-31）
+  - `Services/StartupSnapshotIntegrity.cs`（新規・純粋静的クラス）：SHA256 サイドカー（`<snapshot>.sha256`・sha256sum 互換）の生成・検証・ACL 保護。`ComputeSha256(Stream)` オーバーロードでファイル無しの単体テストも可能（機能 B の StartupSnapshotDiffer と同じ流儀）
+  - `BackupService.BackupStartupSnapshot()`：snapshot 作成時に SHA256 サイドカーを自動生成（失敗しても snapshot 自体は止めない）。ファイル名をミリ秒精度（`_fff`）化し管理者版/非管理者版の同名衝突を回避
+  - `BackupService.VerifyStartupSnapshotIntegrity(path)`（新規公開）：一致=true / 改ざん疑い or サイドカー破損=false / サイドカーなし（v0.1.5 以前）=null
+  - `BackupService.CleanupOldStartupSnapshots()`：ローテ削除時に `.reg` と対の `.sha256` を個別削除（孤児化防止）。並びキーを LastWriteTime→ファイル名に統一
+  - `StartupListViewModel.RestoreSnapshot()`：差分算出より前に整合性検証（改ざん検知で既定いいえの警告 → 中止）。import 直前に再検証して TOCTOU 窓を封鎖
+  - `DialogService.ConfirmDestructive()`（新規）：既定ボタン＝いいえ・警告アイコン（破壊側に倒れてはいけない確認用）
+  - ACL：app.manifest が asInvoker のため Owner は触らず DACL のみ操作（現ユーザー Modify + SYSTEM/管理者 Full + 継承遮断で他ユーザー上書き防止・`.sha256` のみ・失敗は無害）
+  - **テスト**：`StartupSnapshotIntegrityTests`（既知ハッシュベクトル・改ざん検知・fail-safe・ファイル名欄無視・境界 の **17 ケース全 PASS**／機能 B 15 ケースと合わせ計 32 PASS）
+  - plan-validator 反映：ACL 自己ロックアウト回避（現ユーザー Modify 維持）/ 同名衝突対策（ミリ秒）/ Verify を差分算出の前に配置 / テストは一時ディレクトリで %APPDATA% 非汚染
+  - cross-reviewer 反映：整合性 Confirm を既定いいえ化（軽微1）/ import 直前の再 Verify で TOCTOU 封鎖（重要3）/ ローテ並びをファイル名基準に（軽微3）。見送り項目（ACL 孤児累積 / 健全 snapshot へのフォールバック導線 / エンコード正規化）は設計ドラフト §A 実装後レビューに記録
 - **v0.1.6 機能 B：スタートアップ snapshot 復元前の差分件数警告**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md) §B 実装・2026-05-30）
   - `Services/StartupSnapshotDiffer.cs`（新規・純粋関数）：snapshot(.reg) と現在のレジストリ状態を比較し追加/削除/変更件数を算出（snapshot は読込のみ＝副作用なし）
   - `Models/StartupDiffResult.cs`（新規 record）：差分結果（件数 + エントリ内訳・将来の C プレビュー UI で再利用）
@@ -23,11 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - cross-reviewer 反映：算出失敗時の誤表示回避（重要1）/ プレフィックス・Wow64・Empty テスト追加（重要2）/ 同期実行コメント明示（重要3）/ 閾値 const 化（軽微）
 
 ### Planning
-- **v0.1.6 候補**（cross-reviewer 中 3 件持ち越し・[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)）：
-  - A: snapshot SHA256 改ざん対策（メイン）+ ACL（任意）
-  - B: 世代またぎ復元の差分件数警告（先行実装推奨）
-  - C: snapshot 復元前プレビュー UI（3 ペイン構造）
-  - 推奨実装順：B → A → C（合計 9-12h）
+- **v0.1.6 候補**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)・推奨実装順 B → A → C）：
+  - A: snapshot SHA256 改ざん対策 + ACL → ✅ 実装済（2026-05-31）
+  - B: 世代またぎ復元の差分件数警告 → ✅ 実装済（2026-05-30）
+  - C: snapshot 復元前プレビュー UI（3 ペイン構造）→ ⬜ 未着手（残り 3.5-5h）
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
   - v0.2.0：Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）
   - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目

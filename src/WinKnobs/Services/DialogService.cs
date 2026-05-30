@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
@@ -40,12 +41,25 @@ public class DialogService
 
     private static Window? Owner => Application.Current?.MainWindow;
 
-    /// <summary>はい/いいえ確認。</summary>
+    /// <summary>はい/いいえ確認。既定ボタンは「はい」。</summary>
     public bool Confirm(string message, string title = "確認")
     {
         var result = Owner != null
             ? MessageBox.Show(Owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Question)
             : MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        return result == MessageBoxResult.Yes;
+    }
+
+    /// <summary>
+    /// 破壊的操作の確認（既定ボタン＝いいえ・警告アイコン）。
+    /// 標準 Confirm は既定＝はいのため、誤操作（Enter 連打等）で破壊側に倒れてはいけない確認に使う。
+    /// cross-reviewer 軽微1：整合性エラー時の「それでも復元しますか？（推奨いいえ）」が既定はいだと意図と逆転するため追加。
+    /// </summary>
+    public bool ConfirmDestructive(string message, string title = "確認")
+    {
+        var result = Owner != null
+            ? MessageBox.Show(Owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)
+            : MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         return result == MessageBoxResult.Yes;
     }
 
@@ -164,6 +178,25 @@ public class DialogService
         var result = dlg.ShowDialog();
         var created = (result == true) ? vm.CreateNewEntry() : null;
         return (result, created);
+    }
+
+    /// <summary>
+    /// v0.1.6 機能 C：snapshot 復元前プレビューダイアログを開く。
+    /// 3 ペイン（削除/変更/追加）で差分内訳を見せ、「内容を確認しました」チェック後のみ復元可。
+    /// 戻り値：true=ユーザーが復元を承認 / false=キャンセル。
+    /// 差分 0 件は呼び出し側で弾く前提（ここには 1 件以上の diff が来る）。
+    /// </summary>
+    public bool OpenRestorePreview(string snapshotPath, StartupDiffResult diff)
+    {
+        var vm = _services.GetRequiredService<RestorePreviewViewModel>();
+        // 契約：Init は DataContext 設定より「前」（Init で値を確定 → DataContext 割当時に WPF が一括バインド）。
+        vm.Init(diff, Path.GetFileName(snapshotPath), File.GetLastWriteTime(snapshotPath));
+
+        var dlg = _services.GetRequiredService<RestorePreviewDialog>();
+        dlg.DataContext = vm;
+        dlg.Owner = Owner;
+
+        return dlg.ShowDialog() == true;
     }
 
     /// <summary>

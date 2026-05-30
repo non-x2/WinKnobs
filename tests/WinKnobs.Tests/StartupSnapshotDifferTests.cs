@@ -136,6 +136,49 @@ public class StartupSnapshotDifferTests
         Assert.Equal(1, diff.TotalCount);
     }
 
+    // ─── C（v0.1.6）：Modified の変更種別タグ ───
+
+    [Fact]
+    public void 変更タグ_コマンド変更_が付く()
+    {
+        var reg = Reg(Sec(HkcuRun, Sz("App1", @"C:\Apps\app1_NEW.exe")));
+        var current = new[] { Cur(StartupHive.HKCU_Run, "App1", @"C:\Apps\app1_OLD.exe") };
+
+        var diff = StartupSnapshotDiffer.Analyze(reg, current);
+
+        Assert.Single(diff.ModifiedEntries);
+        Assert.Contains("（コマンド変更）", diff.ModifiedEntries[0]);
+    }
+
+    [Fact]
+    public void 変更タグ_無効から有効_が付く()
+    {
+        // snapshot=有効 / 現在=無効 → 復元すると「無効→有効」
+        var reg = Reg(
+            Sec(HkcuRun, Sz("App1", @"C:\Apps\app1.exe")),
+            Sec(HkcuApproved, Approved("App1", enabled: true)));
+        var current = new[] { Cur(StartupHive.HKCU_Run, "App1", @"C:\Apps\app1.exe", enabled: false) };
+
+        var diff = StartupSnapshotDiffer.Analyze(reg, current);
+
+        Assert.Single(diff.ModifiedEntries);
+        Assert.Contains("（無効→有効）", diff.ModifiedEntries[0]);
+    }
+
+    [Fact]
+    public void 変更タグ_コマンドと状態の両方_が付く()
+    {
+        var reg = Reg(
+            Sec(HkcuRun, Sz("App1", @"C:\Apps\app1_NEW.exe")),
+            Sec(HkcuApproved, Approved("App1", enabled: false)));
+        var current = new[] { Cur(StartupHive.HKCU_Run, "App1", @"C:\Apps\app1_OLD.exe", enabled: true) };
+
+        var diff = StartupSnapshotDiffer.Analyze(reg, current);
+
+        Assert.Single(diff.ModifiedEntries);
+        Assert.Contains("（コマンド・状態変更）", diff.ModifiedEntries[0]);
+    }
+
     [Fact]
     public void 複合_追加2削除2変更1_で計5件()
     {
