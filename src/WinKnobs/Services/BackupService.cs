@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using Microsoft.Win32;
 
 namespace WinKnobs.Services;
@@ -24,6 +25,8 @@ public class BackupService
 
     private readonly string _backupDir;
     private readonly string _startupBackupDir;
+    private readonly string _networkBackupDir;       // v0.1.7：ネットワーク退避ストア
+    private readonly string _networkOriginalsPath;   // v0.1.7：原状 JSON（first-touch-wins）
     private readonly string _regExePath;
 
     public BackupService()
@@ -38,6 +41,11 @@ public class BackupService
         _startupBackupDir = Path.Combine(_backupDir, "startup");
         Directory.CreateDirectory(_startupBackupDir);
 
+        // v0.1.7：ネットワーク退避ストア（plan-validator #4：ExportKey でなく JSON 原状を集約）。
+        _networkBackupDir = Path.Combine(_backupDir, "network");
+        Directory.CreateDirectory(_networkBackupDir);
+        _networkOriginalsPath = Path.Combine(_networkBackupDir, "originals.json");
+
         // E-4：reg.exe はフルパス指定
         _regExePath = Path.Combine(Environment.SystemDirectory, "reg.exe");
     }
@@ -47,6 +55,65 @@ public class BackupService
 
     /// <summary>スタートアップ snapshot 専用ディレクトリ。</summary>
     public string StartupBackupDirectory => _startupBackupDir;
+
+    /// <summary>ネットワーク退避ストア専用ディレクトリ（v0.1.7）。</summary>
+    public string NetworkBackupDirectory => _networkBackupDir;
+
+    // =================== v0.1.7：ネットワーク原状退避（JSON・first-touch-wins） ===================
+    // plan-validator #4 反映：配信最適化 .reg(ExportKey) を使わず、各機能の原状を JSON 集約。
+    // 「戻す」の意味は「WinKnobs が触る前の原状へ復帰」なので、機能キー単位で初回のみ退避（first-touch-wins）。
+    // 再適用しても原状は上書きしない。エッジ3（admin/非admin 並存中の破損）は原子的置換で緩和。
+
+    /// <summary>機能キーの原状を JSON で退避（既に退避済みなら何もしない＝first-touch-wins）。</summary>
+    public void SaveNetworkOriginalIfAbsent(string featureKey, string jsonPayload)
+    {
+        var dict = LoadNetworkOriginals();
+        if (dict.ContainsKey(featureKey)) return;
+        dict[featureKey] = jsonPayload;
+        SaveNetworkOriginals(dict);
+    }
+
+    /// <summary>退避済みの全原状（機能キー→JSON ペイロード）を読む。</summary>
+    public Dictionary<string, string> LoadNetworkOriginals()
+    {
+        try
+        {
+            if (!File.Exists(_networkOriginalsPath)) return new();
+            var json = File.ReadAllText(_networkOriginalsPath);
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    /// <summary>退避済みの原状が 1 件以上あるか（「ぜんぶ戻す」ボタンの有効化判定）。</summary>
+    public bool HasNetworkOriginals() => LoadNetworkOriginals().Count > 0;
+
+    /// <summary>指定機能キーの原状退避を削除（個別復元完了後の後始末）。</summary>
+    public void RemoveNetworkOriginal(string featureKey)
+    {
+        var dict = LoadNetworkOriginals();
+        if (dict.Remove(featureKey)) SaveNetworkOriginals(dict);
+    }
+
+    /// <summary>ネットワーク原状退避をすべて消去（「ぜんぶ戻す」完了後）。</summary>
+    public void ClearNetworkOriginals()
+    {
+        try { if (File.Exists(_networkOriginalsPath)) File.Delete(_networkOriginalsPath); }
+        catch { /* 後始末失敗は無害 */ }
+    }
+
+    private void SaveNetworkOriginals(Dictionary<string, string> dict)
+    {
+        // 原子的置換（temp 書込 → コピー上書き → temp 削除）。admin/非admin 並存中の破損を緩和（エッジ3）。
+        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+        var tmp = _networkOriginalsPath + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Copy(tmp, _networkOriginalsPath, overwrite: true);
+        try { File.Delete(tmp); } catch { /* 無害 */ }
+    }
 
     /// <summary>
     /// 指定したレジストリキーを .reg ファイルにエクスポート。

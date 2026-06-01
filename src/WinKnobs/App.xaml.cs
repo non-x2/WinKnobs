@@ -39,6 +39,7 @@ public partial class App : Application
                 services.AddSingleton<RestorePointService>();
                 services.AddSingleton<ThemeService>();
                 services.AddSingleton<ExternalLauncherService>();
+                services.AddSingleton<NetworkService>();      // v0.1.7：ネットワーク機能
                 services.AddSingleton<EnvironmentInfoService>();
                 services.AddSingleton<DialogService>();
                 services.AddSingleton<PrivilegeService>();   // v0.1.4 BUG-3 対応
