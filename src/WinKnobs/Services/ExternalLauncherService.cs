@@ -139,6 +139,12 @@ public class ExternalLauncherService
         => RunExe(Path.Combine(Environment.SystemDirectory, "netsh.exe"), args);
 
     /// <summary>
+    /// ipconfig を実行して標準出力を取得（v0.1.7 機能2 軽いリセット用）。例：RunIpconfig("/flushdns")。
+    /// </summary>
+    public string RunIpconfig(params string[] args)
+        => RunExe(Path.Combine(Environment.SystemDirectory, "ipconfig.exe"), args);
+
+    /// <summary>
     /// 汎用 exe 実行ヘルパー（SystemDirectory のフルパス推奨）。
     /// </summary>
     private static string RunExe(string exePath, string[] args)

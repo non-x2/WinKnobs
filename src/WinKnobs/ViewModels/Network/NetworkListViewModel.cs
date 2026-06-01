@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -62,7 +63,8 @@ public partial class NetworkListViewModel : ObservableObject
     {
         try { DeliveryOptimizationSummary = _network.GetDeliveryOptimizationSummary(); }
         catch { DeliveryOptimizationSummary = "（取得できません）"; }
-        // DnsSummary / ConnectionSummary は Phase 4（DNS）で実装。
+        try { DnsSummary = _network.GetDnsSummary(); }
+        catch { DnsSummary = "（取得できません）"; }
     }
 
     // ============ Phase 2：機能0 Windows 純正画面ランチャー（実装済） ============
@@ -159,21 +161,150 @@ public partial class NetworkListViewModel : ObservableObject
 
     // ============ Phase 4-6：かんたん設定（各フェーズで実装）============
 
-    /// <summary>機能1 DNS プロファイル切替。Phase 4 で実装。</summary>
+    /// <summary>
+    /// 「DNSを速くする」＝全アクティブ物理アダプタの DNS を Cloudflare に切替（netsh）。戻せる🟡・管理者要。
+    /// 詳細層（Phase 7）で 自動/Google/手入力 も選べるようにする。
+    /// </summary>
     [RelayCommand]
-    private void ApplyDns() => NotifyComingSoon("DNSを速くする");
+    private void ApplyDns()
+    {
+        if (_privilege.IsShutdownPending) return;
 
-    /// <summary>機能2 ネットワーク不調リセット（軽い＝flushdns）。Phase 6 で実装。</summary>
+        var adapters = _network.GetActivePhysicalAdapters();
+        if (adapters.Count == 0)
+        {
+            _dialogs.Info(
+                "DNS を変更できる有効なネットワークアダプタが見つかりません。\n" +
+                "（Wi-Fi または有線がつながっているか確認してください）",
+                "対象なし");
+            StatusMessage = "ℹ️ DNS 変更対象のアダプタがありません。";
+            return;
+        }
+
+        var ok = _dialogs.Confirm(
+            "DNS を Cloudflare（1.1.1.1）に変更します。\n\n" +
+            $"対象アダプタ：{string.Join("・", adapters.Select(a => a.Name))}\n\n" +
+            "・Web サイト名の解決が速く・プライバシー重視になります。\n" +
+            "・うまくつながらない時は「↩ ぜんぶ元の状態に戻す」で自動(DHCP)に戻せます。\n" +
+            "　（戻す操作はインターネットに繋がっていなくても実行できます）\n\n" +
+            "実行しますか？",
+            "DNSを速くする");
+        if (!ok) return;
+
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation("DNSを速くする", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
+                case ElevationChoice.ContinueAnyway: break;
+                case ElevationChoice.Cancel:
+                default: return;
+            }
+        }
+
+        try
+        {
+            var result = _network.ApplyDnsProfile(DnsProfile.Cloudflare);
+            RefreshStatus();
+            StatusMessage = result.Succeeded == result.Total
+                ? $"✅ DNS を Cloudflare に変更しました（{result.Succeeded}/{result.Total} アダプタ）。戻すには「↩ ぜんぶ元の状態に戻す」。"
+                : $"⚠️ 一部のアダプタで変更できませんでした（{result.Succeeded}/{result.Total} 成功）。";
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded("DNSを速くする")) { }
+        catch (SecurityException)            when (HandleElevationNeeded("DNSを速くする")) { }
+        catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("DNSを速くする")) { }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"DNS の変更に失敗しました：\n{ex.Message}", "失敗");
+            StatusMessage = $"❌ DNS 変更失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 「不調を直す」＝DNS 解決キャッシュをクリア（ipconfig /flushdns）。実質可逆・管理者不要・退避不要。
+    /// 完全リセット（winsock/int ip reset・不可逆）は v0.2.x へ後ろ倒し → 純正画面へ誘導。
+    /// </summary>
     [RelayCommand]
-    private void ResetNetwork() => NotifyComingSoon("不調を直す（DNSキャッシュのクリア）");
+    private void ResetNetwork()
+    {
+        if (_privilege.IsShutdownPending) return;
 
-    /// <summary>共通「ぜんぶ元に戻す」。Phase 5 で実装。</summary>
+        var ok = _dialogs.Confirm(
+            "DNS の名前解決キャッシュをクリアします（軽いリセット）。\n\n" +
+            "・「さっきまで見られたサイトに繋がらない」等の不調が直ることがあります。\n" +
+            "・設定は変わりません・再起動も不要です（すぐ作り直される安全な操作です）。\n\n" +
+            "※ もっと深刻な不調には、上の「🪟 ネットの状態」から Windows 標準の『ネットワークのリセット』をお使いください。\n\n" +
+            "実行しますか？",
+            "不調を直す（DNSキャッシュのクリア）");
+        if (!ok) return;
+
+        try
+        {
+            _network.FlushDnsCache();
+            StatusMessage = "🔧 DNS の名前解決キャッシュをクリアしました。";
+        }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"キャッシュのクリアに失敗しました：\n{ex.Message}", "失敗");
+            StatusMessage = $"❌ 失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 共通「↩ ぜんぶ元の状態に戻す」。退避済みの DNS・帯域抑制を原状へ。管理者要（HKLM/netsh）。
+    /// </summary>
     [RelayCommand]
-    private void RevertAll() => NotifyComingSoon("ぜんぶ元の状態に戻す");
+    private void RevertAll()
+    {
+        if (_privilege.IsShutdownPending) return;
 
-    /// <summary>骨格スタブ用：未実装の機能を押された時の案内。</summary>
-    private void NotifyComingSoon(string feature)
-        => StatusMessage = $"「{feature}」はこの後のフェーズで有効になります（現在は骨格を実装中）。";
+        if (!_network.HasBackup())
+        {
+            _dialogs.Info(
+                "元に戻す変更がありません。\n" +
+                "（このツールで DNS・通信設定を変更すると、ここから戻せるようになります）",
+                "戻す対象なし");
+            StatusMessage = "ℹ️ 戻す対象の変更がありません。";
+            return;
+        }
+
+        var ok = _dialogs.Confirm(
+            "このツールで変更したネットワーク設定を、すべて元の状態に戻します。\n" +
+            "（対象：DNS の変更・「通信を軽くする」。ネットワークのリセットは元に戻せません）\n\n" +
+            "実行しますか？",
+            "ぜんぶ元の状態に戻す");
+        if (!ok) return;
+
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation("ぜんぶ元の状態に戻す", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
+                case ElevationChoice.ContinueAnyway: break;
+                case ElevationChoice.Cancel:
+                default: return;
+            }
+        }
+
+        try
+        {
+            var result = _network.RevertAll();
+            RefreshStatus();
+            StatusMessage = result.Failed == 0
+                ? $"↩ {result.Restored} 件の変更を元に戻しました。"
+                : $"⚠️ {result.Restored} 件を戻し、{result.Failed} 件は戻せませんでした（管理者権限が必要かもしれません）。";
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded("ぜんぶ元に戻す")) { }
+        catch (SecurityException)            when (HandleElevationNeeded("ぜんぶ元に戻す")) { }
+        catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("ぜんぶ元に戻す")) { }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"元に戻す処理に失敗しました：\n{ex.Message}", "失敗");
+            StatusMessage = $"❌ 失敗: {ex.Message}";
+        }
+    }
 
     // ============ 昇格ヘルパー（StartupListViewModel から複製・M-1 で共通化予定） ============
 

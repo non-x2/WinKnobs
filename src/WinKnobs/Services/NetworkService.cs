@@ -1,3 +1,7 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.NetworkInformation;
 using System.Text.Json;
 using Microsoft.Win32;
 
@@ -5,35 +9,46 @@ namespace WinKnobs.Services;
 
 /// <summary>
 /// ネットワーク機能のサービス層（v0.1.7・設計ドラフト 4-2）。
-/// レジストリ／netsh 呼び出しを集約する。コマンド生成・値判定など純粋部分は static にして xUnit 可能に保つ。
+/// 読取・判定は .NET（System.Net.NetworkInformation／レジストリ＝ロケール非依存・安全）、
+/// 設定変更は netsh に集約（PowerShell 基盤を新設しない＝plan-validator 重要3）。
+/// コマンド生成・値判定など純粋部分は static にして xUnit 可能に保つ。
 ///
 /// 実装フェーズ：
-///   Phase 3（実装済）：配信最適化（DODownloadMode）の取得・適用・復元。
-///   Phase 4：DNS プロファイル切替（netsh・物理アダプタ判定）。
+///   Phase 3（実装済）：配信最適化（DODownloadMode）。
+///   Phase 4（実装済）：DNS プロファイル切替（netsh・物理アダプタ判定・退避/復元）。
 ///   Phase 6：軽いリセット（flushdns）。
 /// </summary>
 public class NetworkService
 {
     private readonly RegistryService _registry;
     private readonly BackupService _backup;
+    private readonly ExternalLauncherService _launcher;
 
-    // 配信最適化（Delivery Optimization）：設定アプリが使う Config 側。
+    // ── 配信最適化（Delivery Optimization）──
     private const string DoConfigPath = @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config";
-    // グループポリシー側（企業 PC で上書きされる）。存在検出に使う。
     private const string DoPolicyPath = @"HKLM\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization";
     private const string DoValueName = "DODownloadMode";
 
-    /// <summary>退避ストアの機能キー（配信最適化）。</summary>
     public const string FeatureDeliveryOptimization = "deliveryOptimization";
+    public const string FeatureDns = "dns";
 
     public const int DoModeOff = 0;      // HTTP のみ（P2P 完全オフ・軽い）
     public const int DoModeDefault = 3;  // インターネット含む（Windows 既定）
 
-    public NetworkService(RegistryService registry, BackupService backup)
+    // ── DNS プロファイル（IPv4 / IPv6）──
+    public static readonly string[] CloudflareV4 = { "1.1.1.1", "1.0.0.1" };
+    public static readonly string[] CloudflareV6 = { "2606:4700:4700::1111", "2606:4700:4700::1001" };
+    public static readonly string[] GoogleV4 = { "8.8.8.8", "8.8.4.4" };
+    public static readonly string[] GoogleV6 = { "2001:4860:4860::8888", "2001:4860:4860::8844" };
+
+    public NetworkService(RegistryService registry, BackupService backup, ExternalLauncherService launcher)
     {
         _registry = registry;
         _backup = backup;
+        _launcher = launcher;
     }
+
+    // =================== Phase 3：配信最適化（帯域抑制） ===================
 
     /// <summary>現在の DODownloadMode。未設定は null（＝Windows 既定 3 とみなす）。</summary>
     public int? GetDeliveryOptimizationMode()
@@ -73,7 +88,6 @@ public class NetworkService
     /// </summary>
     public NetworkApplyResult ApplyDeliveryOptimization(bool light)
     {
-        // 退避（first-touch-wins）：WinKnobs が触る前の原状を JSON で保存。
         var before = GetDeliveryOptimizationMode();
         var payload = JsonSerializer.Serialize(new DeliveryOptimizationBackup(before, before.HasValue));
         _backup.SaveNetworkOriginalIfAbsent(FeatureDeliveryOptimization, payload);
@@ -81,7 +95,6 @@ public class NetworkService
         var target = light ? DoModeOff : DoModeDefault;
         _registry.WriteValue(DoConfigPath, DoValueName, target, RegistryValueKind.DWord);
 
-        // read-back：書込が反映されたか（グループポリシーで弾かれると一致しない・エッジ4）。
         var after = GetDeliveryOptimizationMode();
         return new NetworkApplyResult(after == target, after ?? DoModeDefault, IsDeliveryOptimizationPolicyManaged());
     }
@@ -96,10 +109,243 @@ public class NetworkService
         else
             _registry.DeleteValue(DoConfigPath, DoValueName);  // 元々無かった → 削除して Windows 既定へ
     }
+
+    // =================== Phase 4：DNS プロファイル切替 ===================
+
+    /// <summary>
+    /// 物理アクティブアダプタ判定（純粋関数・xUnit 対象）。
+    /// Up かつ Ethernet/Wireless80211 で、説明に仮想・VPN・トンネル・Bluetooth 等のマーカーが無いもの。
+    /// plan-validator エッジ1：誤って VPN/WSL/Hyper-V を含めないよう Description で厳格除外。
+    /// </summary>
+    public static bool IsPhysicalAdapter(NetworkInterfaceType type, OperationalStatus status, string? description)
+    {
+        if (status != OperationalStatus.Up) return false;
+        if (type != NetworkInterfaceType.Ethernet && type != NetworkInterfaceType.Wireless80211) return false;
+
+        var desc = description ?? string.Empty;
+        string[] virtualMarkers =
+        {
+            "Hyper-V", "vEthernet", "Virtual", "VPN", "TAP", "WAN Miniport",
+            "VMware", "VirtualBox", "Loopback", "Pseudo", "Tunnel", "WSL",
+            "Bluetooth", "Wi-Fi Direct", "Npcap", "Container",
+        };
+        return !virtualMarkers.Any(m => desc.Contains(m, System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>IPv4/IPv6 アドレス文字列の検証（純粋関数・xUnit 対象・Phase 7 手入力で使用）。</summary>
+    public static bool IsValidIpAddress(string? s)
+        => !string.IsNullOrWhiteSpace(s) && IPAddress.TryParse(s.Trim(), out _);
+
+    /// <summary>アクティブな物理アダプタを列挙（読取のみ・安全）。</summary>
+    public List<AdapterInfo> GetActivePhysicalAdapters()
+    {
+        var list = new List<AdapterInfo>();
+        foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (!IsPhysicalAdapter(ni.NetworkInterfaceType, ni.OperationalStatus, ni.Description)) continue;
+            List<string> dns;
+            try { dns = ni.GetIPProperties().DnsAddresses.Select(a => a.ToString()).ToList(); }
+            catch { dns = new(); }
+            list.Add(new AdapterInfo(ni.Name, ni.Id, ni.Description ?? string.Empty, dns));
+        }
+        return list;
+    }
+
+    /// <summary>DNS サーバー一覧から既知プロファイル名を判定（純粋関数・xUnit 対象）。</summary>
+    public static string DescribeDnsProfile(IEnumerable<string> servers)
+    {
+        var set = servers.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        if (set.Contains("1.1.1.1") || set.Contains("1.0.0.1")) return "Cloudflare";
+        if (set.Contains("8.8.8.8") || set.Contains("8.8.4.4")) return "Google";
+        if (set.Count == 0) return "自動 (DHCP)";
+        return "自動 / その他";
+    }
+
+    /// <summary>「今の状態」表示用 DNS サマリ（先頭物理アダプタ基準）。</summary>
+    public string GetDnsSummary()
+    {
+        var adapters = GetActivePhysicalAdapters();
+        if (adapters.Count == 0) return "（有効なアダプタなし）";
+        var first = adapters[0];
+        var profile = DescribeDnsProfile(first.DnsServers);
+        var v4 = first.DnsServers.FirstOrDefault(a => !a.Contains(':'));
+        return v4 == null ? profile : $"{profile}（{v4}）";
+    }
+
+    /// <summary>
+    /// 全アクティブ物理アダプタに DNS プロファイルを適用（netsh）。適用前に全対象の原状を退避（first-touch-wins）。
+    /// 非管理者では netsh が失敗 → 例外（呼び出し側で昇格誘導）。
+    /// エッジ1：途中失敗時は適用済みアダプタを退避値へロールバックしてから例外送出。
+    /// </summary>
+    public DnsApplyResult ApplyDnsProfile(DnsProfile profile)
+    {
+        var adapters = GetActivePhysicalAdapters();
+        if (adapters.Count == 0) return new DnsApplyResult(0, 0, 0, NoAdapters: true);
+
+        // 退避（first-touch-wins）：全対象アダプタの現状 NameServer（ロケール非依存）を記録。
+        var backups = adapters.Select(a => new DnsAdapterBackup(
+            a.Name, a.Id,
+            ReadStaticDns(a.Id, ipv6: false),
+            ReadStaticDns(a.Id, ipv6: true))).ToList();
+        _backup.SaveNetworkOriginalIfAbsent(FeatureDns, JsonSerializer.Serialize(new DnsBackup(backups)));
+
+        var done = new List<DnsAdapterBackup>();
+        int ok = 0;
+        foreach (var a in adapters)
+        {
+            try
+            {
+                ApplyDnsToAdapter(a.Name, profile);
+                ok++;
+                done.Add(backups.First(b => b.Id == a.Id));
+            }
+            catch
+            {
+                // エッジ1：部分適用ロールバック（適用済みを退避値へ戻す）。
+                foreach (var d in done)
+                {
+                    try { RestoreAdapterDns(d); } catch { /* ロールバック失敗は握り */ }
+                }
+                throw;  // 上位（VM）で昇格/エラー処理。ロールバック済。
+            }
+        }
+        return new DnsApplyResult(adapters.Count, ok, 0, NoAdapters: false);
+    }
+
+    /// <summary>DNS を退避ペイロードから全アダプタ復元（Phase 5「ぜんぶ戻す」が利用）。</summary>
+    public void RestoreDns(string jsonPayload)
+    {
+        var b = JsonSerializer.Deserialize<DnsBackup>(jsonPayload);
+        if (b == null) return;
+        System.Exception? firstError = null;
+        foreach (var ad in b.Adapters)
+        {
+            try { RestoreAdapterDns(ad); }
+            catch (System.Exception ex) { firstError ??= ex; }
+        }
+        if (firstError != null) throw firstError;  // 1 枚でも失敗 → 退避を残すためエラー伝播
+    }
+
+    // =================== Phase 5：共通「ぜんぶ戻す」 ===================
+
+    /// <summary>退避済みの機能があるか（「ぜんぶ戻す」ボタンの活性判定）。</summary>
+    public bool HasBackup() => _backup.HasNetworkOriginals();
+
+    /// <summary>
+    /// 退避済みの全機能を原状へ復元。成功した機能だけ退避ストアから消す（失敗は残して再試行可能に）。
+    /// 各機能の復元は HKLM/netsh ＝管理者要（呼び出し側で事前昇格）。
+    /// </summary>
+    public NetworkRevertResult RevertAll()
+    {
+        var originals = _backup.LoadNetworkOriginals();
+        if (originals.Count == 0) return new NetworkRevertResult(0, 0);
+
+        int restored = 0, failed = 0;
+        foreach (var kv in originals)
+        {
+            try
+            {
+                switch (kv.Key)
+                {
+                    case FeatureDeliveryOptimization: RestoreDeliveryOptimization(kv.Value); break;
+                    case FeatureDns: RestoreDns(kv.Value); break;
+                    default: continue;  // 未知の機能キーは触らない
+                }
+                _backup.RemoveNetworkOriginal(kv.Key);  // 成功したものだけ退避から消す
+                restored++;
+            }
+            catch
+            {
+                failed++;  // 失敗は退避を残す（管理者で再試行可能）
+            }
+        }
+        return new NetworkRevertResult(restored, failed);
+    }
+
+    // =================== Phase 6：軽いリセット（flushdns のみ） ===================
+
+    /// <summary>DNS 解決キャッシュをクリア（ipconfig /flushdns）。実質可逆・管理者不要・退避不要。</summary>
+    public void FlushDnsCache() => _launcher.RunIpconfig("/flushdns");
+
+    // ── DNS 内部ヘルパー ──
+
+    /// <summary>レジストリから静的 DNS（NameServer・空=DHCP）をロケール非依存で読む。</summary>
+    private string ReadStaticDns(string guid, bool ipv6)
+    {
+        var svc = ipv6 ? "Tcpip6" : "Tcpip";
+        var path = $@"HKLM\SYSTEM\CurrentControlSet\Services\{svc}\Parameters\Interfaces\{guid}";
+        return _registry.ReadValue<string>(path, "NameServer") ?? string.Empty;
+    }
+
+    private void ApplyDnsToAdapter(string name, DnsProfile profile)
+    {
+        if (profile == DnsProfile.Auto)
+        {
+            _launcher.RunNetsh("interface", "ipv4", "set", "dnsservers", $"name={name}", "source=dhcp");
+            try { _launcher.RunNetsh("interface", "ipv6", "set", "dnsservers", $"name={name}", "source=dhcp"); } catch { }
+            return;
+        }
+        var (v4, v6) = profile == DnsProfile.Cloudflare ? (CloudflareV4, CloudflareV6) : (GoogleV4, GoogleV6);
+        SetStaticDns(name, ipv6: false, v4);
+        try { SetStaticDns(name, ipv6: true, v6); } catch { /* IPv6 失敗は致命でない（IPv4 が効けば実用上 OK） */ }
+    }
+
+    private void SetStaticDns(string name, bool ipv6, string[] servers)
+    {
+        var fam = ipv6 ? "ipv6" : "ipv4";
+        _launcher.RunNetsh("interface", fam, "set", "dnsservers", $"name={name}", "static", servers[0], "primary");
+        for (int i = 1; i < servers.Length; i++)
+            _launcher.RunNetsh("interface", fam, "add", "dnsservers", $"name={name}", servers[i], $"index={i + 1}");
+    }
+
+    private void RestoreAdapterDns(DnsAdapterBackup b)
+    {
+        RestoreFamilyDns(b.Name, ipv6: false, b.Ipv4NameServer);
+        RestoreFamilyDns(b.Name, ipv6: true, b.Ipv6NameServer);
+    }
+
+    private void RestoreFamilyDns(string name, bool ipv6, string nameServerRaw)
+    {
+        var fam = ipv6 ? "ipv6" : "ipv4";
+        var servers = ParseNameServer(nameServerRaw);
+        if (servers.Length == 0)
+        {
+            // 元は DHCP（NameServer 空）→ 自動へ。
+            _launcher.RunNetsh("interface", fam, "set", "dnsservers", $"name={name}", "source=dhcp");
+            return;
+        }
+        _launcher.RunNetsh("interface", fam, "set", "dnsservers", $"name={name}", "static", servers[0], "primary");
+        for (int i = 1; i < servers.Length; i++)
+            _launcher.RunNetsh("interface", fam, "add", "dnsservers", $"name={name}", servers[i], $"index={i + 1}");
+    }
+
+    /// <summary>レジストリ NameServer（"1.1.1.1,1.0.0.1" 等）を配列へ（純粋関数・xUnit 対象）。</summary>
+    public static string[] ParseNameServer(string? raw)
+        => string.IsNullOrWhiteSpace(raw)
+            ? System.Array.Empty<string>()
+            : raw.Split(new[] { ',', ' ', ';' }, System.StringSplitOptions.RemoveEmptyEntries);
 }
 
-/// <summary>ネットワーク設定適用の結果。</summary>
+/// <summary>ネットワーク設定適用の結果（配信最適化）。</summary>
 public record NetworkApplyResult(bool Applied, int EffectiveValue, bool PolicyManaged);
 
 /// <summary>配信最適化の原状退避ペイロード（JSON 直列化用）。</summary>
 public record DeliveryOptimizationBackup(int? Mode, bool Existed);
+
+/// <summary>DNS プロファイル。</summary>
+public enum DnsProfile { Auto, Cloudflare, Google }
+
+/// <summary>アクティブ物理アダプタ情報。</summary>
+public record AdapterInfo(string Name, string Id, string Description, List<string> DnsServers);
+
+/// <summary>DNS 適用結果。</summary>
+public record DnsApplyResult(int Total, int Succeeded, int Failed, bool NoAdapters);
+
+/// <summary>アダプタ 1 枚分の DNS 原状退避（NameServer 生文字列・空=DHCP）。</summary>
+public record DnsAdapterBackup(string Name, string Id, string Ipv4NameServer, string Ipv6NameServer);
+
+/// <summary>DNS 原状退避ペイロード（全対象アダプタ）。</summary>
+public record DnsBackup(List<DnsAdapterBackup> Adapters);
+
+/// <summary>「ぜんぶ戻す」の結果。</summary>
+public record NetworkRevertResult(int Restored, int Failed);
