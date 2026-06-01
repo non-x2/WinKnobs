@@ -162,13 +162,20 @@ public partial class NetworkListViewModel : ObservableObject
     // ============ Phase 4-6：かんたん設定（各フェーズで実装）============
 
     /// <summary>
-    /// 「DNSを速くする」＝全アクティブ物理アダプタの DNS を Cloudflare に切替（netsh）。戻せる🟡・管理者要。
-    /// 詳細層（Phase 7）で 自動/Google/手入力 も選べるようにする。
+    /// DNS プロファイルを全アクティブ物理アダプタに切替（netsh）。戻せる🟡・管理者要。
+    /// CommandParameter：cloudflare（既定・かんたん設定）/ google / auto（DHCPに戻す）。詳細層から google/auto も選べる。
     /// </summary>
     [RelayCommand]
-    private void ApplyDns()
+    private void ApplyDns(string? profileKey)
     {
         if (_privilege.IsShutdownPending) return;
+
+        var (profile, label) = profileKey switch
+        {
+            "auto"   => (DnsProfile.Auto, "自動 (DHCP)"),
+            "google" => (DnsProfile.Google, "Google (8.8.8.8)"),
+            _        => (DnsProfile.Cloudflare, "Cloudflare (1.1.1.1)"),
+        };
 
         var adapters = _network.GetActivePhysicalAdapters();
         if (adapters.Count == 0)
@@ -181,19 +188,21 @@ public partial class NetworkListViewModel : ObservableObject
             return;
         }
 
+        var detail = profile == DnsProfile.Auto
+            ? "・各アダプタの DNS を自動取得（DHCP）に戻します。\n"
+            : "・Web サイト名の解決が速く・プライバシー重視になります。\n";
         var ok = _dialogs.Confirm(
-            "DNS を Cloudflare（1.1.1.1）に変更します。\n\n" +
+            $"DNS を「{label}」に変更します。\n\n" +
             $"対象アダプタ：{string.Join("・", adapters.Select(a => a.Name))}\n\n" +
-            "・Web サイト名の解決が速く・プライバシー重視になります。\n" +
-            "・うまくつながらない時は「↩ ぜんぶ元の状態に戻す」で自動(DHCP)に戻せます。\n" +
-            "　（戻す操作はインターネットに繋がっていなくても実行できます）\n\n" +
+            detail +
+            "・「↩ ぜんぶ元の状態に戻す」で元の状態に戻せます（戻す操作はインターネット不要）。\n\n" +
             "実行しますか？",
-            "DNSを速くする");
+            $"DNSを変更（{label}）");
         if (!ok) return;
 
         if (!_privilege.IsRunningAsAdministrator())
         {
-            var choice = _dialogs.ConfirmElevation("DNSを速くする", isFromError: false);
+            var choice = _dialogs.ConfirmElevation($"DNS変更（{label}）", isFromError: false);
             switch (choice)
             {
                 case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
@@ -205,15 +214,15 @@ public partial class NetworkListViewModel : ObservableObject
 
         try
         {
-            var result = _network.ApplyDnsProfile(DnsProfile.Cloudflare);
+            var result = _network.ApplyDnsProfile(profile);
             RefreshStatus();
             StatusMessage = result.Succeeded == result.Total
-                ? $"✅ DNS を Cloudflare に変更しました（{result.Succeeded}/{result.Total} アダプタ）。戻すには「↩ ぜんぶ元の状態に戻す」。"
+                ? $"✅ DNS を「{label}」に変更しました（{result.Succeeded}/{result.Total} アダプタ）。戻すには「↩ ぜんぶ元の状態に戻す」。"
                 : $"⚠️ 一部のアダプタで変更できませんでした（{result.Succeeded}/{result.Total} 成功）。";
         }
-        catch (UnauthorizedAccessException) when (HandleElevationNeeded("DNSを速くする")) { }
-        catch (SecurityException)            when (HandleElevationNeeded("DNSを速くする")) { }
-        catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("DNSを速くする")) { }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded("DNS変更")) { }
+        catch (SecurityException)            when (HandleElevationNeeded("DNS変更")) { }
+        catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("DNS変更")) { }
         catch (Exception ex)
         {
             _dialogs.Error($"DNS の変更に失敗しました：\n{ex.Message}", "失敗");

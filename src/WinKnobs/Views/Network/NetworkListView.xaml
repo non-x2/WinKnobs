@@ -37,7 +37,7 @@
                         HorizontalContentAlignment="Left"
                         Content="🚀 通信を軽くする　— 余計な自動通信を抑える"/>
                 <Button AutomationProperties.AutomationId="NetworkDnsButton"
-                        Command="{Binding ApplyDnsCommand}"
+                        Command="{Binding ApplyDnsCommand}" CommandParameter="cloudflare"
                         HorizontalAlignment="Left" MinWidth="260" Margin="0,0,0,5" Padding="8,5"
                         HorizontalContentAlignment="Left"
                         Content="🌐 DNSを速くする　— Cloudflare に変更"/>
@@ -81,7 +81,23 @@
                       Header="くわしい設定（上級者向け）"
                       IsExpanded="{Binding IsAdvancedExpanded}">
                 <StackPanel Margin="4,8,0,0">
-                    <TextBlock Text="ネットワークの詳細項目（ダブルクリックで編集）。将来ここに DNS 手入力・DoH などが増えます。"
+                    <!-- DNS の選び方（Cloudflare はかんたん設定にも・ここでは Google / 自動 も選べる） -->
+                    <TextBlock Text="DNS の選び方" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <WrapPanel Margin="0,0,0,6">
+                        <Button AutomationProperties.AutomationId="NetworkDnsCloudflareButton"
+                                Command="{Binding ApplyDnsCommand}" CommandParameter="cloudflare"
+                                Content="Cloudflare (1.1.1.1)" MinWidth="150" Margin="0,0,6,6" Padding="8,4"/>
+                        <Button AutomationProperties.AutomationId="NetworkDnsGoogleButton"
+                                Command="{Binding ApplyDnsCommand}" CommandParameter="google"
+                                Content="Google (8.8.8.8)" MinWidth="140" Margin="0,0,6,6" Padding="8,4"/>
+                        <Button AutomationProperties.AutomationId="NetworkDnsAutoButton"
+                                Command="{Binding ApplyDnsCommand}" CommandParameter="auto"
+                                Content="自動 (DHCP) に戻す" MinWidth="150" Margin="0,0,6,6" Padding="8,4"/>
+                    </WrapPanel>
+                    <TextBlock Text="（DNS 手入力・DoH ON/OFF・アダプタ個別指定は今後追加予定）"
+                               FontSize="11" Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,10"/>
+
+                    <TextBlock Text="ネットワークの詳細項目（ダブルクリックで編集）"
                                TextWrapping="Wrap" FontSize="11"
                                Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,6"/>
                     <!-- 既存 Network 項目（HTTP同時接続数 / TCP Auto-Tuning）を MainViewModel の独立ビューから表示。
