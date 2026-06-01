@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:WinKnobs.ViewModels"
         xmlns:conv="clr-namespace:WinKnobs.Converters"
         xmlns:startup="clr-namespace:WinKnobs.Views.Startup"
+        xmlns:network="clr-namespace:WinKnobs.Views.Network"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -179,7 +180,7 @@
                 <!-- 既存：標準カテゴリ用 DataGrid（変更最小・Visibility 追加のみ） -->
                 <DataGrid x:Name="ItemsGrid"
                           AutomationProperties.AutomationId="ItemsGrid"
-                          Visibility="{Binding IsStartupCategorySelected, Converter={StaticResource BoolToCollapsedVis}}"
+                          Visibility="{Binding IsStandardCategorySelected, Converter={StaticResource BoolToVisibleVis}}"
                           ItemsSource="{Binding FilteredItems}"
                           SelectedItem="{Binding SelectedItem}"
                           MouseDoubleClick="ItemsGrid_MouseDoubleClick"
@@ -220,6 +221,16 @@
                                          RelativeSource={RelativeSource AncestorType=Window},
                                          Converter={StaticResource BoolToVisibleVis}}"
                     AutomationProperties.AutomationId="StartupListView"/>
+
+                <!-- 新規：ネットワーク・カテゴリ専用ペイン（v0.1.7・Network カテゴリ選択時のみ表示）
+                     DataContext を NetworkListVM に切替えるため、Visibility の IsNetworkCategorySelected は
+                     Window.DataContext (=MainViewModel) から RelativeSource で再取得する（StartupListView と同方式）。 -->
+                <network:NetworkListView
+                    DataContext="{Binding NetworkListVM}"
+                    Visibility="{Binding Path=DataContext.IsNetworkCategorySelected,
+                                         RelativeSource={RelativeSource AncestorType=Window},
+                                         Converter={StaticResource BoolToVisibleVis}}"
+                    AutomationProperties.AutomationId="NetworkListView"/>
             </Grid>
         </Grid>
 

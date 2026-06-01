@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using WinKnobs.Services;
 using WinKnobs.ViewModels;
 using WinKnobs.ViewModels.Items;
+using WinKnobs.ViewModels.Network;
 using WinKnobs.ViewModels.Startup;
 using WinKnobs.Views;
 using WinKnobs.Views.Startup;
@@ -46,6 +47,9 @@ public partial class App : Application
                 // スタートアップ系（Phase R-1〜R-3）：状態保持＋シングルトン共有
                 services.AddSingleton<StartupItemsProvider>();
                 services.AddSingleton<StartupListViewModel>();
+
+                // ネットワーク系（v0.1.7）：専用ペイン VM（状態保持＋シングルトン共有）
+                services.AddSingleton<NetworkListViewModel>();
 
                 // ViewModel
                 services.AddTransient<MainViewModel>();

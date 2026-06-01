@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WinKnobs.Models;
 using WinKnobs.Services;
+using WinKnobs.ViewModels.Network;
 using WinKnobs.ViewModels.Startup;
 
 // .NET 10 で WPF に System.Windows.ThemeMode が追加されたため別名で衝突回避
@@ -53,6 +54,20 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isStartupCategorySelected;
 
+    /// <summary>
+    /// ネットワーク・カテゴリが選択中か（v0.1.7）。専用ペイン NetworkListView の表示切替に使用。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isNetworkCategorySelected;
+
+    /// <summary>
+    /// 標準カテゴリ（Startup でも Network でもない）が選択中か。既存 DataGrid(ItemsGrid) の表示切替に使用。
+    /// 専用ペイン追加で右ペインが「3 者択一」になったため、単一 bool（IsStartupCategorySelected の否定）では
+    /// 表現できず新設（plan-validator 致命2 反映）。既定 true＝起動直後（未選択）は従来通り DataGrid を表示。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isStandardCategorySelected = true;
+
     public ObservableCollection<SettingCategory> Categories { get; } = new();
     public ObservableCollection<SettingItem> Items { get; } = new();
     public ICollectionView FilteredItems { get; }
@@ -63,6 +78,19 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     public StartupListViewModel StartupListVM { get; }
 
+    /// <summary>
+    /// ネットワーク・カテゴリ専用ペイン用 ViewModel（DI 取得・v0.1.7）。
+    /// MainWindow.xaml の NetworkListView の DataContext にバインドされる。
+    /// </summary>
+    public NetworkListViewModel NetworkListVM { get; }
+
+    /// <summary>
+    /// ネットワーク・カテゴリの既存詳細項目（HTTP 同時接続数 / TCP Auto-Tuning 等）を
+    /// 専用ペインの「▸ くわしい設定」に表示するための独立ビュー。
+    /// FilteredItems とは別の CollectionView（フィルタを共有しない）。
+    /// </summary>
+    public ICollectionView NetworkAdvancedItems { get; }
+
     public MainViewModel(
         DialogService dialogs,
         ThemeService theme,
@@ -71,7 +99,8 @@ public partial class MainViewModel : ObservableObject
         BackupService backup,
         RestorePointService restore,
         RegistryService registry,
-        StartupListViewModel startupListVM)
+        StartupListViewModel startupListVM,
+        NetworkListViewModel networkListVM)
     {
         _dialogs = dialogs;
         _theme = theme;
@@ -82,6 +111,7 @@ public partial class MainViewModel : ObservableObject
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
+        NetworkListVM = networkListVM;
 
         // テーマ初期化＋変更追従（2026-05-16：MenuItem IsChecked 連動）
         _currentThemeMode = _theme.CurrentMode;
@@ -92,6 +122,11 @@ public partial class MainViewModel : ObservableObject
 
         FilteredItems = CollectionViewSource.GetDefaultView(Items);
         FilteredItems.Filter = FilterItem;
+
+        // 専用ペイン「▸ くわしい設定」用：ネットワーク・カテゴリの既存項目だけを表示する独立ビュー。
+        // FilteredItems（GetDefaultView）と共有すると互いのフィルタが干渉するため、別 CollectionView を作る。
+        NetworkAdvancedItems = new CollectionViewSource { Source = Items }.View;
+        NetworkAdvancedItems.Filter = o => o is SettingItem si && si.Category == CategoryType.Network;
     }
 
     private bool FilterItem(object obj)
@@ -124,9 +159,13 @@ public partial class MainViewModel : ObservableObject
     {
         FilteredItems?.Refresh();
 
-        // スタートアップ系カテゴリへの切替検出（設計書 5-1）
+        // スタートアップ系／ネットワーク・カテゴリへの切替検出（設計書 5-1 / v0.1.7 致命2 反映）
         var isStartup = value?.Type == CategoryType.Startup;
+        var isNetwork = value?.Type == CategoryType.Network;
         IsStartupCategorySelected = isStartup;
+        IsNetworkCategorySelected = isNetwork;
+        // 既存 DataGrid は「Startup でも Network でもない」時だけ表示する（3 者択一）
+        IsStandardCategorySelected = !(isStartup || isNetwork);
 
         if (isStartup)
         {
@@ -139,6 +178,11 @@ public partial class MainViewModel : ObservableObject
             }
             // Startup に切り替わるたびに読み直し（regedit 外部変更が反映されるように）
             StartupListVM.Load();
+        }
+        else if (isNetwork)
+        {
+            // ネットワークペインの状態表示を更新（Phase 3/4 で実値読込）
+            NetworkListVM.Load();
         }
 
         StatusMessage = value == null

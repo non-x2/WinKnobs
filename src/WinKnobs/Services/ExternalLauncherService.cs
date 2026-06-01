@@ -116,6 +116,14 @@ public class ExternalLauncherService
     public bool OpenUrl(string url) => Launch(url, null);
 
     /// <summary>
+    /// v0.1.7 機能0：Windows 純正のネットワーク設定画面を開く（開くだけ・設定値は変更しない・管理者不要）。
+    /// 設定アプリの ms-settings: URI、またはクラシックな control.exe / ncpa.cpl を UseShellExecute で起動する。
+    /// 例：OpenNetworkSettings("ms-settings:network-status") / OpenNetworkSettings("control.exe", "ncpa.cpl")
+    /// </summary>
+    /// <returns>起動に成功したら true。URI 非対応など失敗時は false（呼び出し側でフォールバック誘導）。</returns>
+    public bool OpenNetworkSettings(string fileName, string? args = null) => Launch(fileName, args);
+
+    /// <summary>
     /// A3-2-c 拡張：fsutil を実行して標準出力を取得（A3-2-c W7 復活・CommandAction 用）。
     /// 例：RunFsutil("behavior", "set", "disable8dot3", "1")
     /// </summary>

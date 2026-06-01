@@ -1,0 +1,131 @@
+<UserControl x:Class="WinKnobs.Views.Network.NetworkListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:WinKnobs.ViewModels.Network"
+             d:DataContext="{d:DesignInstance Type=vm:NetworkListViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Background="{DynamicResource Bg.Window}"
+             Foreground="{DynamicResource Fg.Default}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="14,12">
+
+            <!-- 今の状態（Phase 3/4 で実値表示） -->
+            <Border Padding="10,8" Margin="0,0,0,12"
+                    Background="{DynamicResource Bg.Panel}"
+                    BorderBrush="{DynamicResource Border.Default}"
+                    BorderThickness="1" CornerRadius="4">
+                <StackPanel>
+                    <TextBlock Text="今の状態" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <TextBlock AutomationProperties.AutomationId="NetworkDnsSummary"
+                               Text="{Binding DnsSummary, StringFormat=DNS：{0}}"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,1"/>
+                    <TextBlock Text="{Binding ConnectionSummary, StringFormat=通信：{0}}"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,1"/>
+                    <TextBlock Text="{Binding DeliveryOptimizationSummary, StringFormat=配信最適化(P2P)：{0}}"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,1"/>
+                </StackPanel>
+            </Border>
+
+            <!-- かんたん設定（おすすめ）：Phase 3-6 で実装 -->
+            <TextBlock Text="━━ かんたん設定（おすすめ）━━" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <StackPanel Margin="0,0,0,12">
+                <Button AutomationProperties.AutomationId="NetworkBandwidthButton"
+                        Command="{Binding SetBandwidthCommand}"
+                        HorizontalAlignment="Left" MinWidth="260" Margin="0,0,0,5" Padding="8,5"
+                        HorizontalContentAlignment="Left"
+                        Content="🚀 通信を軽くする　— 余計な自動通信を抑える"/>
+                <Button AutomationProperties.AutomationId="NetworkDnsButton"
+                        Command="{Binding ApplyDnsCommand}"
+                        HorizontalAlignment="Left" MinWidth="260" Margin="0,0,0,5" Padding="8,5"
+                        HorizontalContentAlignment="Left"
+                        Content="🌐 DNSを速くする　— Cloudflare に変更"/>
+                <Button AutomationProperties.AutomationId="NetworkResetButton"
+                        Command="{Binding ResetNetworkCommand}"
+                        HorizontalAlignment="Left" MinWidth="260" Margin="0,0,0,5" Padding="8,5"
+                        HorizontalContentAlignment="Left"
+                        Content="🔧 不調を直す　— DNSキャッシュをクリア"/>
+            </StackPanel>
+
+            <!-- Windowsの画面を開く（機能0・実装済・開くだけ） -->
+            <TextBlock Text="━━ Windowsの画面を開く ━━" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <WrapPanel Margin="0,0,0,12">
+                <Button AutomationProperties.AutomationId="NetworkOpenStatusButton"
+                        Command="{Binding OpenWindowsNetworkCommand}" CommandParameter="status"
+                        Content="🪟 ネットの状態" MinWidth="120" Margin="0,0,6,6" Padding="8,5"/>
+                <Button AutomationProperties.AutomationId="NetworkOpenWifiButton"
+                        Command="{Binding OpenWindowsNetworkCommand}" CommandParameter="wifi"
+                        Content="📶 Wi-Fi" MinWidth="100" Margin="0,0,6,6" Padding="8,5"/>
+                <Button AutomationProperties.AutomationId="NetworkOpenAdaptersButton"
+                        Command="{Binding OpenWindowsNetworkCommand}" CommandParameter="adapters"
+                        Content="🔌 アダプター" MinWidth="120" Margin="0,0,6,6" Padding="8,5"/>
+                <Button AutomationProperties.AutomationId="NetworkOpenSharingButton"
+                        Command="{Binding OpenWindowsNetworkCommand}" CommandParameter="sharing"
+                        Content="🌍 共有センター" MinWidth="130" Margin="0,0,6,6" Padding="8,5"/>
+            </WrapPanel>
+
+            <!-- 安心：ぜんぶ元に戻す（Phase 5 で実装） -->
+            <TextBlock Text="━━ 安心 ━━" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <Button AutomationProperties.AutomationId="NetworkRevertAllButton"
+                    Command="{Binding RevertAllCommand}"
+                    HorizontalAlignment="Left" MinWidth="260" Margin="0,0,0,4" Padding="8,5"
+                    HorizontalContentAlignment="Left"
+                    Content="↩ ぜんぶ元の状態に戻す　（変更前に自動退避）"/>
+            <TextBlock Text="※ DNS・通信設定の変更は自動で退避され、ここから戻せます（ネットワークのリセットは戻せません）。"
+                       TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,12"/>
+
+            <!-- ▸ くわしい設定（上級者向け・既定折りたたみ）。既存ネットワーク詳細項目を表示 -->
+            <Expander AutomationProperties.AutomationId="NetworkAdvancedExpander"
+                      Header="くわしい設定（上級者向け）"
+                      IsExpanded="{Binding IsAdvancedExpanded}">
+                <StackPanel Margin="4,8,0,0">
+                    <TextBlock Text="ネットワークの詳細項目（ダブルクリックで編集）。将来ここに DNS 手入力・DoH などが増えます。"
+                               TextWrapping="Wrap" FontSize="11"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,6"/>
+                    <!-- 既存 Network 項目（HTTP同時接続数 / TCP Auto-Tuning）を MainViewModel の独立ビューから表示。
+                         本ペインの DataContext は NetworkListViewModel のため、Window 経由で MainViewModel に到達する。 -->
+                    <DataGrid x:Name="NetworkAdvancedGrid"
+                              AutomationProperties.AutomationId="NetworkAdvancedGrid"
+                              ItemsSource="{Binding DataContext.NetworkAdvancedItems, RelativeSource={RelativeSource AncestorType=Window}}"
+                              SelectedItem="{Binding DataContext.SelectedItem, RelativeSource={RelativeSource AncestorType=Window}}"
+                              AutoGenerateColumns="False" IsReadOnly="True"
+                              GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                              RowHeight="30" CanUserResizeRows="False" SelectionMode="Single"
+                              MaxHeight="220" BorderThickness="0">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="AutomationProperties.AutomationId"
+                                        Value="{Binding Id, StringFormat=NetworkItem_{0}}"/>
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="" Binding="{Binding RiskMark}" Width="32" FontSize="14"/>
+                            <DataGridTextColumn Header="項目" Binding="{Binding Title}" Width="240"/>
+                            <DataGridTextColumn Header="説明" Binding="{Binding Description}" Width="*"/>
+                            <DataGridTextColumn Header="再起動" Binding="{Binding RestartMark}" Width="60"/>
+                        </DataGrid.Columns>
+                        <DataGrid.InputBindings>
+                            <MouseBinding MouseAction="LeftDoubleClick"
+                                          Command="{Binding DataContext.OpenSelectedItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        </DataGrid.InputBindings>
+                    </DataGrid>
+                </StackPanel>
+            </Expander>
+
+            <!-- ステータス -->
+            <Border Margin="0,12,0,0" Padding="8,5"
+                    Background="{DynamicResource Bg.Panel}"
+                    BorderBrush="{DynamicResource Border.Default}"
+                    BorderThickness="0,1,0,0">
+                <TextBlock x:Name="NetworkStatusText"
+                           AutomationProperties.AutomationId="NetworkStatusText"
+                           Text="{Binding StatusMessage}"
+                           FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Fg.Subtle}"/>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
