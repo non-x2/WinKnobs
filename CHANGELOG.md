@@ -12,6 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planning
+- **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
+  - v0.2.0：Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）
+  - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目
+  - v0.2.2：IME / 音声 / Network 完成 6 項目
+  - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
+- **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
+- **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.1.6] - 2026-06-01
+
 ### Added
 - **v0.1.6 機能 C：スタートアップ snapshot 復元前プレビュー UI（3 ペイン）**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md) §C 実装・2026-05-31）
   - `Views/Startup/RestorePreviewDialog.xaml(.cs)` + `ViewModels/Startup/RestorePreviewViewModel.cs`（新規）：🗑 削除予定 / ✏ 変更予定 / ➕ 追加予定 を 3 ペイン（DataGrid・ダークテーマ適用・各ペイン AutomationId 付与）で表示し、「内容を確認しました」チェック後のみ復元ボタンを有効化
@@ -41,19 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **テスト基盤新設**：`tests/WinKnobs.Tests`（xUnit・本リポジトリ初の Unit test プロジェクト）+ `StartupSnapshotDifferTests`（差分 0/1/5/10+・REG_EXPAND_SZ・hex 継続行・削除マーカー・プレフィックス・Wow64・破損 reg の **15 ケース全 PASS**）
   - cross-reviewer 反映：算出失敗時の誤表示回避（重要1）/ プレフィックス・Wow64・Empty テスト追加（重要2）/ 同期実行コメント明示（重要3）/ 閾値 const 化（軽微）
 
-### Planning
-- **v0.1.6 候補**（[設計ドラフト v2](docs/v0.1.6_候補設計ドラフト_v2.md)・推奨実装順 B → A → C）：**A/B/C すべて実装完了（2026-05-31）**
-  - A: snapshot SHA256 改ざん対策 + ACL → ✅ 実装済（2026-05-31）
-  - B: 世代またぎ復元の差分件数警告 → ✅ 実装済（2026-05-30）
-  - C: snapshot 復元前プレビュー UI（3 ペイン構造）→ ✅ 実装済（2026-05-31）
-  - 残：VM 統合検証 + v0.1.6 全体のバージョン bump 判定（v0.1.5-dev → v0.1.6）
-- **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - v0.2.0：Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）
-  - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目
-  - v0.2.2：IME / 音声 / Network 完成 6 項目
-  - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
-- **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
-- **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.5 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+### Notes
+- バージョン bump：v0.1.5-dev → v0.1.6（csproj AssemblyVersion=0.1.6.0 / FileVersion=0.1.6.0 / MainWindow ステータスバー / MainViewModel 環境情報）
+- 裏付け：xUnit **42 PASS**（B15 + A17 + C10）/ build 0 警告 0 エラー / VM-UIA **65 OK・0 FAIL**（リグレッションなし）/ plan-validator・cross-reviewer 致命 0
+- 残（任意）：VM 実機目視（A 改ざん警告 / C プレビュー UI）。Public 化前残作業は Unreleased の Planning を参照
 
 ---
 
