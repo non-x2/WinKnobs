@@ -172,36 +172,67 @@ public class NetworkService
         return v4 == null ? profile : $"{profile}（{v4}）";
     }
 
-    /// <summary>
-    /// 全アクティブ物理アダプタに DNS プロファイルを適用（netsh）。適用前に全対象の原状を退避（first-touch-wins）。
-    /// 非管理者では netsh が失敗 → 例外（呼び出し側で昇格誘導）。
-    /// エッジ1：途中失敗時は適用済みアダプタを退避値へロールバックしてから例外送出。
-    /// </summary>
+    /// <summary>全アクティブ物理アダプタに DNS プロファイルを適用（netsh）。詳細層でアダプタを絞る場合は overload。</summary>
     public DnsApplyResult ApplyDnsProfile(DnsProfile profile)
-    {
-        var adapters = GetActivePhysicalAdapters();
-        if (adapters.Count == 0) return new DnsApplyResult(0, 0, 0, NoAdapters: true);
+        => ApplyDnsProfile(profile, null);
 
-        // 退避（first-touch-wins）：全対象アダプタの現状 NameServer（ロケール非依存）を記録。
-        var backups = adapters.Select(a => new DnsAdapterBackup(
+    /// <summary>
+    /// DNS プロファイルを対象アダプタ（null/空＝全アクティブ物理アダプタ）に適用（netsh）。
+    /// 適用前に対象アダプタの原状を退避（アダプタ単位 first-touch-wins）。部分失敗はロールバックして例外送出。
+    /// 非管理者では netsh が失敗 → 例外（呼び出し側で昇格誘導）。
+    /// </summary>
+    public DnsApplyResult ApplyDnsProfile(DnsProfile profile, IReadOnlyList<string>? targetAdapterIds)
+        => ApplyDnsCore(ResolveTargets(targetAdapterIds), name => ApplyDnsToAdapter(name, profile));
+
+    /// <summary>
+    /// 手入力 DNS（任意 IPv4/IPv6 配列）を対象アダプタ（null/空＝全件）に適用（netsh・Phase 7a 詳細層）。
+    /// v4/v6 とも空配列のファミリは netsh 呼び出しをスキップ（エッジ1）。退避/ロールバックは profile 版と共通。
+    /// </summary>
+    public DnsApplyResult ApplyCustomDns(string[] v4, string[] v6, IReadOnlyList<string>? targetAdapterIds = null)
+        => ApplyDnsCore(ResolveTargets(targetAdapterIds), name => ApplyCustomDnsToAdapter(name, v4, v6));
+
+    /// <summary>適用対象アダプタを解決（null/空＝全アクティブ物理アダプタ／指定時は ID で絞る・存在しない ID は無視）。</summary>
+    private List<AdapterInfo> ResolveTargets(IReadOnlyList<string>? targetAdapterIds)
+    {
+        var all = GetActivePhysicalAdapters();
+        if (targetAdapterIds == null || targetAdapterIds.Count == 0) return all;
+        var idSet = targetAdapterIds.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        return all.Where(a => idSet.Contains(a.Id)).ToList();
+    }
+
+    /// <summary>
+    /// DNS 適用の共通コア（profile 版 / custom 版 / 個別アダプタ版で共有・plan-validator 重要②③）。
+    /// 退避：対象アダプタの「適用直前の原状」を読み、既存退避に未収録のアダプタだけ追記して上書き保存
+    ///       （アダプタ単位 first-touch-wins。機能キー単位の IfAbsent では個別適用で後発アダプタが退避できないため）。
+    /// ロールバック：適用直前の値（preApply）を done に蓄積し、途中失敗時に適用済みを巻き戻して例外送出。
+    /// </summary>
+    private DnsApplyResult ApplyDnsCore(List<AdapterInfo> targets, System.Action<string> applyToAdapter)
+    {
+        if (targets.Count == 0) return new DnsApplyResult(0, 0, 0, NoAdapters: true);
+
+        // 適用直前の原状（ロールバック用＋退避マージ素材）。
+        var preApply = targets.Select(a => new DnsAdapterBackup(
             a.Name, a.Id,
             ReadStaticDns(a.Id, ipv6: false),
             ReadStaticDns(a.Id, ipv6: true))).ToList();
-        _backup.SaveNetworkOriginalIfAbsent(FeatureDns, JsonSerializer.Serialize(new DnsBackup(backups)));
+
+        // 退避ストア：read-modify-write（未収録アダプタだけ追記＝アダプタ単位 first-touch-wins）。
+        var merged = MergeDnsBackups(LoadDnsBackup(), preApply);
+        _backup.SaveNetworkOriginal(FeatureDns, JsonSerializer.Serialize(new DnsBackup(merged)));
 
         var done = new List<DnsAdapterBackup>();
         int ok = 0;
-        foreach (var a in adapters)
+        foreach (var a in targets)
         {
             try
             {
-                ApplyDnsToAdapter(a.Name, profile);
+                applyToAdapter(a.Name);
                 ok++;
-                done.Add(backups.First(b => b.Id == a.Id));
+                done.Add(preApply.First(b => b.Id == a.Id));
             }
             catch
             {
-                // エッジ1：部分適用ロールバック（適用済みを退避値へ戻す）。
+                // 部分適用ロールバック（適用済みを適用直前の値へ戻す）。
                 foreach (var d in done)
                 {
                     try { RestoreAdapterDns(d); } catch { /* ロールバック失敗は握り */ }
@@ -209,8 +240,38 @@ public class NetworkService
                 throw;  // 上位（VM）で昇格/エラー処理。ロールバック済。
             }
         }
-        return new DnsApplyResult(adapters.Count, ok, 0, NoAdapters: false);
+        return new DnsApplyResult(targets.Count, ok, 0, NoAdapters: false);
     }
+
+    /// <summary>退避ストアから DNS 原状（全アダプタ分）を読む（無ければ空）。</summary>
+    private List<DnsAdapterBackup> LoadDnsBackup()
+    {
+        var originals = _backup.LoadNetworkOriginals();
+        if (!originals.TryGetValue(FeatureDns, out var json)) return new();
+        try { return JsonSerializer.Deserialize<DnsBackup>(json)?.Adapters ?? new(); }
+        catch { return new(); }
+    }
+
+    /// <summary>
+    /// 既存退避に、新規対象のうち未収録（ID 未登録）のアダプタだけ追記したリストを返す（純粋関数・xUnit 対象）。
+    /// アダプタ単位 first-touch-wins：既に退避済みのアダプタの原状は保持（上書きしない）。
+    /// </summary>
+    public static List<DnsAdapterBackup> MergeDnsBackups(
+        List<DnsAdapterBackup> existing, List<DnsAdapterBackup> newTargets)
+    {
+        var knownIds = existing.Select(b => b.Id).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var merged = new List<DnsAdapterBackup>(existing);
+        foreach (var nt in newTargets)
+            if (knownIds.Add(nt.Id)) merged.Add(nt);  // Add が true＝未収録のみ追記
+        return merged;
+    }
+
+    /// <summary>
+    /// 手入力欄（プライマリ/セカンダリ等）から有効な IP だけを順序保持で配列化（純粋関数・xUnit 対象）。
+    /// 空欄・空白・無効 IP（IsValidIpAddress=false）は除外。前後空白は trim して返す。
+    /// </summary>
+    public static string[] BuildDnsServers(params string?[] inputs)
+        => inputs.Where(IsValidIpAddress).Select(s => s!.Trim()).ToArray();
 
     /// <summary>DNS を退避ペイロードから全アダプタ復元（Phase 5「ぜんぶ戻す」が利用）。</summary>
     public void RestoreDns(string jsonPayload)
@@ -290,8 +351,16 @@ public class NetworkService
         try { SetStaticDns(name, ipv6: true, v6); } catch { /* IPv6 失敗は致命でない（IPv4 が効けば実用上 OK） */ }
     }
 
+    /// <summary>手入力 DNS を 1 アダプタに適用（空配列のファミリはスキップ＝エッジ1）。Phase 7a。</summary>
+    private void ApplyCustomDnsToAdapter(string name, string[] v4, string[] v6)
+    {
+        if (v4.Length > 0) SetStaticDns(name, ipv6: false, v4);
+        if (v6.Length > 0) { try { SetStaticDns(name, ipv6: true, v6); } catch { /* IPv6 失敗は致命でない */ } }
+    }
+
     private void SetStaticDns(string name, bool ipv6, string[] servers)
     {
+        if (servers.Length == 0) return;  // エッジ1（plan-validator）：空配列ガード（servers[0] の IndexOutOfRange 予防）。
         var fam = ipv6 ? "ipv6" : "ipv4";
         _launcher.RunNetsh("interface", fam, "set", "dnsservers", $"name={name}", "static", servers[0], "primary");
         for (int i = 1; i < servers.Length; i++)

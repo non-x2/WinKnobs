@@ -73,6 +73,20 @@ public class BackupService
         SaveNetworkOriginals(dict);
     }
 
+    /// <summary>
+    /// 機能キーの原状を JSON で退避（無条件上書き・v0.1.7 詳細層）。
+    /// アダプタ個別指定の read-modify-write 用：機能キー単位の first-touch-wins では
+    /// 「アダプタAだけ適用→後でBだけ適用」で B が退避できない（キー "dns" が既存のため skip）。
+    /// 呼び出し側で「既存退避＋新規対象の未収録分」をマージした完全な原状を組んで、ここで上書きする
+    /// （first-touch-wins の単位を機能キーからアダプタへ細分化）。必ずマージ後の完全な原状を渡すこと。
+    /// </summary>
+    public void SaveNetworkOriginal(string featureKey, string jsonPayload)
+    {
+        var dict = LoadNetworkOriginals();
+        dict[featureKey] = jsonPayload;
+        SaveNetworkOriginals(dict);
+    }
+
     /// <summary>退避済みの全原状（機能キー→JSON ペイロード）を読む。</summary>
     public Dictionary<string, string> LoadNetworkOriginals()
     {

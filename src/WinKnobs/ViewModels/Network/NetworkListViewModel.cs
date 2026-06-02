@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Security;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -37,6 +39,22 @@ public partial class NetworkListViewModel : ObservableObject
     [ObservableProperty]
     private bool _isAdvancedExpanded;
 
+    // ── 詳細層：DNS手入力（Phase 7a）。有効 IP が1つでもあれば適用ボタン活性。──
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCustomDnsCommand))]
+    private string _customDnsV4Primary = string.Empty;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCustomDnsCommand))]
+    private string _customDnsV4Secondary = string.Empty;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCustomDnsCommand))]
+    private string _customDnsV6 = string.Empty;
+
+    /// <summary>詳細層：DNS 適用の対象アダプタ選択（既定＝全チェック＝現行の全件挙動・Phase 7c）。</summary>
+    public ObservableCollection<AdapterSelect> Adapters { get; } = new();
+
     public NetworkListViewModel(
         ExternalLauncherService launcher,
         DialogService dialogs,
@@ -55,6 +73,7 @@ public partial class NetworkListViewModel : ObservableObject
     public void Load()
     {
         RefreshStatus();
+        RefreshAdapters();
         StatusMessage = "ネットワーク設定を開きました。「Windowsの画面を開く」はすぐに使えます。";
     }
 
@@ -65,6 +84,21 @@ public partial class NetworkListViewModel : ObservableObject
         catch { DeliveryOptimizationSummary = "（取得できません）"; }
         try { DnsSummary = _network.GetDnsSummary(); }
         catch { DnsSummary = "（取得できません）"; }
+    }
+
+    /// <summary>
+    /// 対象アダプタ選択リストを現在のアクティブ物理アダプタで再構築（詳細層・Phase 7c）。
+    /// 既定は全選択。再ロード時は既存のチェック状態を維持し、新規アダプタは選択状態で追加する。
+    /// </summary>
+    private void RefreshAdapters()
+    {
+        var prev = Adapters.ToDictionary(a => a.Id, a => a.IsSelected, System.StringComparer.OrdinalIgnoreCase);
+        Adapters.Clear();
+        foreach (var info in _network.GetActivePhysicalAdapters())
+        {
+            var selected = !prev.TryGetValue(info.Id, out var was) || was;  // 既知は以前の状態・新規は選択
+            Adapters.Add(new AdapterSelect(info) { IsSelected = selected });
+        }
     }
 
     // ============ Phase 2：機能0 Windows 純正画面ランチャー（実装済） ============
@@ -162,7 +196,7 @@ public partial class NetworkListViewModel : ObservableObject
     // ============ Phase 4-6：かんたん設定（各フェーズで実装）============
 
     /// <summary>
-    /// DNS プロファイルを全アクティブ物理アダプタに切替（netsh）。戻せる🟡・管理者要。
+    /// DNS プロファイルを「対象アダプタ」（くわしい設定で選択・既定全選択）に切替（netsh）。戻せる🟡・管理者要。
     /// CommandParameter：cloudflare（既定・かんたん設定）/ google / auto（DHCPに戻す）。詳細層から google/auto も選べる。
     /// </summary>
     [RelayCommand]
@@ -177,23 +211,15 @@ public partial class NetworkListViewModel : ObservableObject
             _        => (DnsProfile.Cloudflare, "Cloudflare (1.1.1.1)"),
         };
 
-        var adapters = _network.GetActivePhysicalAdapters();
-        if (adapters.Count == 0)
-        {
-            _dialogs.Info(
-                "DNS を変更できる有効なネットワークアダプタが見つかりません。\n" +
-                "（Wi-Fi または有線がつながっているか確認してください）",
-                "対象なし");
-            StatusMessage = "ℹ️ DNS 変更対象のアダプタがありません。";
-            return;
-        }
+        var targets = ResolveSelectedAdapters();
+        if (targets == null) return;  // 対象なし／未選択（中で Info 表示済み）
 
         var detail = profile == DnsProfile.Auto
             ? "・各アダプタの DNS を自動取得（DHCP）に戻します。\n"
             : "・Web サイト名の解決が速く・プライバシー重視になります。\n";
         var ok = _dialogs.Confirm(
             $"DNS を「{label}」に変更します。\n\n" +
-            $"対象アダプタ：{string.Join("・", adapters.Select(a => a.Name))}\n\n" +
+            $"対象アダプタ：{string.Join("・", targets.Select(a => a.Name))}\n\n" +
             detail +
             "・「↩ ぜんぶ元の状態に戻す」で元の状態に戻せます（戻す操作はインターネット不要）。\n\n" +
             "実行しますか？",
@@ -214,7 +240,7 @@ public partial class NetworkListViewModel : ObservableObject
 
         try
         {
-            var result = _network.ApplyDnsProfile(profile);
+            var result = _network.ApplyDnsProfile(profile, targets.Select(a => a.Id).ToList());
             RefreshStatus();
             StatusMessage = result.Succeeded == result.Total
                 ? $"✅ DNS を「{label}」に変更しました（{result.Succeeded}/{result.Total} アダプタ）。戻すには「↩ ぜんぶ元の状態に戻す」。"
@@ -228,6 +254,113 @@ public partial class NetworkListViewModel : ObservableObject
             _dialogs.Error($"DNS の変更に失敗しました：\n{ex.Message}", "失敗");
             StatusMessage = $"❌ DNS 変更失敗: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// 手入力した DNS（v4プライマリ/セカンダリ・v6）を「対象アダプタ」に適用（詳細層・Phase 7a）。戻せる🟡・管理者要。
+    /// 有効 IP が1つも無ければボタン非活性（CanApplyCustomDns）。空ファミリは適用スキップ（NetworkService 側エッジ1）。
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanApplyCustomDns))]
+    private void ApplyCustomDns()
+    {
+        if (_privilege.IsShutdownPending) return;
+
+        var v4 = NetworkService.BuildDnsServers(CustomDnsV4Primary, CustomDnsV4Secondary);
+        var v6 = NetworkService.BuildDnsServers(CustomDnsV6);
+        if (v4.Length == 0 && v6.Length == 0)
+        {
+            _dialogs.Info("有効な DNS サーバの IP アドレスを入力してください（例：1.1.1.1）。", "入力エラー");
+            return;
+        }
+
+        var targets = ResolveSelectedAdapters();
+        if (targets == null) return;  // 対象なし／未選択（中で Info 表示済み）
+
+        var shown = string.Join("・", v4.Concat(v6));
+        // cross-reviewer 重要UX①：入力しなかったファミリは現状維持＝プロファイル版（v4/v6 両方セット）と非対称。
+        // 「片方だけ入力したのに、もう片方が前の DNS のまま残る」混在状態をユーザーに見えるように明示する。
+        var keepNote =
+            v4.Length == 0 ? "・IPv4 の DNS は今のまま変わりません（IPv6 だけ設定します）。\n" :
+            v6.Length == 0 ? "・IPv6 の DNS は今のまま変わりません（IPv4 だけ設定します）。\n" :
+            "";
+        var ok = _dialogs.Confirm(
+            "手入力した DNS を適用します。\n\n" +
+            $"DNS：{shown}\n" +
+            $"対象アダプタ：{string.Join("・", targets.Select(a => a.Name))}\n\n" +
+            keepNote +
+            "・「↩ ぜんぶ元の状態に戻す」で元の状態に戻せます（戻す操作はインターネット不要）。\n\n" +
+            "実行しますか？",
+            "DNSを手入力で適用");
+        if (!ok) return;
+
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation("DNS手入力", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
+                case ElevationChoice.ContinueAnyway: break;
+                case ElevationChoice.Cancel:
+                default: return;
+            }
+        }
+
+        try
+        {
+            var result = _network.ApplyCustomDns(v4, v6, targets.Select(a => a.Id).ToList());
+            RefreshStatus();
+            StatusMessage = result.Succeeded == result.Total
+                ? $"✅ 手入力 DNS を適用しました（{result.Succeeded}/{result.Total} アダプタ）。戻すには「↩ ぜんぶ元の状態に戻す」。"
+                : $"⚠️ 一部のアダプタで変更できませんでした（{result.Succeeded}/{result.Total} 成功）。";
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded("DNS手入力")) { }
+        catch (SecurityException)            when (HandleElevationNeeded("DNS手入力")) { }
+        catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("DNS手入力")) { }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"DNS の手入力適用に失敗しました：\n{ex.Message}", "失敗");
+            StatusMessage = $"❌ DNS手入力失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>手入力欄に有効な IP が1つでもあれば適用可（ボタン活性・3 欄いずれか）。</summary>
+    private bool CanApplyCustomDns()
+        => NetworkService.IsValidIpAddress(CustomDnsV4Primary)
+        || NetworkService.IsValidIpAddress(CustomDnsV4Secondary)
+        || NetworkService.IsValidIpAddress(CustomDnsV6);
+
+    /// <summary>
+    /// DNS 適用の対象アダプタを解決。アクティブ物理アダプタが無い／1枚も選択されていない場合は
+    /// Info を出して null（呼び出し側は中止）。Adapters 未ロード時は全件にフォールバック。
+    /// </summary>
+    private List<AdapterInfo>? ResolveSelectedAdapters()
+    {
+        var active = _network.GetActivePhysicalAdapters();
+        if (active.Count == 0)
+        {
+            _dialogs.Info(
+                "DNS を変更できる有効なネットワークアダプタが見つかりません。\n" +
+                "（Wi-Fi または有線がつながっているか確認してください）",
+                "対象なし");
+            StatusMessage = "ℹ️ DNS 変更対象のアダプタがありません。";
+            return null;
+        }
+
+        if (Adapters.Count == 0) return active;  // Load 前フォールバック＝全件（従来挙動）
+
+        var selectedIds = Adapters.Where(a => a.IsSelected).Select(a => a.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var chosen = active.Where(a => selectedIds.Contains(a.Id)).ToList();
+        if (chosen.Count == 0)
+        {
+            _dialogs.Info(
+                "「対象アダプタ」が1つも選ばれていません。\n" +
+                "くわしい設定の「対象アダプタ」で、変更したいアダプタにチェックを入れてください。",
+                "アダプタ未選択");
+            StatusMessage = "ℹ️ 対象アダプタが選ばれていません。";
+            return null;
+        }
+        return chosen;
     }
 
     /// <summary>
@@ -361,5 +494,24 @@ public partial class NetworkListViewModel : ObservableObject
             || msg.Contains("Requires elevation", StringComparison.OrdinalIgnoreCase)
             || msg.Contains("要求された操作には特権が必要", StringComparison.Ordinal)
             || msg.Contains("ERROR_ACCESS_DENIED", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+/// <summary>詳細層：DNS 適用対象アダプタのチェック項目（Phase 7c）。</summary>
+public partial class AdapterSelect : ObservableObject
+{
+    public string Id { get; }
+    public string Name { get; }
+    public string Description { get; }
+
+    /// <summary>このアダプタを DNS 適用対象に含めるか（既定＝true＝従来の全件挙動）。</summary>
+    [ObservableProperty]
+    private bool _isSelected = true;
+
+    public AdapterSelect(AdapterInfo info)
+    {
+        Id = info.Id;
+        Name = info.Name;
+        Description = info.Description;
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net.NetworkInformation;
 using WinKnobs.Services;
 
@@ -91,4 +92,75 @@ public class NetworkServiceTests
     [InlineData("1.1.1.1 ", true)]   // 前後空白は trim して許容
     public void IsValidIpAddress_table(string? input, bool expected)
         => Assert.Equal(expected, NetworkService.IsValidIpAddress(input));
+
+    // ─── BuildDnsServers（手入力欄→有効 IP 配列・Phase 7a 詳細層・純粋関数）───
+
+    [Fact]
+    public void BuildDnsServers_keeps_valid_and_trims()
+        => Assert.Equal(new[] { "1.1.1.1", "1.0.0.1" },
+            NetworkService.BuildDnsServers(" 1.1.1.1 ", "1.0.0.1"));
+
+    [Fact]
+    public void BuildDnsServers_drops_empty_and_invalid()
+        => Assert.Equal(new[] { "8.8.8.8" },
+            NetworkService.BuildDnsServers("8.8.8.8", "", "  ", "abc", null));
+
+    [Fact]
+    public void BuildDnsServers_all_empty_returns_empty()
+        => Assert.Empty(NetworkService.BuildDnsServers("", null, "   "));
+
+    [Fact]
+    public void BuildDnsServers_keeps_ipv6()
+        => Assert.Equal(new[] { "2606:4700:4700::1111" },
+            NetworkService.BuildDnsServers("2606:4700:4700::1111"));
+
+    [Fact]
+    public void BuildDnsServers_preserves_order()
+        => Assert.Equal(new[] { "8.8.8.8", "1.1.1.1" },
+            NetworkService.BuildDnsServers("8.8.8.8", "1.1.1.1"));
+
+    // ─── MergeDnsBackups（アダプタ単位 first-touch-wins・Phase 7c 詳細層・純粋関数）───
+
+    [Fact]
+    public void MergeDnsBackups_appends_only_unrecorded()
+    {
+        var existing = new List<DnsAdapterBackup>
+        {
+            new("Wi-Fi", "id-A", "1.1.1.1", ""),
+        };
+        var newTargets = new List<DnsAdapterBackup>
+        {
+            new("Wi-Fi", "id-A", "8.8.8.8", ""),   // 既収録 → 原状を保持（上書きしない）
+            new("Ethernet", "id-B", "", ""),       // 未収録 → 追記
+        };
+
+        var merged = NetworkService.MergeDnsBackups(existing, newTargets);
+
+        Assert.Equal(2, merged.Count);
+        Assert.Equal("1.1.1.1", merged.Single(b => b.Id == "id-A").Ipv4NameServer);  // first-touch 保持
+        Assert.Contains(merged, b => b.Id == "id-B");
+    }
+
+    [Fact]
+    public void MergeDnsBackups_empty_existing_takes_all()
+    {
+        var merged = NetworkService.MergeDnsBackups(
+            new List<DnsAdapterBackup>(),
+            new List<DnsAdapterBackup> { new("Wi-Fi", "id-A", "", ""), new("Eth", "id-B", "", "") });
+
+        Assert.Equal(2, merged.Count);
+    }
+
+    [Fact]
+    public void MergeDnsBackups_id_case_insensitive()
+    {
+        var existing = new List<DnsAdapterBackup> { new("Wi-Fi", "ID-A", "1.1.1.1", "") };
+
+        var merged = NetworkService.MergeDnsBackups(
+            existing,
+            new List<DnsAdapterBackup> { new("Wi-Fi", "id-a", "8.8.8.8", "") });  // 大小違いは同一扱い
+
+        Assert.Single(merged);
+        Assert.Equal("1.1.1.1", merged[0].Ipv4NameServer);  // 既存の原状を保持
+    }
 }

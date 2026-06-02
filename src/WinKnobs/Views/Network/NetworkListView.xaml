@@ -94,7 +94,63 @@
                                 Command="{Binding ApplyDnsCommand}" CommandParameter="auto"
                                 Content="自動 (DHCP) に戻す" MinWidth="150" Margin="0,0,6,6" Padding="8,4"/>
                     </WrapPanel>
-                    <TextBlock Text="（DNS 手入力・DoH ON/OFF・アダプタ個別指定は今後追加予定）"
+                    <!-- 対象アダプタ選択（Phase 7c・既定全チェック＝従来の全件挙動） -->
+                    <TextBlock Text="対象アダプタ（チェックしたアダプタにだけ上の DNS・手入力を適用）"
+                               TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,2,0,4"/>
+                    <ItemsControl AutomationProperties.AutomationId="NetworkAdapterList"
+                                  ItemsSource="{Binding Adapters}" Margin="0,0,0,10">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected}"
+                                          AutomationProperties.AutomationId="{Binding Id, StringFormat=NetworkAdapterCheck_{0}}"
+                                          Margin="0,2" VerticalContentAlignment="Center">
+                                    <CheckBox.Content>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Description}" FontSize="11"
+                                                       Foreground="{DynamicResource Fg.Subtle}"
+                                                       Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </CheckBox.Content>
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- DNS 手入力（Phase 7a・DialogService にテキスト入力が無いためインライン TextBox） -->
+                    <TextBlock Text="DNS を手入力（任意のサーバを指定）" FontWeight="SemiBold" Margin="0,2,0,4"/>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="優先 (IPv4)" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                        <TextBox Grid.Row="0" Grid.Column="1"
+                                 AutomationProperties.AutomationId="NetworkDnsCustomV4Primary"
+                                 Text="{Binding CustomDnsV4Primary, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,4" Padding="4,2"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="代替 (IPv4)" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                        <TextBox Grid.Row="1" Grid.Column="1"
+                                 AutomationProperties.AutomationId="NetworkDnsCustomV4Secondary"
+                                 Text="{Binding CustomDnsV4Secondary, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,4" Padding="4,2"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="IPv6 (任意)" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                        <TextBox Grid.Row="2" Grid.Column="1"
+                                 AutomationProperties.AutomationId="NetworkDnsCustomV6"
+                                 Text="{Binding CustomDnsV6, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,4" Padding="4,2"/>
+                    </Grid>
+                    <Button AutomationProperties.AutomationId="NetworkDnsCustomApplyButton"
+                            Command="{Binding ApplyCustomDnsCommand}"
+                            HorizontalAlignment="Left" MinWidth="200" Margin="0,0,0,10" Padding="8,4"
+                            Content="この内容で適用"/>
+
+                    <TextBlock Text="（DoH ON/OFF は今後追加予定）"
                                FontSize="11" Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,10"/>
 
                     <TextBlock Text="ネットワークの詳細項目（ダブルクリックで編集）"
