@@ -23,6 +23,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.8] - 2026-06-04
+
+### Added
+- **DoH（暗号化DNS・DNS over HTTPS）ON/OFF**（ネットワーク・カテゴリの「くわしい設定」）
+  - DNS の問い合わせを暗号化し、盗み見されにくくする。**安全側デフォルト**：`DohFlags=1`（auto）＋ `udpfallback=yes` ＝暗号化に失敗してもふつうの通信に自動フォールバック（ネットが切れない）
+  - **対象**：選択アダプタの現行 DNS のうち既知 DoH プロバイダ（Cloudflare / Google / Quad9）の IP。それ以外は「先に Cloudflare/Google へ」と案内（壊さず順序を導く）
+  - **有効化の本命**：インターフェース別レジストリ `…\Dnscache\InterfaceSpecificParameters\{GUID}\DohInterfaceSettings\{Doh|Doh6}\{IP}` の `DohFlags`(REG_QWORD)。netsh テンプレ登録は補助（best-effort・IP 重複排除・`dnsclient`/`dns` 両コンテキスト対応）
+  - **退避/復元**：適用直前の (GUID×family×IP) 原状を first-touch でマージ保存（`MergeDohBackups`）。`RevertAll` を明示順 **DoH→DNS→配信最適化** ＋ ループ後一括削除に改修（列挙中削除の回避）
+  - **OS ビルド判定**：`GetOsBuildNumber()` ＋ `IsDohSupported(build>=22000)`。非対応 OS ではトグル無効
+  - UI：詳細層プレースホルダ「（DoH ON/OFF は今後追加予定）」を実トグルへ置換（AutomationId：`NetworkDohSummary` / `NetworkDohOnButton` / `NetworkDohOffButton`）
+  - **テスト**：xUnit **110 PASS**（v0.1.7 の 84 + DoH 純粋関数 26＝ビルド判定境界 / 既知プロバイダ / テンプレ / レジストリパス Doh・Doh6 / 退避マージ）
+  - **VM 実機検証**（build 26200/25H2・★2方式）：本命の `DohFlags=1` QWORD 書込→読戻し（値1/型QWord）→DNS 解決不変（非破壊）→削除で原状復帰 が全て成立。`netsh dns add encryption` はグローバル `DohWellKnownServers` のみ書き IF別は作らないことを実機で確認（＝IF別 DohFlags が必須という設計前提を裏付け）
+
+### Notes
+- バージョン bump：v0.1.7 → v0.1.8（csproj AssemblyVersion=0.1.8.0 / FileVersion=0.1.8.0 / MainWindow ステータスバー / MainViewModel 環境情報）
+- @plan-validator（致命2＋重要1）→ @cross-reviewer（致命0・重要3）反映済み
+- 既知の軽微（v0.2 候補）：DoH OFF 後に空の `DohInterfaceSettings\Doh` 容器キーが残る（値なし＝機能影響ゼロ）。カスタム IP＋テンプレ手入力・strict モード（`DohFlags=2`）・`DescribeDnsProfile` への Quad9 追加は未対応
+- 「暗号化が実際に走った」最終目視は Windows 設定の対象アダプタ「DNS over HTTPS: On」表示で確認可能（CLI は書込まで確定・機構は Microsoft 公式手順どおり）
+
+---
+
 ## [0.1.7] - 2026-06-03
 
 ### Added
