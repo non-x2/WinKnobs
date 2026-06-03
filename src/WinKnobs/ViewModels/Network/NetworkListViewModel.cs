@@ -35,6 +35,10 @@ public partial class NetworkListViewModel : ObservableObject
     [ObservableProperty] private string _connectionSummary = "—";
     [ObservableProperty] private string _deliveryOptimizationSummary = "（読み込み中）";
 
+    // ── DoH（暗号化DNS・v0.1.8）。非対応 OS ではボタン無効化。──
+    [ObservableProperty] private string _dohSummary = "（読み込み中）";
+    [ObservableProperty] private bool _isDohSupported = true;
+
     /// <summary>▸ くわしい設定 Expander の開閉（既定：閉じる＝初心者の視界から隠す・設計原則1）。</summary>
     [ObservableProperty]
     private bool _isAdvancedExpanded;
@@ -84,6 +88,8 @@ public partial class NetworkListViewModel : ObservableObject
         catch { DeliveryOptimizationSummary = "（取得できません）"; }
         try { DnsSummary = _network.GetDnsSummary(); }
         catch { DnsSummary = "（取得できません）"; }
+        try { DohSummary = _network.GetDohSummary(); IsDohSupported = _network.IsDohSupportedHere(); }
+        catch { DohSummary = "（取得できません）"; }
     }
 
     /// <summary>
@@ -364,6 +370,94 @@ public partial class NetworkListViewModel : ObservableObject
     }
 
     /// <summary>
+    /// DoH（暗号化DNS）を ON/OFF（詳細層・v0.1.8）。対象＝選択アダプタの現行 DNS のうち既知 DoH プロバイダの IP。
+    /// CommandParameter："on"＝有効化（DohFlags=1）／"off"＝解除。戻せる🟡・HKLM 書込で管理者要。
+    /// </summary>
+    [RelayCommand]
+    private void ApplyDoh(string? mode)
+    {
+        if (_privilege.IsShutdownPending) return;
+        var enable = mode != "off";
+
+        if (!_network.IsDohSupportedHere())
+        {
+            _dialogs.Info(
+                "お使いの Windows は暗号化DNS（DoH）に対応していません。\n（Windows 11 以降が必要です）",
+                "非対応");
+            StatusMessage = "ℹ️ この Windows は DoH 非対応です。";
+            return;
+        }
+
+        var targets = ResolveSelectedAdapters();
+        if (targets == null) return;  // 対象なし／未選択（中で Info 表示済み）
+        var ids = targets.Select(a => a.Id).ToList();
+
+        // 事前判定：既知 DoH プロバイダの現行 DNS が無ければ案内（エッジ1：DHCP/空で無風成功を防ぐ）。
+        if (!_network.HasKnownDohDns(ids))
+        {
+            _dialogs.Info(
+                enable
+                    ? "暗号化（DoH）の対象になる DNS が見つかりません。\n\n" +
+                      "先に「🌐 DNSを速くする（Cloudflare）」や詳細層で Cloudflare / Google / Quad9 に設定してください。\n" +
+                      "その DNS のときだけ暗号化を ON にできます。"
+                    : "解除できる暗号化DNS（DoH）の対象が見つかりません。\n\n" +
+                      "これまでの変更をまとめて元に戻すには「↩ ぜんぶ元の状態に戻す」をお使いください。",
+                "対象なし");
+            StatusMessage = enable
+                ? "ℹ️ 暗号化の対象 DNS がありません（先に Cloudflare/Google へ）。"
+                : "ℹ️ 解除対象がありません（ぜんぶ戻すで復元可）。";
+            return;
+        }
+
+        var ok = _dialogs.Confirm(
+            enable
+                ? "DNS の問い合わせを暗号化（DoH）します。\n\n" +
+                  $"対象アダプタ：{string.Join("・", targets.Select(a => a.Name))}\n\n" +
+                  "・通信内容を盗み見されにくくします（Cloudflare/Google/Quad9 のときだけ有効）。\n" +
+                  "・うまくいかない時は自動でふつうの通信に戻ります（ネットは切れません）。\n" +
+                  "・「↩ ぜんぶ元の状態に戻す」で元に戻せます。\n\n実行しますか？"
+                : "DNS の暗号化（DoH）を解除して、ふつうの状態に戻します。\n\n" +
+                  $"対象アダプタ：{string.Join("・", targets.Select(a => a.Name))}\n\n" +
+                  "・「↩ ぜんぶ元の状態に戻す」で元に戻せます。\n\n実行しますか？",
+            enable ? "暗号化DNS（DoH）をONにする" : "暗号化DNS（DoH）を解除");
+        if (!ok) return;
+
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation(enable ? "DoHをON" : "DoHを解除", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
+                case ElevationChoice.ContinueAnyway: break;
+                case ElevationChoice.Cancel:
+                default: return;
+            }
+        }
+
+        try
+        {
+            var result = _network.ApplyDoh(ids, enable);
+            RefreshStatus();
+            if (result.NoTargets)
+                StatusMessage = "ℹ️ 暗号化の対象 DNS がありませんでした（先に Cloudflare/Google へ）。";
+            else
+                StatusMessage = result.Succeeded == result.Total
+                    ? (enable
+                        ? $"🔒 暗号化DNS（DoH）を ON にしました（{result.Succeeded}/{result.Total}）。戻すには「↩ ぜんぶ元の状態に戻す」。"
+                        : $"🔓 暗号化DNS（DoH）を解除しました（{result.Succeeded}/{result.Total}）。")
+                    : $"⚠️ 一部の対象で変更できませんでした（{result.Succeeded}/{result.Total} 成功）。";
+        }
+        catch (UnauthorizedAccessException) when (HandleElevationNeeded("DoH 設定")) { }
+        catch (SecurityException)            when (HandleElevationNeeded("DoH 設定")) { }
+        catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded("DoH 設定")) { }
+        catch (Exception ex)
+        {
+            _dialogs.Error($"暗号化DNS（DoH）の変更に失敗しました：\n{ex.Message}", "失敗");
+            StatusMessage = $"❌ DoH 変更失敗: {ex.Message}";
+        }
+    }
+
+    /// <summary>
     /// 「不調を直す」＝DNS 解決キャッシュをクリア（ipconfig /flushdns）。実質可逆・管理者不要・退避不要。
     /// 完全リセット（winsock/int ip reset・不可逆）は v0.2.x へ後ろ倒し → 純正画面へ誘導。
     /// </summary>
@@ -413,7 +507,7 @@ public partial class NetworkListViewModel : ObservableObject
 
         var ok = _dialogs.Confirm(
             "このツールで変更したネットワーク設定を、すべて元の状態に戻します。\n" +
-            "（対象：DNS の変更・「通信を軽くする」。ネットワークのリセットは元に戻せません）\n\n" +
+            "（対象：DNS の変更・暗号化DNS(DoH)・「通信を軽くする」。ネットワークのリセットは元に戻せません）\n\n" +
             "実行しますか？",
             "ぜんぶ元の状態に戻す");
         if (!ok) return;

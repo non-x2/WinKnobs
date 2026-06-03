@@ -150,8 +150,25 @@
                             HorizontalAlignment="Left" MinWidth="200" Margin="0,0,0,10" Padding="8,4"
                             Content="この内容で適用"/>
 
-                    <TextBlock Text="（DoH ON/OFF は今後追加予定）"
-                               FontSize="11" Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,10"/>
+                    <!-- DoH（暗号化DNS）ON/OFF（v0.1.8・既知 DoH プロバイダの現行 DNS のときだけ有効） -->
+                    <TextBlock Text="🔒 DoH（暗号化DNS）" FontWeight="SemiBold" Margin="0,2,0,4"/>
+                    <TextBlock AutomationProperties.AutomationId="NetworkDohSummary"
+                               Text="{Binding DohSummary, StringFormat=今の状態：{0}}"
+                               TextWrapping="Wrap" FontSize="11"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,4"/>
+                    <WrapPanel Margin="0,0,0,4">
+                        <Button AutomationProperties.AutomationId="NetworkDohOnButton"
+                                Command="{Binding ApplyDohCommand}" CommandParameter="on"
+                                IsEnabled="{Binding IsDohSupported}"
+                                Content="🔒 ONにする（暗号化）" MinWidth="170" Margin="0,0,6,6" Padding="8,4"/>
+                        <Button AutomationProperties.AutomationId="NetworkDohOffButton"
+                                Command="{Binding ApplyDohCommand}" CommandParameter="off"
+                                IsEnabled="{Binding IsDohSupported}"
+                                Content="解除する" MinWidth="100" Margin="0,0,6,6" Padding="8,4"/>
+                    </WrapPanel>
+                    <TextBlock Text="※ DNS が Cloudflare / Google / Quad9 のときだけ有効。うまくいかない時はふつうの通信に自動で戻ります（ネットは切れません）。"
+                               TextWrapping="Wrap" FontSize="11"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,10"/>
 
                     <TextBlock Text="ネットワークの詳細項目（ダブルクリックで編集）"
                                TextWrapping="Wrap" FontSize="11"

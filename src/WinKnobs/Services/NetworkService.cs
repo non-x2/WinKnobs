@@ -31,6 +31,30 @@ public class NetworkService
 
     public const string FeatureDeliveryOptimization = "deliveryOptimization";
     public const string FeatureDns = "dns";
+    public const string FeatureDoh = "doh";  // v0.1.8：暗号化DNS（DNS over HTTPS）
+
+    // ── DoH（DNS over HTTPS・v0.1.8）──
+    // 有効化の本命はインターフェース別レジストリ DohFlags（REG_QWORD）。netsh テンプレ登録は補助（best-effort）。
+    private const string DnscacheIfParams = @"HKLM\SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters";
+    public const long DohFlagsAuto = 1;  // 自動（暗号化優先・失敗時は平文フォールバック＝ネットが切れない安全側）
+
+    /// <summary>既知 DoH プロバイダの IP→テンプレ（v0.1.8 はこの3社限定。カスタムIPは v0.2）。</summary>
+    private static readonly Dictionary<string, string> KnownDohTemplates =
+        new(System.StringComparer.OrdinalIgnoreCase)
+        {
+            ["1.1.1.1"] = "https://cloudflare-dns.com/dns-query",
+            ["1.0.0.1"] = "https://cloudflare-dns.com/dns-query",
+            ["2606:4700:4700::1111"] = "https://cloudflare-dns.com/dns-query",
+            ["2606:4700:4700::1001"] = "https://cloudflare-dns.com/dns-query",
+            ["8.8.8.8"] = "https://dns.google/dns-query",
+            ["8.8.4.4"] = "https://dns.google/dns-query",
+            ["2001:4860:4860::8888"] = "https://dns.google/dns-query",
+            ["2001:4860:4860::8844"] = "https://dns.google/dns-query",
+            ["9.9.9.9"] = "https://dns.quad9.net/dns-query",
+            ["149.112.112.112"] = "https://dns.quad9.net/dns-query",
+            ["2620:fe::fe"] = "https://dns.quad9.net/dns-query",
+            ["2620:fe::9"] = "https://dns.quad9.net/dns-query",
+        };
 
     public const int DoModeOff = 0;      // HTTP のみ（P2P 完全オフ・軽い）
     public const int DoModeDefault = 3;  // インターネット含む（Windows 既定）
@@ -295,6 +319,11 @@ public class NetworkService
     /// <summary>
     /// 退避済みの全機能を原状へ復元。成功した機能だけ退避ストアから消す（失敗は残して再試行可能に）。
     /// 各機能の復元は HKLM/netsh ＝管理者要（呼び出し側で事前昇格）。
+    ///
+    /// 復元順序（plan-validator 致命2）：DoH → DNS → 配信最適化 の明示順。
+    /// DNS を先に戻すと、DoH 退避が指す「適用時の DNS IP」と現状がズレる事故を避ける。
+    /// plan-validator 致命1：originals を最初に1回ロード（スナップショット）して固定順で回し、
+    /// 退避ストアからの削除は列挙後にまとめて行う（列挙中変更の InvalidOperationException 回避）。
     /// </summary>
     public NetworkRevertResult RevertAll()
     {
@@ -302,17 +331,21 @@ public class NetworkService
         if (originals.Count == 0) return new NetworkRevertResult(0, 0);
 
         int restored = 0, failed = 0;
-        foreach (var kv in originals)
+        var succeededKeys = new List<string>();
+
+        // 明示順（DoH→DNS→配信最適化）。未知の機能キーは触らない（退避も残す）。
+        foreach (var key in new[] { FeatureDoh, FeatureDns, FeatureDeliveryOptimization })
         {
+            if (!originals.TryGetValue(key, out var payload)) continue;
             try
             {
-                switch (kv.Key)
+                switch (key)
                 {
-                    case FeatureDeliveryOptimization: RestoreDeliveryOptimization(kv.Value); break;
-                    case FeatureDns: RestoreDns(kv.Value); break;
-                    default: continue;  // 未知の機能キーは触らない
+                    case FeatureDoh: RestoreDoh(payload); break;
+                    case FeatureDns: RestoreDns(payload); break;
+                    case FeatureDeliveryOptimization: RestoreDeliveryOptimization(payload); break;
                 }
-                _backup.RemoveNetworkOriginal(kv.Key);  // 成功したものだけ退避から消す
+                succeededKeys.Add(key);  // 削除はループ後（列挙中変更を避ける）
                 restored++;
             }
             catch
@@ -320,7 +353,194 @@ public class NetworkService
                 failed++;  // 失敗は退避を残す（管理者で再試行可能）
             }
         }
+
+        foreach (var k in succeededKeys) _backup.RemoveNetworkOriginal(k);  // 成功分だけ後始末
         return new NetworkRevertResult(restored, failed);
+    }
+
+    // =================== v0.1.8：DoH（暗号化DNS・DNS over HTTPS） ===================
+    // 本命＝インターフェース別レジストリ DohFlags(REG_QWORD)。netsh テンプレ登録は補助(best-effort)。
+    // 対象は「選択アダプタの現行 DNS のうち既知 DoH プロバイダの IP」。退避/復元は DNS と同流儀(first-touch-wins)。
+
+    /// <summary>OS が DoH に対応しているか（このマシンのビルドで判定）。</summary>
+    public bool IsDohSupportedHere() => IsDohSupported(GetOsBuildNumber());
+
+    /// <summary>Windows のビルド番号を読む（CurrentBuildNumber=REG_SZ）。読めなければ 0（純粋関数 IsDohSupported で安全に無効化）。</summary>
+    public int GetOsBuildNumber()
+    {
+        var s = _registry.ReadValue<string>(@"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber");
+        return int.TryParse(s, out var n) ? n : 0;  // REG_SZ → int 化失敗（欠損/非数値）は 0
+    }
+
+    /// <summary>ビルド番号から DoH 対応を判定（純粋関数・xUnit 対象）。Windows 11=22000+。0（読めない）は false＝安全側。</summary>
+    public static bool IsDohSupported(int build) => build >= 22000;
+
+    /// <summary>IP が既知 DoH プロバイダか（純粋関数・xUnit 対象）。</summary>
+    public static bool IsKnownDohProvider(string? ip)
+        => !string.IsNullOrWhiteSpace(ip) && KnownDohTemplates.ContainsKey(ip.Trim());
+
+    /// <summary>既知 DoH プロバイダの DoH テンプレ URL（純粋関数・xUnit 対象・未知は null）。</summary>
+    public static string? GetDohTemplate(string? ip)
+        => ip != null && KnownDohTemplates.TryGetValue(ip.Trim(), out var t) ? t : null;
+
+    /// <summary>
+    /// インターフェース別 DoH 設定のレジストリパスを生成（純粋関数・xUnit 対象）。
+    /// HKLM\...\Dnscache\InterfaceSpecificParameters\{GUID}\DohInterfaceSettings\{Doh|Doh6}\{IP}
+    /// </summary>
+    public static string BuildDohRegistryPath(string guid, bool ipv6, string ip)
+        => $@"{DnscacheIfParams}\{guid}\DohInterfaceSettings\{(ipv6 ? "Doh6" : "Doh")}\{ip}";
+
+    /// <summary>「今の状態」表示用 DoH サマリ（アクティブ物理アダプタの集約）。</summary>
+    public string GetDohSummary()
+    {
+        if (!IsDohSupportedHere()) return "この Windows では非対応";
+        int on = 0, eligible = 0;
+        foreach (var a in GetActivePhysicalAdapters())
+        {
+            var targets = ResolveDohTargetsForAdapter(a.Id);
+            if (targets.Count == 0) continue;  // 現行 DNS が既知 DoH 先でない＝対象外
+            eligible++;
+            // cross-reviewer 重要2：キー存在でなく「値が有効(>=1)」で判定。
+            // DohFlags=0（外部ツール/GPO で明示無効化）を ON と誤表示しないため、ReadDohState の値を見る。
+            var allOn = targets.All(t =>
+            {
+                var st = ReadDohState(t.Guid, t.Ipv6, t.Ip);
+                return st.DohExisted && st.Flags >= 1;
+            });
+            if (allOn) on++;
+        }
+        if (eligible == 0) return "対象外（DNS が Cloudflare/Google/Quad9 のときに使えます）";
+        return on == eligible ? $"ON（{on}/{eligible} アダプタ）"
+             : on == 0 ? "OFF"
+             : $"一部ON（{on}/{eligible} アダプタ）";
+    }
+
+    /// <summary>選択アダプタに既知 DoH プロバイダの現行 DNS があるか（UI の事前判定用）。</summary>
+    public bool HasKnownDohDns(IReadOnlyList<string>? targetAdapterIds)
+        => ResolveTargets(targetAdapterIds).Any(a => ResolveDohTargetsForAdapter(a.Id).Count > 0);
+
+    /// <summary>
+    /// DoH を対象アダプタ（null/空＝全アクティブ物理）に適用。enable=true で ON（DohFlags=1）/ false で解除（キー削除）。
+    /// 対象＝各アダプタの現行 DNS のうち既知 DoH プロバイダの IP。0 件なら NoTargets（呼び出し側で案内）。
+    /// 退避：適用直前の (GUID×family×IP) 原状を first-touch でマージ保存。部分失敗はロールバックして例外送出。
+    /// </summary>
+    public DohApplyResult ApplyDoh(IReadOnlyList<string>? targetAdapterIds, bool enable)
+    {
+        var adapters = ResolveTargets(targetAdapterIds);
+        var targets = adapters.SelectMany(a => ResolveDohTargetsForAdapter(a.Id)).ToList();
+        if (targets.Count == 0) return new DohApplyResult(0, 0, NoTargets: true);
+
+        // 適用直前の原状（ロールバック用＋退避マージ素材）。読めたままを保存（自前正規化しない＝表記ズレ回避）。
+        var preApply = targets.Select(t => ReadDohState(t.Guid, t.Ipv6, t.Ip)).ToList();
+        var merged = MergeDohBackups(LoadDohBackup(), preApply);
+        _backup.SaveNetworkOriginal(FeatureDoh, JsonSerializer.Serialize(new DohBackup(merged)));
+
+        // 本命＝レジストリ DohFlags 書込/削除（速い・成否判定の対象）。途中失敗は適用済みをロールバックして例外送出。
+        var done = new List<DohAdapterBackup>();
+        int ok = 0;
+        foreach (var t in targets)
+        {
+            try
+            {
+                var path = BuildDohRegistryPath(t.Guid, t.Ipv6, t.Ip);
+                if (enable) _registry.WriteValue(path, "DohFlags", DohFlagsAuto, RegistryValueKind.QWord);
+                else _registry.DeleteKeyTree(path);  // 解除＝当該 IP の Doh サブキーを消す
+                ok++;
+                done.Add(preApply.First(b => b.Guid == t.Guid && b.Ipv6 == t.Ipv6 && b.Ip == t.Ip));
+            }
+            catch
+            {
+                foreach (var d in done) { try { RestoreDohEntry(d); } catch { /* ロールバック失敗は握り */ } }
+                throw;
+            }
+        }
+
+        // 補助＝netsh テンプレ登録（enable 時のみ・IP 重複は1回・best-effort・失敗は致命でない＝plan-validator 重要3）。
+        // cross-reviewer 重要1：per-target でなく全件成功後に一意 IP だけ登録（netsh プロセス起動回数を最小化）。
+        if (enable)
+            foreach (var ip in targets.Select(t => t.Ip).Distinct(System.StringComparer.OrdinalIgnoreCase))
+                TryRegisterDohTemplate(ip);
+
+        return new DohApplyResult(targets.Count, ok, NoTargets: false);
+    }
+
+    /// <summary>DoH を退避ペイロードから復元（RevertAll が利用）。1枚でも失敗したら退避を残すため例外伝播。</summary>
+    public void RestoreDoh(string jsonPayload)
+    {
+        var b = JsonSerializer.Deserialize<DohBackup>(jsonPayload);
+        if (b == null) return;
+        System.Exception? firstError = null;
+        foreach (var e in b.Entries)
+        {
+            try { RestoreDohEntry(e); }
+            catch (System.Exception ex) { firstError ??= ex; }
+        }
+        if (firstError != null) throw firstError;
+    }
+
+    /// <summary>
+    /// 既存退避に、未収録（GUID×family×IP）の新規対象だけ追記（純粋関数・xUnit 対象）。
+    /// アダプタ・IP 単位 first-touch-wins：既に退避済みの原状は保持（上書きしない）。
+    /// </summary>
+    public static List<DohAdapterBackup> MergeDohBackups(
+        List<DohAdapterBackup> existing, List<DohAdapterBackup> newTargets)
+    {
+        static string Key(DohAdapterBackup b) => $"{b.Guid}|{(b.Ipv6 ? "6" : "4")}|{b.Ip}".ToLowerInvariant();
+        var known = existing.Select(Key).ToHashSet();
+        var merged = new List<DohAdapterBackup>(existing);
+        foreach (var nt in newTargets)
+            if (known.Add(Key(nt))) merged.Add(nt);
+        return merged;
+    }
+
+    // ── DoH 内部ヘルパー ──
+
+    /// <summary>1 アダプタの現行 DNS のうち既知 DoH プロバイダの (GUID, family, IP) を列挙（v4/v6 両方）。</summary>
+    private List<(string Guid, bool Ipv6, string Ip)> ResolveDohTargetsForAdapter(string guid)
+    {
+        var list = new List<(string, bool, string)>();
+        foreach (var ipv6 in new[] { false, true })
+            foreach (var s in ParseNameServer(ReadStaticDns(guid, ipv6)))
+                if (IPAddress.TryParse(s.Trim(), out var ip) && IsKnownDohProvider(ip.ToString()))
+                    list.Add((guid, ipv6, ip.ToString()));  // 自分が一貫して使う正規表記
+        return list;
+    }
+
+    /// <summary>レジストリから現在の DohFlags 原状を読む（キー/値が無ければ DohExisted=false）。</summary>
+    private DohAdapterBackup ReadDohState(string guid, bool ipv6, string ip)
+    {
+        var raw = _registry.ReadValue<object>(BuildDohRegistryPath(guid, ipv6, ip), "DohFlags");
+        long flags = 0;
+        if (raw != null) { try { flags = System.Convert.ToInt64(raw); } catch { flags = 0; } }  // QWORD/DWORD 両対応
+        return new DohAdapterBackup(guid, ipv6, ip, raw != null, flags);
+    }
+
+    /// <summary>退避レコード1件を原状へ（元々あれば値書戻し／無ければ Doh サブキー削除）。</summary>
+    private void RestoreDohEntry(DohAdapterBackup e)
+    {
+        var path = BuildDohRegistryPath(e.Guid, e.Ipv6, e.Ip);
+        if (e.DohExisted) _registry.WriteValue(path, "DohFlags", e.Flags, RegistryValueKind.QWord);
+        else _registry.DeleteKeyTree(path);
+    }
+
+    /// <summary>退避ストアから DoH 原状（全エントリ）を読む（無ければ空）。</summary>
+    private List<DohAdapterBackup> LoadDohBackup()
+    {
+        var originals = _backup.LoadNetworkOriginals();
+        if (!originals.TryGetValue(FeatureDoh, out var json)) return new();
+        try { return JsonSerializer.Deserialize<DohBackup>(json)?.Entries ?? new(); }
+        catch { return new(); }
+    }
+
+    /// <summary>既知 DoH テンプレを netsh で登録（補助・best-effort・失敗は致命でない）。dnsclient/dns 両コンテキスト試行。</summary>
+    private void TryRegisterDohTemplate(string ip)
+    {
+        var template = GetDohTemplate(ip);
+        if (string.IsNullOrEmpty(template)) return;
+        try { _launcher.RunNetsh("dnsclient", "add", "encryption", $"server={ip}", $"dohtemplate={template}", "autoupgrade=yes", "udpfallback=yes"); return; }
+        catch { /* 旧コンテキスト or 既存登録で失敗し得る → フォールバック */ }
+        try { _launcher.RunNetsh("dns", "add", "encryption", $"server={ip}", $"dohtemplate={template}", "autoupgrade=yes"); }
+        catch { /* 既に登録済み等＝無害。本命は DohFlags レジストリ */ }
     }
 
     // =================== Phase 6：軽いリセット（flushdns のみ） ===================
@@ -418,3 +638,12 @@ public record DnsBackup(List<DnsAdapterBackup> Adapters);
 
 /// <summary>「ぜんぶ戻す」の結果。</summary>
 public record NetworkRevertResult(int Restored, int Failed);
+
+/// <summary>DoH 原状退避（アダプタ×family×IP 単位・DohExisted=適用前にキーがあったか）。</summary>
+public record DohAdapterBackup(string Guid, bool Ipv6, string Ip, bool DohExisted, long Flags);
+
+/// <summary>DoH 原状退避ペイロード（全対象エントリ）。</summary>
+public record DohBackup(List<DohAdapterBackup> Entries);
+
+/// <summary>DoH 適用結果（NoTargets＝既知 DoH プロバイダの現行 DNS が無い）。</summary>
+public record DohApplyResult(int Total, int Succeeded, bool NoTargets);
