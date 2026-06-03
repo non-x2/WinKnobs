@@ -246,7 +246,7 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="WinKnobs v0.1.6" FontSize="11"
+                <TextBlock Text="WinKnobs v0.1.7" FontSize="11"
                            Foreground="{DynamicResource Fg.Subtle}"/>
             </StatusBarItem>
         </StatusBar>

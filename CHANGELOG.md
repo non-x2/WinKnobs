@@ -23,6 +23,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.7] - 2026-06-03
+
+### Added
+- **ネットワーク カテゴリ新設（初心者層 + くわしい設定）**（[設計ドラフト](docs/v0.1.7_ネットワーク実用_設計ドラフト.md)・plan-validator / cross-reviewer 反映済・実装順は危険度の低い順 0→3→1→戻す→2→詳細層）
+  - **機能0：Windows 純正画面ランチャー**（`ExternalLauncherService.OpenNetworkSettings`・`ms-settings:` / `ncpa.cpl` / 共有センター）＝管理者不要・退避不要の安全弁（抱え込まず純正へ逃がす）
+  - **機能1：DNS 切替**（`NetworkService`・netsh・Cloudflare / Google / 自動(DHCP)・物理アダプタ判定は .NET NetworkInterface・退避はレジストリ NameServer・部分適用ロールバック・対象0枚は Info で案内）
+  - **機能2：軽いリセット**（flushdns のみ・再起動不要）
+  - **機能3：バックグラウンド帯域抑制**（配信最適化 `DODownloadMode` の取得 / 適用 / 復元・read-back・ポリシー検出）
+  - **共通：ぜんぶ元に戻す**（`RevertAll`・適用前の値を `backup\network\originals.json` に自動退避・成功分のみ退避削除）
+  - **詳細層：DNS 手入力**（IPv4 優先 / 代替・IPv6 のインライン TextBox + 適用ボタン）と **対象アダプタ個別指定**（CheckBox リスト・既定全選択＝従来の全件挙動）
+  - アーキ：`NetworkService.ApplyDnsCore(targets, log)` を profile / custom / 個別の共通コアに集約（退避 read-modify-write のアダプタ単位 first-touch + 部分ロールバック）。`BackupService.SaveNetworkOriginal`（無条件上書き）新設。純粋関数 `MergeDnsBackups` / `BuildDnsServers`
+  - `MainWindow.xaml`：Visibility を `IsNetworkCategorySelected` で 3 者択一に改修（既存 AutomationId 不変＝UIA 温存）。既存ネットワーク 2 項目（HTTP 同時接続数 / TCP Auto-Tuning）は「くわしい設定」に独立ビューで表示（項目定義は不変）
+  - **テスト**：xUnit **84 PASS**（v0.1.6 の 42 + ネットワーク 42＝`NetworkServiceTests` の DNS 引数生成 / IP 検証 / 物理判定 34 + `MergeDnsBackups` / `BuildDnsServers` 8）
+  - **VM-UIA**：`tc_network_smoke`（ネットワークペイン全要素の表示確認・新規 12 ブロック）+ 既存 smoke で **OK 41 / FAIL 0**（リグレッションなし・既存項目 Grid 2 件・ホーム復帰 OK・★2方式で非昇格自動実行）
+
+### Notes
+- バージョン bump：v0.1.6 → v0.1.7（csproj AssemblyVersion=0.1.7.0 / FileVersion=0.1.7.0 / MainWindow ステータスバー / MainViewModel 環境情報）
+- 残（v0.1.8 候補）：**DoH ON/OFF**（暗号化 DNS・OS ビルド判定 + `netsh dns add encryption`・退避はレジストリ直読み）。UI プレースホルダ「（DoH ON/OFF は今後追加予定）」を残置済
+- 実機 DNS 適用の往復は VM（仮想 NIC のみ）では検証不可のため、ロジックは xUnit で担保。のんさん実機での目視は任意
+
+---
+
 ## [0.1.6] - 2026-06-01
 
 ### Added
