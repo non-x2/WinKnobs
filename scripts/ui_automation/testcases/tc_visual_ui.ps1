@@ -7,8 +7,8 @@ function Invoke-VisualUi {
 
     $results = @()
 
-    # ========== T-UI-1: カテゴリ TreeView に 11 カテゴリ存在 ==========
-    $allCategories = @("Home","System","Startup","Shell","Network","Kernel","Login","Desktop","Privacy","KeyboardMouse","SearchResults","Favorites")
+    # ========== T-UI-1: カテゴリ TreeView に 12 カテゴリ存在（v0.1.9 で Accessibility 追加） ==========
+    $allCategories = @("Home","System","Startup","Shell","Network","Kernel","Login","Desktop","Accessibility","Privacy","KeyboardMouse","SearchResults","Favorites")
     $foundCount = 0
     foreach ($cat in $allCategories) {
         $id = "Category_$cat"
@@ -16,10 +16,10 @@ function Invoke-VisualUi {
         if ($e) { $foundCount++ }
     }
     # SearchResults はカテゴリ常時表示ではない可能性あり（検索時のみ）
-    if ($foundCount -ge 10) {
-        $results += New-TestResult -Id "visual_ui.T-UI-1.category_count" -Status "OK" -Detail "$foundCount / 12 カテゴリ検出（実装済 11 + SearchResults）"
+    if ($foundCount -ge 11) {
+        $results += New-TestResult -Id "visual_ui.T-UI-1.category_count" -Status "OK" -Detail "$foundCount / 13 カテゴリ検出（実装済 12 + SearchResults）"
     } else {
-        $results += New-TestResult -Id "visual_ui.T-UI-1.category_count" -Status "FAIL" -Detail "カテゴリ $foundCount 件のみ（10 件以上期待）"
+        $results += New-TestResult -Id "visual_ui.T-UI-1.category_count" -Status "FAIL" -Detail "カテゴリ $foundCount 件のみ（11 件以上期待）"
     }
 
     # ========== T-UI-2〜5: 検索動作 ==========

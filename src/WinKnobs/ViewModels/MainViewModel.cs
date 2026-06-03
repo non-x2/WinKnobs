@@ -390,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.8\n" +
+            "🪟 WinKnobs v0.1.9\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -429,6 +429,7 @@ public partial class MainViewModel : ObservableObject
         Categories.Add(new SettingCategory("カーネル", CategoryType.Kernel, "🧠"));
         Categories.Add(new SettingCategory("ログイン", CategoryType.Login, "🔐"));
         Categories.Add(new SettingCategory("デスクトップ・UI", CategoryType.Desktop, "🎨"));
+        Categories.Add(new SettingCategory("アクセシビリティ", CategoryType.Accessibility, "♿"));
         Categories.Add(new SettingCategory("プライバシー", CategoryType.Privacy, "🔒"));
         Categories.Add(new SettingCategory("キーボード・マウス", CategoryType.KeyboardMouse, "⌨️"));
         Categories.Add(new SettingCategory("検索結果", CategoryType.SearchResults, "🔍"));
@@ -642,6 +643,9 @@ public partial class MainViewModel : ObservableObject
         // plan-validator V-5/VE-5 修正：DWord 0/1/2 を Command 型の Choices に変換
         // ⚠️ Win11 24H2 で効かない報告あり → Description に明記
         Items.Add(BuildTaskbarSizeItem());
+
+        // v0.1.9：アクセシビリティ「テキストのサイズ」（HKCU\...\Accessibility → TextScaleFactor）
+        Items.Add(BuildTextScaleItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -1471,11 +1475,91 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.1.9：アクセシビリティ「テキストのサイズ」を Command 型で構築。
+    /// HKCU\Software\Microsoft\Accessibility\TextScaleFactor（REG_DWORD・100〜225）。
+    /// 管理者不要・危険度 Green。完全反映はサインアウト→再ログイン（RestartScope.Logoff）。
+    /// plan-validator 反映：
+    ///   - Read は NearestPresetLabel（必ず Choices 内文字列＝ComboBox 整合）。
+    ///   - Read/Backup とも `v is int i` で TaskbarSi と同型（ReadValue&lt;object&gt; 型変換の曖昧さ排除）。
+    ///   - Backup は生値を保存（復元忠実性）。適用前が未設定なら Restore で DeleteValue＝未設定に戻す。
+    /// </summary>
+    private SettingItem BuildTextScaleItem()
+    {
+        var path = TextScaleHelper.RegistryPath;
+        var valueName = TextScaleHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "accessibility.textScaleFactor",
+            Title = "テキストのサイズ（文字を大きく）",
+            Description = "Windows の文字サイズを変更します（設定 > アクセシビリティ > テキストのサイズ と同じ）。"
+                + "4K など高解像度で文字が小さく感じる時に。100%（既定）〜225% から選べます。"
+                + "画面全体の拡大率（DPI）とは別で、文字だけを大きくします。"
+                + "⚠️ 完全に反映するにはサインアウト→再ログインが必要です（一部アプリは即時反映）。",
+            Category = CategoryType.Accessibility,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            // 中立表示：拡大率を一律推奨しない（既定 100%）。プリセットに 135% は含めるが推奨マークは付けない。
+            RecommendedValue = TextScaleHelper.Choices[0],
+            DefaultValue = TextScaleHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = TextScaleHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, valueName);
+                    // 値あり（int）→最近接プリセットラベル（必ず Choices 内）／値なし→既定
+                    return v is int i
+                        ? TextScaleHelper.NearestPresetLabel(i)
+                        : TextScaleHelper.Choices[0];
+                },
+                Apply = label =>
+                {
+                    if (!TextScaleHelper.TryParseLabel(label, out var pct)) return;
+                    var value = TextScaleHelper.ClampToRange(pct);
+                    _registry.WriteValue<int>(path, valueName, value, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, valueName);
+                    // 生値を保存（最近接ラベルではなく実値）＝忠実に戻すため
+                    return JsonSerializer.Serialize(new TextScaleBackup
+                    {
+                        ValueExisted = v is int,
+                        Value = v is int i ? i : 0
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<TextScaleBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                    {
+                        _registry.WriteValue<int>(path, valueName, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                    else
+                    {
+                        _registry.DeleteValue(path, valueName);   // 元が未設定なら値ごと削除して未設定へ
+                    }
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
         public bool ValueExisted { get; set; }
         public int Index { get; set; }
+    }
+
+    /// <summary>v0.1.9 テキストサイズ用バックアップトークン（生値保存）。</summary>
+    private class TextScaleBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
     }
 
     /// <summary>W5 用バックアップトークン。</summary>

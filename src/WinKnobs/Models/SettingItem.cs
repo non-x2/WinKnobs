@@ -50,7 +50,13 @@ public enum CategoryType
     Privacy,
     KeyboardMouse,
     SearchResults,
-    Favorites
+    Favorites,
+    /// <summary>
+    /// アクセシビリティ（テキストサイズ等・v0.1.9）。
+    /// plan-validator 反映：enum は末尾追加（既存値の数値シフト回避）。
+    /// UI 表示順は InitializeCategories の Add 位置で制御する（enum 定義位置 ≠ 表示順）。
+    /// </summary>
+    Accessibility
 }
 
 /// <summary>

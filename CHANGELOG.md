@@ -23,6 +23,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.9] - 2026-06-04
+
+### Added
+- **アクセシビリティ「テキストのサイズ」つまみ**（新カテゴリ ♿アクセシビリティ・第1項目）
+  - Windows の文字サイズ（設定 > アクセシビリティ > テキストのサイズ）を 100%（既定）〜225% のプリセットから1クリックで切替。**画面拡大率（DPI）とは別で、文字だけを拡大**
+  - レジストリ `HKCU\Software\Microsoft\Accessibility\TextScaleFactor`（REG_DWORD）。**管理者不要・危険度🟢・即戻せる**。完全反映はサインアウト→再ログイン（`RestartScope.Logoff`）
+  - 実装は TaskbarSi と同じ Command 型（プリセット選択式）。Read＝最近接プリセット（必ず ComboBox 候補内）／ Apply＝範囲 100-225 に丸めて書込／ Backup＝適用前の生値を保存し Restore で忠実復元（未設定なら値削除）
+  - **中立表示**：拡大率を一律推奨しない（既定 100%・「推奨」マークなし）。135% はプリセットに含めるのみ
+  - 新カテゴリは enum 末尾追加（既存値の数値シフト回避）。UI 表示順は `InitializeCategories` の Add 位置（デスクトップ・UI とプライバシーの間）で制御
+  - **テスト**：xUnit **150 PASS**（v0.1.8 の 110 + TextScaleHelper 純粋関数 40＝範囲丸め境界 / ラベル解析 / 最近接プリセット invariant〔戻り値は必ず Choices 内〕/ const と Choices 端値整合）
+  - UIA：`tc_visual_ui.ps1` のカテゴリ件数を 12→13（実装済 12 + SearchResults）に更新
+
+### Notes
+- バージョン bump：v0.1.8 → v0.1.9（csproj AssemblyVersion=0.1.9.0 / FileVersion=0.1.9.0 / MainWindow ステータスバー / MainViewModel 環境情報）
+- @plan-validator（致命2：enum 途中挿入の数値シフト / NearestPresetLabel の Choices 整合・ReadValue 型判定）→ @cross-reviewer（**致命0**・重要2：const/Choices 端値テスト・.ps1 BOM 確認）反映済み
+- 設計判断：WM_SETTINGCHANGE ブロードキャストは見送り（TextScaleFactor は再ログインで反映＝死にコード回避・TaskbarSi と同流儀で案内のみ）
+- 既知の軽微（割り切り）：未設定キーへの初書込後 Restore は値のみ削除し空キーが残る（HKCU・無害）／既存の非プリセット値（例 140%）は最も近いプリセット表示になる（戻すと生値に忠実復元）
+- VM 実機検証は次の一手（HKCU・管理者不要・即戻せるため低リスク。アクセシビリティ用 UIA テストケースは未整備）
+
+---
+
 ## [0.1.8] - 2026-06-04
 
 ### Added

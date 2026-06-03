@@ -24,7 +24,7 @@ function Invoke-Smoke {
         }
     }
 
-    # 3. 動的カテゴリ（11 カテゴリ中代表 5 個）
+    # 3. 動的カテゴリ（12 カテゴリ中代表 5 個・v0.1.9 で Accessibility 追加）
     $categories = @("Home", "System", "Privacy", "Network", "Kernel")
     foreach ($cat in $categories) {
         $id = "Category_$cat"
