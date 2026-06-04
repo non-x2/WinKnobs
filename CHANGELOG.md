@@ -23,6 +23,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.15] - 2026-06-04
+
+### Added
+- **🛠 システム・メンテナンス「システムの保護（システムの復元）ON/OFF」**（Phase 2・メニューコマンド）
+  - 「ファイル」メニューの「復元ポイントを作成」の隣に「システムの保護を有効にする / 無効にする (要管理者)」を追加。既存 `RestorePointService` と同じ作法（PowerShell・結果ダイアログ）を再利用
+  - 実行：PowerShell `Enable-ComputerRestore` / `Disable-ComputerRestore -Drive 'C:\'`（**要管理者権限**）。管理者なしで失敗時は「管理者として実行し直して」と案内
+  - ⚠️ 無効化の確認ダイアログに「既存の復元ポイントが削除される」旨を明記。確認必須
+  - 新規 `Services/SystemProtectionHelper.cs`（純粋関数：NormalizeDrive / BuildCommand / Classify ＋ `SystemProtectionOutcome` enum）＋ `Services/SystemProtectionService.cs`（RestorePointService 同型・PowerShell 60秒タイムアウト）
+  - 案A（メニューコマンド）採用＝のんさん選択。実行系を最小の未検証コードで・システム復元の操作（保護ON/OFF＋ポイント作成）を1か所に集約
+
+### Notes
+- バージョン bump：v0.1.14 → v0.1.15（csproj 3箇所 / MainWindow / MainViewModel）。生成 DLL FileVersion=**0.1.15.0** 実測
+- **テスト**：xUnit **401 PASS / 0 FAIL**（v0.1.14 の 368 + SystemProtectionHelper 33）。dotnet build -c Release **0 警告 0 エラー**
+- 🛠 **堅牢化（2026-06-05・@cross-reviewer 重要3＋監視）**：`BuildCommand` に `-ErrorAction Stop` 付与（非終了エラーも terminating 化し ExitCode!=0 を保証＝PowerShell 5.1/7 どちらでも権限不足を取りこぼさず ExitCode 主判定にできる）。`SystemProtectionService` に「大量出力時はパイプバッファ充填でデッドロックしうる（小出力前提）」注意コメント追記
+- ✅ **@cross-reviewer 再実施完了**（前回 parse error 解消）：指摘＝致命1／重要2／重要3。🎯 **致命1（日本語 stderr 文字化けで Classify が機能しない）は実機検証で誤検知と確定** — WinKnobs 同条件（WinExe・.NET10）で `Process.StandardError.CurrentEncoding=CP0`（システム ANSI）＝日本語は正常デコード。サブエージェントの「.NET 既定=UTF-8」想定は WinExe では当たらず。重要2（昇格設計）は致命1前提のため自動解消（設計自体は妥当）
+- ✅ **実機検証（2026-06-05・ホスト非昇格で安全に）**：`Enable-ComputerRestore -Drive 'C:\' -ErrorAction Stop` を非昇格実行 → 「アクセスは拒否されました」→ `Classify`=**AccessDenied**・ExitCode=1。非昇格運用の最重要経路（権限不足→「管理者として実行し直して」案内）が動作確認済（VM 管理者操作なしで安全に確認）。本物文言を xUnit リグレッションに固定。**残＝管理者での Success 経路（ExitCode=0）の VM 目視のみ（任意・低リスク）**
+- **残（次セッション）**：Phase 3 メモリ圧縮（MMAgent・v0.2.0 前倒し）／ Phase 4 リモートデスクトップ（🔴 最高リスク）。設計：docs/v0.1.14_システムメンテナンス_設計ドラフト.md
+
+---
+
 ## [0.1.14] - 2026-06-04
 
 ### Added

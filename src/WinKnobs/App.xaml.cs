@@ -37,6 +37,7 @@ public partial class App : Application
                 services.AddSingleton<RegistryService>();
                 services.AddSingleton<BackupService>();
                 services.AddSingleton<RestorePointService>();
+                services.AddSingleton<SystemProtectionService>();   // v0.1.15 システム・メンテナンス Phase 2
                 services.AddSingleton<ThemeService>();
                 services.AddSingleton<ExternalLauncherService>();
                 services.AddSingleton<NetworkService>();      // v0.1.7：ネットワーク機能

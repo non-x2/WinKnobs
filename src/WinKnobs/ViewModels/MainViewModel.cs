@@ -27,6 +27,7 @@ public partial class MainViewModel : ObservableObject
     private readonly EnvironmentInfoService _envInfo;
     private readonly BackupService _backup;
     private readonly RestorePointService _restore;
+    private readonly SystemProtectionService _systemProtection;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -98,6 +99,7 @@ public partial class MainViewModel : ObservableObject
         EnvironmentInfoService envInfo,
         BackupService backup,
         RestorePointService restore,
+        SystemProtectionService systemProtection,
         RegistryService registry,
         StartupListViewModel startupListVM,
         NetworkListViewModel networkListVM)
@@ -108,6 +110,7 @@ public partial class MainViewModel : ObservableObject
         _envInfo = envInfo;
         _backup = backup;
         _restore = restore;
+        _systemProtection = systemProtection;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
@@ -349,6 +352,45 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // -------- システムの保護（システムの復元）ON/OFF：v0.1.15 システム・メンテナンス Phase 2 --------
+    // 既存「復元ポイントを作成」(CreateRestorePoint) と同じ作法（PowerShell 管理者・結果ダイアログ）。
+    // 実行は SystemProtectionService（Enable/Disable-ComputerRestore）。最終確認は VM 実機検証（管理者操作）。
+
+    [RelayCommand]
+    private void EnableSystemProtection() => ToggleSystemProtection(true);
+
+    [RelayCommand]
+    private void DisableSystemProtection() => ToggleSystemProtection(false);
+
+    private void ToggleSystemProtection(bool enable)
+    {
+        var verb = enable ? "有効" : "無効";
+        var msg = enable
+            ? "システムの保護（システムの復元）を C ドライブで有効にします。\n（管理者権限が必要）\n\n有効にすると復元ポイントを作成できるようになります。\n続行しますか？"
+            : "システムの保護（システムの復元）を C ドライブで無効にします。\n（管理者権限が必要）\n\n⚠️ 無効にすると、既存の復元ポイントが削除され、新しい復元ポイントを作成できなくなります。\n続行しますか？";
+        var ok = _dialogs.Confirm(msg, $"システムの保護を{verb}化");
+        if (!ok) return;
+
+        var result = _systemProtection.SetProtection(enable, out var err);
+        switch (result)
+        {
+            case SystemProtectionOutcome.Success:
+                _dialogs.Info($"✅ システムの保護を{verb}にしました。", "成功");
+                StatusMessage = $"✅ システムの保護を{verb}化";
+                break;
+            case SystemProtectionOutcome.AccessDenied:
+                _dialogs.Warn(
+                    "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                    "権限不足");
+                StatusMessage = "❌ 権限不足（管理者が必要）";
+                break;
+            default:
+                _dialogs.Error($"システムの保護の{verb}化に失敗しました：\n{err}", "失敗");
+                StatusMessage = $"❌ {verb}化失敗";
+                break;
+        }
+    }
+
     // -------- ヘルプメニュー --------
     [RelayCommand]
     private void CopyEnvironmentInfo()
@@ -390,7 +432,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.14\n" +
+            "🪟 WinKnobs v0.1.15\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
