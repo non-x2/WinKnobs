@@ -390,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.9\n" +
+            "🪟 WinKnobs v0.1.10\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -646,6 +646,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.1.9：アクセシビリティ「テキストのサイズ」（HKCU\...\Accessibility → TextScaleFactor）
         Items.Add(BuildTextScaleItem());
+
+        // v0.1.10：アクセシビリティ「マウスポインタのサイズ」（CursorSize + CursorBaseSize の2値）
+        Items.Add(BuildPointerSizeItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -1548,6 +1551,91 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.1.10：アクセシビリティ第2項目「マウスポインタのサイズ」を Command 型で構築。
+    /// 2値書込：CursorSize(HKCU\…\Accessibility・1-15) ＋ CursorBaseSize(HKCU\Control Panel\Cursors・32-256)。
+    /// 対応式 CursorBaseSize=32+(CursorSize-1)*16。書込後に SystemParametersInfo(SPI_SETCURSORS) で即時反映（best-effort）。
+    /// plan-validator 反映：
+    ///   - Backup の existed は `v != null`（REG_SZ 等でも existed=true・Restore でのデータ消失を防ぐ）。
+    ///     値は CoerceInt で数値化し DWORD に正規化して保存/復元（＝Windows 設定アプリと同じく DWORD 化を意図的に採用）。
+    ///   - Read は NearestPresetLabel（必ず Choices 内＝ComboBox 整合）。CursorSize 基準。
+    /// </summary>
+    private SettingItem BuildPointerSizeItem()
+    {
+        var accPath = CursorSizeHelper.AccessibilityPath;
+        var accName = CursorSizeHelper.CursorSizeValue;
+        var curPath = CursorSizeHelper.CursorsPath;
+        var curName = CursorSizeHelper.CursorBaseSizeValue;
+
+        return new SettingItem
+        {
+            Id = "accessibility.pointerSize",
+            Title = "マウスポインタのサイズ（大きく）",
+            Description = "マウスポインタ（矢印）を大きくします（設定 > アクセシビリティ > マウスポインターとタッチ と同じ）。"
+                + "ポインタを見失いやすい・高解像度で小さく感じる時に。標準（1）〜最大（15）。"
+                + "適用後、マウスを動かすと反映します（反映しない場合はサインアウト→再ログインで確実に反映）。"
+                + "⚠️ Windows の「設定」アプリを開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Accessibility,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            // 中立表示：サイズを一律推奨しない（既定＝標準）。
+            RecommendedValue = CursorSizeHelper.Choices[0],
+            DefaultValue = CursorSizeHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = CursorSizeHelper.Choices,
+                Read = () =>
+                {
+                    // CursorSize（設定アプリのスライダー値）基準。値あり→最近接プリセット／なし→標準
+                    var v = _registry.ReadValue<object>(accPath, accName);
+                    return v is int i
+                        ? CursorSizeHelper.NearestPresetLabel(i)
+                        : CursorSizeHelper.Choices[0];
+                },
+                Apply = label =>
+                {
+                    if (!CursorSizeHelper.TryParseLabel(label, out var size)) return;
+                    size = CursorSizeHelper.ClampSize(size);
+                    var baseSize = CursorSizeHelper.ToBaseSize(size);
+                    // 2値とも書く（設定アプリのスライダー表示と実描画を一致させる）
+                    _registry.WriteValue<int>(accPath, accName, size, Microsoft.Win32.RegistryValueKind.DWord);
+                    _registry.WriteValue<int>(curPath, curName, baseSize, Microsoft.Win32.RegistryValueKind.DWord);
+                    SystemCursorService.ReloadSystemCursors();   // best-effort 即時反映
+                },
+                Backup = () =>
+                {
+                    var acc = _registry.ReadValue<object>(accPath, accName);
+                    var cur = _registry.ReadValue<object>(curPath, curName);
+                    // existed は v != null（REG_SZ でも true）。値は数値化（DWORD 正規化で復元）
+                    return JsonSerializer.Serialize(new PointerSizeBackup
+                    {
+                        CursorSizeExisted = acc != null,
+                        CursorSize = CursorSizeHelper.CoerceInt(acc, CursorSizeHelper.MinSize),
+                        BaseSizeExisted = cur != null,
+                        BaseSize = CursorSizeHelper.CoerceInt(cur, CursorSizeHelper.BaseSizeForMin)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<PointerSizeBackup>(token);
+                    if (bk == null) return;
+                    if (bk.CursorSizeExisted)
+                        _registry.WriteValue<int>(accPath, accName, bk.CursorSize, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.DeleteValue(accPath, accName);
+
+                    if (bk.BaseSizeExisted)
+                        _registry.WriteValue<int>(curPath, curName, bk.BaseSize, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.DeleteValue(curPath, curName);
+
+                    SystemCursorService.ReloadSystemCursors();
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
@@ -1560,6 +1648,15 @@ public partial class MainViewModel : ObservableObject
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
+    }
+
+    /// <summary>v0.1.10 マウスポインタサイズ用バックアップトークン（2値・existed は値の有無）。</summary>
+    private class PointerSizeBackup
+    {
+        public bool CursorSizeExisted { get; set; }
+        public int CursorSize { get; set; }
+        public bool BaseSizeExisted { get; set; }
+        public int BaseSize { get; set; }
     }
 
     /// <summary>W5 用バックアップトークン。</summary>

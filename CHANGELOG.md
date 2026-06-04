@@ -23,6 +23,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.10] - 2026-06-04
+
+### Added
+- **アクセシビリティ「マウスポインタのサイズ」つまみ**（♿アクセシビリティ・第2項目）
+  - マウスポインタ（矢印）を 標準(1)〜最大(15) のプリセットから1クリックで拡大（設定 > アクセシビリティ > マウスポインターとタッチ と同じ）
+  - **2値書込**：`HKCU\Software\Microsoft\Accessibility\CursorSize`(1-15・設定アプリのスライダー値) ＋ `HKCU\Control Panel\Cursors\CursorBaseSize`(32-256・実描画)。対応式 `CursorBaseSize = 32 + (CursorSize-1)×16`
+  - **即時反映**：書込後に `SystemParametersInfo(SPI_SETCURSORS)` でカーソルをレジストリから再読込（best-effort。反映しない場合はサインアウト→再ログイン）。**管理者不要・危険度🟢・即戻せる**
+  - 実装：TaskbarSi / TextScaleFactor と同型の Command 型（プリセット選択式）。Read=最近接プリセット（必ず ComboBox 候補内）／ Backup=2値の生値（型混在環境でも `existed = v != null` で判定し DWORD 正規化）／ Restore=各値 書戻し or 削除＋再読込
+  - 新規 `Services/CursorSizeHelper.cs`（純粋関数：ClampSize/ToBaseSize/TryParseLabel/NearestPresetLabel/CoerceInt）＋ `Services/SystemCursorService.cs`（P/Invoke・`EntryPoint="SystemParametersInfoW"` 明示）
+  - 中立表示：サイズを一律推奨しない（既定＝標準）
+  - **テスト**：xUnit **205 PASS**（v0.1.9 の 150 + CursorSizeHelper 純粋関数 55＝範囲丸め境界 int.Min/Max / 2値マッピング / ラベル解析 / 最近接プリセット invariant / REG_SZ 混在の CoerceInt）
+
+### Notes
+- バージョン bump：v0.1.9 → v0.1.10（csproj AssemblyVersion=0.1.10.0 / FileVersion=0.1.10.0 / MainWindow ステータスバー / MainViewModel 環境情報）
+- @plan-validator（致命1＝CursorBaseSize の REG_SZ 混在で Restore がデータ消失／重要＝SystemParametersInfo の EntryPoint 明示・NearestPresetLabel の long キャスト）→ @cross-reviewer（**致命0**・P/Invoke シグネチャ/定数を公式と照合・重要1＝Description 文言）反映済み
+- 設計判断：①2値とも書く（設定アプリのスライダー表示と実描画を一致）②SPI は best-effort・失敗は再ログインで反映（TextScaleFactor の broadcast 見送りとは逆＝SPI は実際に反映する“生きたコード”）③Backup は Clamp せず忠実復元（異常値も元に戻す＝バックアップの正しい契約）
+- 既知の軽微（割り切り・cross-reviewer 監視のみ）：プリセットは8段（中間値は Windows 設定アプリで）／SPIF_SENDCHANGE は無応答ウィンドウ次第で最大数秒ブロックの可能性（適用時のみ・稀）
+- VM 実機検証は次の一手（HKCU・管理者不要・即戻せる低リスク。ポインタが実際に大きくなる目視＋EntryPointNotFound が出ないこと）
+
+---
+
 ## [0.1.9] - 2026-06-04
 
 ### Added
