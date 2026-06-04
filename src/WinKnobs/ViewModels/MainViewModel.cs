@@ -390,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.11\n" +
+            "🪟 WinKnobs v0.1.12\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -652,6 +652,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.1.11：アクセシビリティ「スクロールバーを常に表示」（DynamicScrollbars・Command型2択）
         Items.Add(BuildScrollbarItem());
+
+        // v0.1.12：アクセシビリティ「テキストカーソルの太さ」（CaretWidth・REG_DWORD・1-20px）
+        Items.Add(BuildCaretWidthItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -1706,6 +1709,78 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.1.12：アクセシビリティ第4項目「テキストカーソルの太さ」を Command 型で構築。
+    /// HKCU\Control Panel\Desktop\CaretWidth（REG_DWORD・1〜20px）。テキストカーソル（点滅する縦棒｜）の太さ。
+    /// 管理者不要・危険度 Green・完全反映はサインアウト→再ログイン（RestartScope.Logoff）。
+    /// プリセット範囲型は TextScaleFactor(v0.1.9) と同型。Read の REG_SZ 対応・CoerceInt は
+    /// Scrollbar(v0.1.11)/Pointer(v0.1.10) を踏襲（手本2系統のいいとこ取り＝TextScale より Read が頑健）。
+    /// plan-validator 反映：
+    ///   - Read は NearestPresetLabel（必ず Choices 内＝ComboBox 整合）。CoerceInt で REG_SZ 混在も拾う。
+    ///   - Backup の existed は v != null。値は CoerceInt で数値化し DWORD 正規化（異常型/未設定は MinWidth に寄る）。
+    ///   - live-apply（SystemParametersInfo SPI_SETCARETWIDTH）は未検証ゆえ見送り（v0.1.13 検証候補・「API無し」とは断定しない）。
+    /// </summary>
+    private SettingItem BuildCaretWidthItem()
+    {
+        var path = CaretWidthHelper.RegistryPath;
+        var name = CaretWidthHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "accessibility.caretWidth",
+            Title = "テキストカーソルの太さ",
+            Description = "文字入力時に点滅する縦棒（テキストカーソル｜）の太さを変更します（設定 > アクセシビリティ > テキスト カーソル > テキスト カーソルの太さ と同じ）。"
+                + "入力位置を見失いやすい時に。1px（既定・最も細い）〜20px から選べます。"
+                + "⚠️ 点滅の速さ（点滅速度）ではなく、縦棒の「太さ」を変える設定です。"
+                + "⚠️ 完全に反映するにはサインアウト→再ログインが必要です。"
+                + "⚠️ Windows の「設定」を開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Accessibility,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            // 中立表示：太さを一律推奨しない（既定 1px・推奨マークなし）。
+            RecommendedValue = CaretWidthHelper.Choices[0],
+            DefaultValue = CaretWidthHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = CaretWidthHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    // 未設定→既定ラベル／値あり→CoerceInt（REG_SZ も拾う）→最近接プリセット（必ず Choices 内）
+                    return v == null
+                        ? CaretWidthHelper.Choices[0]
+                        : CaretWidthHelper.NearestPresetLabel(CaretWidthHelper.CoerceInt(v, CaretWidthHelper.MinWidth));
+                },
+                Apply = label =>
+                {
+                    if (!CaretWidthHelper.TryParseLabel(label, out var px)) return;
+                    _registry.WriteValue<int>(path, name,
+                        CaretWidthHelper.ClampToRange(px), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    // 生値を CoerceInt で数値化して保存（未設定なら existed=false）。DWORD 正規化。
+                    return JsonSerializer.Serialize(new CaretWidthBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = CaretWidthHelper.CoerceInt(v, CaretWidthHelper.MinWidth)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<CaretWidthBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.DeleteValue(path, name);   // 元が未設定なら削除して未設定へ戻す
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
@@ -1731,6 +1806,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.1.11 スクロールバー常時表示用バックアップトークン（existed は値の有無）。</summary>
     private class ScrollbarBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.1.12 テキストカーソルの太さ用バックアップトークン（existed は値の有無・生値保存）。</summary>
+    private class CaretWidthBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }

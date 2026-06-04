@@ -23,6 +23,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.12] - 2026-06-04
+
+### Added
+- **アクセシビリティ「テキストカーソルの太さ」つまみ**（♿アクセシビリティ・第4項目）
+  - 文字入力時に点滅する縦棒（テキストカーソル｜）の太さを 1px（既定）〜20px のプリセットから1クリックで変更（設定 > アクセシビリティ > テキスト カーソル > テキスト カーソルの太さ と同じ）。入力位置を見失いやすい時に
+  - レジストリ `HKCU\Control Panel\Desktop\CaretWidth`(REG_DWORD・1-20)。**管理者不要・危険度🟢・即戻せる**
+  - 実装：プリセット範囲型は TextScaleFactor(v0.1.9) と同型の Command 型。Read は最近接プリセット（必ず ComboBox 候補内）＋ REG_SZ 混在対応（Scrollbar 型）／ Backup=生値（`existed = v != null`・DWORD 正規化）／ Restore=書戻し or 削除（未設定へ忠実復元）
+  - 新規 `Services/CaretWidthHelper.cs`（純粋関数：ClampToRange/TryParseLabel/NearestPresetLabel/CoerceInt）
+  - 中立表示：太さを一律推奨しない（既定＝1px）。点滅速度（CaretBlinkRate）ではなく「太さ」であることを Description に明記
+  - ⚠️ 既知制約：完全反映はサインアウト→再ログイン。設定アプリを開いている場合は閉じてから適用
+
+### Changed
+- **CoerceInt（レジストリ生値→int 変換）を共通ユーティリティ `Services/RegistryValueCoercion.cs` に集約**（Rule of Three・4箇所目）
+  - CursorSizeHelper(v0.1.10) / ScrollbarHelper(v0.1.11) / CaretWidthHelper(v0.1.12) の3 Helper は本ユーティリティへ委譲する**前方互換ラッパ**へ変更（公開 API・挙動・シグネチャは不変＝既存呼び出し側・xUnit はそのまま緑）
+  - ScrollbarHelper / CursorSizeHelper に残っていた「4箇所目が出たら集約検討」の申し送りコメントを「集約済」へ同時更新
+
+### Notes
+- バージョン bump：v0.1.11 → v0.1.12（csproj AssemblyVersion=0.1.12.0 / FileVersion=0.1.12.0 / MainWindow ステータスバー / MainViewModel 環境情報）。生成 DLL FileVersion=**0.1.12.0** 実測
+- **テスト**：xUnit **298 PASS / 0 FAIL**（v0.1.11 の 238 + CaretWidthHelper 43 + RegistryValueCoercion 17＝60）。dotnet build -c Release **0 警告 0 エラー**
+- @plan-validator（致命2＝CHANGELOG テスト数は実測値で記載／Rule of Three コメント同時更新、高2＝Description「太さ≠点滅速度」明記・端値一致テスト、エッジ3＝REG_BINARY 異常型→既定1px 正規化・中間値最近接・設定アプリ競合）→ @cross-reviewer（**致命0**・リグレッションなし／3ラッパの委譲一致をテストで担保／REG_BINARY 実機経路〔16進文字列〕テスト1件追加で経路乖離を解消）反映済み
+- 設計判断：live-apply（SystemParametersInfo SPI_SETCARETWIDTH=0x2007）は存在するが**未検証ゆえ見送り**・v0.1.13 検証候補（v0.1.9 テキストサイズ・v0.1.11 スクロールバーと同方針＝「API 無し」と断定しない）
+- VM 実機検証は次の一手（HKCU・即戻せる低リスク／アクセシビリティ4項目まとめて）
+
+---
+
 ## [0.1.11] - 2026-06-04
 
 ### Added

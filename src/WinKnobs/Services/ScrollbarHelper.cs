@@ -48,15 +48,10 @@ public static class ScrollbarHelper
         => IsAlwaysShow(value) ? AlwaysShowLabel : AutoHideLabel;
 
     /// <summary>
-    /// レジストリ生値（object）を int に変換。REG_DWORD は int、REG_SZ "0"/"1" は parse、
-    /// それ以外/解釈不能は fallback。Read/Backup で型混在環境（REG_SZ）でも値を保つ。
+    /// レジストリ生値（object）を int に変換。Read/Backup で型混在環境（REG_SZ "0"/"1"）でも値を保つ。
     /// existed の判定（v != null）は呼び出し側で行う＝本メソッドは「値の数値化」のみ。
-    /// ※ CursorSizeHelper.CoerceInt と同一コード（3箇所目）。4箇所目が出たら共通ユーティリティへ集約検討（Rule of Three）。
+    /// ※ v0.1.12 で <see cref="RegistryValueCoercion.CoerceInt"/> へ集約済（Rule of Three・4箇所目）。
+    ///   本メソッドは既存呼び出し側・xUnit との後方互換を保つ前方互換ラッパ（挙動・シグネチャ不変）。
     /// </summary>
-    public static int CoerceInt(object? v, int fallback)
-    {
-        if (v is int i) return i;
-        if (v != null && int.TryParse(v.ToString(), out var p)) return p;
-        return fallback;
-    }
+    public static int CoerceInt(object? v, int fallback) => RegistryValueCoercion.CoerceInt(v, fallback);
 }
