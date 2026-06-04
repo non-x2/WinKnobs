@@ -23,6 +23,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.13] - 2026-06-04
+
+### Added
+- **アクセシビリティ「通知を表示する時間」つまみ**（♿アクセシビリティ・第5項目）
+  - 画面に出る通知（トースト）を自動で消すまでの時間を 5秒（既定）/7秒/15秒/30秒/1分/5分 から1クリックで変更（設定 > アクセシビリティ > 視覚効果 >「通知を表示する時間」と同じ）。通知を読み切れず消える時に
+  - レジストリ `HKCU\Control Panel\Accessibility\MessageDuration`(REG_DWORD・秒)。**管理者不要・危険度🟢・即戻せる**
+  - 新規 `Services/MessageDurationHelper.cs`（純粋関数）。**ラベルに「1分」「5分」が混在するため、ラベル⇔値は CaretWidth の「先頭数字読み」ではなく PresetSeconds とのインデックス明示マッピング**（"1分"→60秒）。Choices/PresetSeconds を同一配列で共有し表記ゆれ事故を構造排除
+  - Read=最近接プリセット（必ず ComboBox 候補内）／ Backup=生値（REG_SZ 混在は CoerceInt で数値化・異常型は既定5秒へ正規化）／ Restore=書戻し or 削除（未設定へ忠実復元）
+  - RestartScope=Logoff（次の通知から反映・完全反映は再ログイン。「即時反映」と断定しない＝plan-validator 致命1反映）
+  - 中立表示：時間を一律推奨しない（既定＝5秒）
+
+### Notes
+- バージョン bump：v0.1.12 → v0.1.13（csproj AssemblyVersion=0.1.13.0 / FileVersion=0.1.13.0 / MainWindow ステータスバー / MainViewModel 環境情報）。生成 DLL FileVersion=**0.1.13.0** 実測
+- **テスト**：xUnit **343 PASS / 0 FAIL**（v0.1.12 の 298 + MessageDurationHelper 45）。dotnet build -c Release **0 警告 0 エラー**
+- @plan-validator（致命1＝RestartScope の None「即時反映」断定回避→Logoff、中2＝Choices/SecondsForLabel 同一配列共有・往復/invariant テスト、エッジ3＝端値ラベル非依存・タイブレーク45→30秒/11→7秒/180→1分・範囲外生値）→ @cross-reviewer（**致命0**・明示マッピングで表記ゆれ構造排除を確認・異常型コメント1行補足）反映済み
+- 既知の軽微（監視のみ）：同型 Backup トークンが5クラス目（将来の共通化候補）／Description と Logoff フッターの二重表示は安全側
+- VM 実機検証は次の一手（HKCU・即戻せる低リスク／非プリセット値・範囲外生値の往復を1度確認）
+
+---
+
 ## [0.1.12] - 2026-06-04
 
 ### Added

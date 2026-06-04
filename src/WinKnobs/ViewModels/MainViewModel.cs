@@ -390,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.12\n" +
+            "🪟 WinKnobs v0.1.13\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -655,6 +655,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.1.12：アクセシビリティ「テキストカーソルの太さ」（CaretWidth・REG_DWORD・1-20px）
         Items.Add(BuildCaretWidthItem());
+
+        // v0.1.13：アクセシビリティ「通知を表示する時間」（MessageDuration・REG_DWORD・秒・5-300）
+        Items.Add(BuildMessageDurationItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -1781,6 +1784,76 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.1.13：アクセシビリティ第5項目「通知を表示する時間」を Command 型で構築。
+    /// HKCU\Control Panel\Accessibility\MessageDuration（REG_DWORD・秒・既定5）。管理者不要・危険度 Green。
+    /// ラベルに「1分」「5分」が混じるため、ラベル⇔値は MessageDurationHelper の明示マッピング（SecondsForLabel）を使う。
+    /// plan-validator 反映：
+    ///   - RestartScope=Logoff（None の「即時反映」断定を避ける。完全反映は再ログイン・CaretWidth と一貫）。
+    ///   - Read は NearestPresetLabel（必ず Choices 内＝ComboBox 整合）。CoerceInt で REG_SZ 混在も拾う。
+    ///   - Backup は生値（非プリセット値45秒等も忠実保存）。Restore は Clamp せず元の値を戻す（バックアップの契約）。
+    ///     ※数値化できない異常型（REG_BINARY 等）は CoerceInt の fallback＝既定5秒に正規化される（実害極小・CaretWidth と同方針）。
+    /// </summary>
+    private SettingItem BuildMessageDurationItem()
+    {
+        var path = MessageDurationHelper.RegistryPath;
+        var name = MessageDurationHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "accessibility.messageDuration",
+            Title = "通知を表示する時間",
+            Description = "画面に出る通知（トースト）を自動で消すまでの時間を変更します（設定 > アクセシビリティ > 視覚効果 >「通知を表示する時間」と同じ）。"
+                + "通知を読み切れずに消えてしまう時に長くできます。5秒（既定）〜5分から選べます。"
+                + "次に表示される通知から反映されます（完全反映はサインアウト→再ログイン）。"
+                + "⚠️ Windows の「設定」を開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Accessibility,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            // 中立表示：時間を一律推奨しない（既定 5秒・推奨マークなし）。
+            RecommendedValue = MessageDurationHelper.Choices[0],
+            DefaultValue = MessageDurationHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = MessageDurationHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    // 未設定→既定ラベル／値あり→CoerceInt（REG_SZ も拾う）→最近接プリセット（必ず Choices 内）
+                    return v == null
+                        ? MessageDurationHelper.Choices[0]
+                        : MessageDurationHelper.NearestPresetLabel(MessageDurationHelper.CoerceInt(v, MessageDurationHelper.MinSeconds));
+                },
+                Apply = label =>
+                {
+                    // ラベルは明示マッピングで秒数化（"1分"→60）。先頭数字方式は使わない。
+                    _registry.WriteValue<int>(path, name,
+                        MessageDurationHelper.SecondsForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    // 生値を CoerceInt で数値化して保存（非プリセット値45秒等も忠実）。未設定なら existed=false。
+                    return JsonSerializer.Serialize(new MessageDurationBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = MessageDurationHelper.CoerceInt(v, MessageDurationHelper.MinSeconds)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<MessageDurationBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.DeleteValue(path, name);   // 元が未設定なら削除して未設定へ戻す
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
@@ -1813,6 +1886,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.1.12 テキストカーソルの太さ用バックアップトークン（existed は値の有無・生値保存）。</summary>
     private class CaretWidthBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.1.13 通知の表示時間用バックアップトークン（existed は値の有無・生値保存）。</summary>
+    private class MessageDurationBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
