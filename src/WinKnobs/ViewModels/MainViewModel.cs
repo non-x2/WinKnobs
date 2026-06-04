@@ -390,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.13\n" +
+            "🪟 WinKnobs v0.1.14\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -423,6 +423,7 @@ public partial class MainViewModel : ObservableObject
     {
         Categories.Add(new SettingCategory("ホーム", CategoryType.Home, "🏠"));
         Categories.Add(new SettingCategory("システム", CategoryType.System, "🖥️"));
+        Categories.Add(new SettingCategory("システム・メンテナンス", CategoryType.Maintenance, "🛠"));
         Categories.Add(new SettingCategory("起動・スタートアップ", CategoryType.Startup, "🚀"));
         Categories.Add(new SettingCategory("エクスプローラ・シェル", CategoryType.Shell, "📂"));
         Categories.Add(new SettingCategory("ネットワーク", CategoryType.Network, "🌐"));
@@ -658,6 +659,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.1.13：アクセシビリティ「通知を表示する時間」（MessageDuration・REG_DWORD・秒・5-300）
         Items.Add(BuildMessageDurationItem());
+
+        // v0.1.14：システム・メンテナンス「タスクマネージャを使えるようにする」（DisableTaskMgr・HKCU・管理者不要・Phase 1）
+        Items.Add(BuildTaskManagerItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -1854,6 +1858,70 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.1.14（システム・メンテナンス Phase 1）：「タスクマネージャを使えるようにする」を Command 型2択で構築。
+    /// HKCU\…\Policies\System\DisableTaskMgr（DWORD・0/未設定=使える / 1=無効）。**管理者不要**（HKCU ポリシー）。
+    /// 危険度 Yellow（自分をロックアウトしうるが WinKnobs でいつでも戻せる）。ScrollbarHelper 同型（Command＋JSON 退避）。
+    /// plan-validator 反映：Read/ラベルは TaskManagerHelper の Choices 同一参照のみ。CoerceInt で REG_SZ 混在対応。未設定は Restore で DeleteValue。
+    /// </summary>
+    private SettingItem BuildTaskManagerItem()
+    {
+        var path = TaskManagerHelper.RegistryPath;
+        var name = TaskManagerHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "maintenance.taskManager",
+            Title = "タスクマネージャを使えるようにする",
+            Description = "タスクマネージャ（Ctrl+Shift+Esc）を使えるようにするか、無効にするかを切り替えます"
+                + "（グループポリシー『タスク マネージャーの削除』と同じ・HKCU）。"
+                + "⚠️『無効にする』を選ぶと、Ctrl+Shift+Esc でもタスクバー右クリックメニューからもタスクマネージャを開けなくなります（WinKnobs からはいつでも『使える』に戻せます）。"
+                + "管理者権限は不要です（自分のユーザー設定）。通常はすぐ反映（反映しない場合は再ログイン）。"
+                + "⚠️ グループポリシーエディタ（gpedit.msc）等のポリシー編集ツールを開いている場合は閉じてから適用してください。",
+            Category = CategoryType.Maintenance,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            // 中立表示：既定＝使える（Choices[0]）。無効化を推奨しない。
+            RecommendedValue = TaskManagerHelper.Choices[0],
+            DefaultValue = TaskManagerHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = TaskManagerHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    // 未設定→null（使える）／値あり→CoerceInt（REG_SZ "1" も拾う）→ラベル（必ず Choices 内）
+                    int? iv = v == null ? (int?)null : TaskManagerHelper.CoerceInt(v, TaskManagerHelper.ValueEnabled);
+                    return TaskManagerHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    _registry.WriteValue<int>(path, name,
+                        TaskManagerHelper.ValueForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new TaskManagerBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = TaskManagerHelper.CoerceInt(v, TaskManagerHelper.ValueEnabled)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<TaskManagerBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.DeleteValue(path, name);   // 元が未設定なら削除して未設定（使える）へ戻す
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
@@ -1893,6 +1961,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.1.13 通知の表示時間用バックアップトークン（existed は値の有無・生値保存）。</summary>
     private class MessageDurationBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.1.14 タスクマネージャ（DisableTaskMgr）用バックアップトークン（existed は値の有無）。</summary>
+    private class TaskManagerBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }

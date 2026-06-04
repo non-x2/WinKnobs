@@ -23,6 +23,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.14] - 2026-06-04
+
+### Added
+- **🛠 システム・メンテナンス カテゴリ（新設）＋「タスクマネージャを使えるようにする」つまみ**（Phase 1）
+  - 大型機能「システム・メンテナンス」（RDP / システム保護 / タスクマネージャ / メモリ圧縮 のフルトグル）の第1弾。**Phase 1 は HKCU・管理者不要・自己検証可で先行出荷**
+  - 新カテゴリ `CategoryType.Maintenance`（🛠・enum 末尾追加）。Startup/Network 以外なので `IsStandardCategorySelected` で標準 DataGrid に自動表示（専用ペイン不要）
+  - 「タスクマネージャを使えるようにする / 無効にする」を Command 型2択で切替。レジストリ `HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr`(REG_DWORD・0/未設定=使える / 1=無効)。**管理者不要・危険度🟡・即戻せる**
+  - 新規 `Services/TaskManagerHelper.cs`（ScrollbarHelper 同型・純粋関数）。Read/ラベルは Choices 同一参照／ CoerceInt で REG_SZ 混在対応／未設定は Restore で DeleteValue（未設定＝使える へ忠実復元）
+  - ⚠️ 自己ロックアウト警告を Description に明記（無効化すると Ctrl+Shift+Esc も右クリックメニューも開けなくなる・WinKnobs から戻せる・gpedit 競合注意）。中立表示（既定＝使える）
+
+### Notes
+- バージョン bump：v0.1.13 → v0.1.14（csproj 3箇所 / MainWindow / MainViewModel）。生成 DLL FileVersion=**0.1.14.0** 実測
+- **テスト**：xUnit **368 PASS / 0 FAIL**（v0.1.13 の 343 + TaskManagerHelper 25）。dotnet build -c Release **0 警告 0 エラー**
+- 設計：[docs/v0.1.14_システムメンテナンス_設計ドラフト.md](docs/v0.1.14_システムメンテナンス_設計ドラフト.md)。@cross-reviewer（**致命0**・enum 末尾追加のリグレッションなし／新カテゴリは標準 DataGrid に正しく吸収／値の向きが Helper・Build・テストで三者一致）反映済み（UX 警告強化）
+- **残（次セッション・管理者+VM必須）**：Phase 2 システムの保護 ON/OFF ／ Phase 3 メモリ圧縮（v0.2.0 前倒し）／ Phase 4 リモートデスクトップ（🔴 セキュリティ最高リスク・強確認 UI）
+- **VM/実機の最終確認（出荷前推奨）**：`Policies\System` は新規パスのため「未設定→無効→使える→未設定」の1往復を VM で確認（HKCU・即戻せる・ホストでは のんさんのタスクマネージャを触らない）。制限系ポリシーキーは配布時 VirusTotal 確認候補（cross-reviewer 監視）
+
+---
+
 ## [0.1.13] - 2026-06-04
 
 ### Added

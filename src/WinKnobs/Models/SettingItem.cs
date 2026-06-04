@@ -56,7 +56,14 @@ public enum CategoryType
     /// plan-validator 反映：enum は末尾追加（既存値の数値シフト回避）。
     /// UI 表示順は InitializeCategories の Add 位置で制御する（enum 定義位置 ≠ 表示順）。
     /// </summary>
-    Accessibility
+    Accessibility,
+
+    /// <summary>
+    /// システム・メンテナンス（タスクマネージャ/システム保護/メモリ/リモートデスクトップ等・v0.1.14〜）。
+    /// enum は末尾追加（既存値の数値シフト回避）。Startup/Network 以外なので
+    /// IsStandardCategorySelected=true となり標準 DataGrid に表示される（専用ペイン不要）。
+    /// </summary>
+    Maintenance
 }
 
 /// <summary>
