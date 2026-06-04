@@ -390,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.10\n" +
+            "🪟 WinKnobs v0.1.11\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -649,6 +649,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.1.10：アクセシビリティ「マウスポインタのサイズ」（CursorSize + CursorBaseSize の2値）
         Items.Add(BuildPointerSizeItem());
+
+        // v0.1.11：アクセシビリティ「スクロールバーを常に表示」（DynamicScrollbars・Command型2択）
+        Items.Add(BuildScrollbarItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -1636,6 +1639,73 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.1.11：アクセシビリティ第3項目「スクロールバーを常に表示」を Command 型2択で構築。
+    /// HKCU\Control Panel\Accessibility\DynamicScrollbars（DWORD・0=常に表示 / 1 or 未設定=既定）。
+    /// 宣言的 Boolean ではなく Command＋JSON 退避にする理由：DynamicScrollbars は既定で未設定のことが多く、
+    /// .reg エクスポート退避だと「新規作成→戻す」で値が消えず戻せない（TaskbarSi と同じ理由）。
+    /// plan-validator 反映：
+    ///   - Read/ラベルは ScrollbarHelper の Choices 同一参照のみ（リテラル直書き禁止＝黙って既定化を防ぐ）。
+    ///   - Read/Backup とも CoerceInt で REG_SZ "0"/"1" 環境にも対応。existed は v != null。
+    /// </summary>
+    private SettingItem BuildScrollbarItem()
+    {
+        var path = ScrollbarHelper.RegistryPath;
+        var name = ScrollbarHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "accessibility.alwaysShowScrollbars",
+            Title = "スクロールバーを常に表示",
+            Description = "スクロールバーを常に表示します（設定 > アクセシビリティ > 視覚効果 と同じ）。"
+                + "Windows 11 既定では、使う時だけ表示され普段は細い線に隠れます。常に表示すると今どこを見ているかが分かりやすくなります。"
+                + "⚠️ 設定アプリやストアアプリには効きますが、エクスプローラなど一部の従来型アプリには反映されません。"
+                + "完全反映はサインアウト→再ログイン（または対象アプリの再起動）。"
+                + "⚠️ Windows の「設定」を開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Accessibility,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            // 中立表示：一律「常に表示」を推さない（既定＝使う時だけ表示）。
+            RecommendedValue = ScrollbarHelper.Choices[0],
+            DefaultValue = ScrollbarHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = ScrollbarHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    // 未設定→null（既定ラベル）／値あり→CoerceInt（REG_SZ "0" も拾う）→ラベル（必ず Choices 内）
+                    int? iv = v == null ? (int?)null : ScrollbarHelper.CoerceInt(v, ScrollbarHelper.ValueAutoHide);
+                    return ScrollbarHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    _registry.WriteValue<int>(path, name,
+                        ScrollbarHelper.ValueForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new ScrollbarBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = ScrollbarHelper.CoerceInt(v, ScrollbarHelper.ValueAutoHide)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<ScrollbarBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.DeleteValue(path, name);   // 元が未設定なら削除して未設定へ戻す
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
@@ -1657,6 +1727,13 @@ public partial class MainViewModel : ObservableObject
         public int CursorSize { get; set; }
         public bool BaseSizeExisted { get; set; }
         public int BaseSize { get; set; }
+    }
+
+    /// <summary>v0.1.11 スクロールバー常時表示用バックアップトークン（existed は値の有無）。</summary>
+    private class ScrollbarBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
     }
 
     /// <summary>W5 用バックアップトークン。</summary>

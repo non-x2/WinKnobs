@@ -23,6 +23,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.11] - 2026-06-04
+
+### Added
+- **アクセシビリティ「スクロールバーを常に表示」つまみ**（♿アクセシビリティ・第3項目）
+  - Windows 11 で普段は隠れるスクロールバーを常に表示（設定 > アクセシビリティ > 視覚効果 と同じ）。現在位置が分かりやすくなる
+  - レジストリ `HKCU\Control Panel\Accessibility\DynamicScrollbars`(DWORD・0=常に表示 / 1 or 未設定=既定)。**管理者不要・危険度🟢・即戻せる**
+  - **Command 型2択**（宣言的 Boolean ではない）。理由：この値は既定で未設定のことが多く、.reg エクスポート退避だと「新規作成→戻す」で値が消えず戻せない → JSON トークン退避（`existed = v != null`／未設定なら Restore で DeleteValue＝未設定へ忠実復元）
+  - 新規 `Services/ScrollbarHelper.cs`（純粋関数：IsAlwaysShow/ValueForLabel/LabelForValue/CoerceInt）。Read/ラベルは必ず `Choices[n]` 同一参照（リテラル直書き禁止＝ComboBox 黙って既定化の事故防止）。REG_SZ "0"/"1" 混在環境も CoerceInt で対応
+  - 中立表示：一律「常に表示」を推さない（既定＝使う時だけ表示）
+  - ⚠️ 既知制約：設定／ストアアプリには効くが、エクスプローラなど一部の従来型(Win32)アプリには反映されない。完全反映はサインアウト→再ログイン
+  - **テスト**：xUnit **238 PASS**（v0.1.10 の 205 + ScrollbarHelper 純粋関数 33＝IsAlwaysShow / ValueForLabel / LabelForValue invariant〔必ず Choices 内・同一参照〕/ CoerceInt の REG_SZ・境界）
+
+### Notes
+- バージョン bump：v0.1.10 → v0.1.11（csproj AssemblyVersion=0.1.11.0 / FileVersion=0.1.11.0 / MainWindow ステータスバー / MainViewModel 環境情報）
+- @plan-validator（致命1＝Read/ラベルの Choices 同一参照保証なしで黙って既定化／重要＝REG_SZ "0" 混在・live-apply は「API無し」断定でなく未検証ゆえ見送り）→ @cross-reviewer（**致命0**・手本と完全同型を確認）反映済み
+- 設計判断：①宣言的 Boolean でなく Command＋JSON 退避（未設定値を正しく戻すため）②型正規化（REG_SZ→REG_DWORD）は値の意味が保たれ Windows が期待する型に揃うため望ましい（CursorBaseSize v0.1.10 に続き2回目）③live-apply（WM_SETTINGCHANGE ブロードキャスト）は未検証ゆえ見送り・v0.1.12 検証候補
+- VM 実機検証は次の一手（HKCU・即戻せる低リスク）
+
+---
+
 ## [0.1.10] - 2026-06-04
 
 ### Added
