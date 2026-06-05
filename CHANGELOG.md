@@ -32,11 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - MainViewModel：`Enable/DisableMemoryCompressionCommand` ＋ `IsMemoryCompressionBusy`（実行中は二重起動を封じる）＋ AccessDenied は「管理者で実行し直して」案内。App.xaml.cs に DI 登録
   - xUnit：`MemoryCompressionHelperTests`（BuildCommand / Classify ・SystemProtection 同型）
 
+### Changed
+- **♻️ 権限不足判定を `ElevationClassifier` に一元化**（Rule of Three 解消・@cross-reviewer 監視指摘の対応）：`SystemProtectionHelper` と `MemoryCompressionHelper` に同一の権限不足キーワード集（7種）がコピー存在していたのを `Services/ElevationClassifier.LooksLikeAccessDenied` に集約。両 `Classify` は委譲に変更（enum マッピングは各自保持）。「片方だけキーワード追加して齟齬が出る」リスクを解消。`RestorePointService` は独自の狭い判定（挙動互換）のため対象外。`ElevationClassifierTests`（+16）→ **438 PASS**
+
 ### Notes
 - バージョン bump：v0.1.16 → v0.1.17（csproj 3箇所 / MainWindow / MainViewModel）
-- ⚠️ 実トグル（Enable/Disable-MMAgent の実行・権限不足時の実出力）は **VM 実機検証の領域**（管理者操作）。純粋関数は xUnit 済
 - @cross-reviewer 多角点検（セキュリティ/perf/UX/保守性/エッジ）：**致命・重要ゼロ**。ConfirmDestructive 不要判断（可逆性で分岐）・`-mc` スイッチ・冪等方式いずれも妥当と確認
-- 🔭 **監視のみ（次の宿題）**：`Classify` の権限不足キーワード集が `SystemProtectionHelper` と2クラスにコピー存在＝Rule of Three 到達。**今回は抽出せず（機能追加スコープ・回帰リスク回避）**だが、**Phase 4 着手前に共通化（`ElevationClassifier` 等）を判断**する。片方だけキーワード追加して齟齬が出るリスク源のため
+- ✅ **VM 実機検証 完了**（2026-06-05・[docs/テスト結果_2026-06-05_v0.1.17_VMメモリ圧縮.md](docs/テスト結果_2026-06-05_v0.1.17_VMメモリ圧縮.md)）：VM `WinKnobs-Test` で実トグル 全4経路 PASS（無効化 ON→OFF / no-op / 有効化 OFF→ON / no-op、いずれも ExitCode=0）。`Get-MMAgent.MemoryCompression` の True↔False を実測。no-op も ExitCode=0＝Classify が実挙動と一致＝**コード修正不要**
 - 残：Phase 4 リモートデスクトップ ON/OFF（🔴最高リスク・最後）
 
 ---
