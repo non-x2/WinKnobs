@@ -103,6 +103,7 @@ cd C:\AI\Claudo\アプリ\WinKnobs\scripts\ui_automation
 | `apply_registry` | T-REG-1/3/4：W1/W6/W5 の HKCU 書込→検証→戻し | **HKCU 書込発生** | ⚠️非推奨 | ✅ |
 | `apply_fsutil` | T-FSU-2/3：K1/K2 の fsutil 設定変更→検証→戻し | **fsutil 設定変更・管理者必須** | ❌ | ✅ |
 | `apply_v2` | T-V2-APPLY-PR1/PR2/PR3/N1：HKLM 書込＋netsh 変更 | **HKLM 書込＋netsh 変更・管理者必須** | ❌ | ✅ |
+| `maintenance_protection` | システムの保護 ON/OFF（v0.1.15/16）：ツールメニュー2項目→確認ダイアログ出現→ConfirmDestructive既定いいえ→いいえで非実行 | なし（「はい」を押さない・RPSessionInterval不変を確認） | ✅ | ✅ |
 
 > **bug1_regression は実適用が発生**します。ホスト直接実行はテスト用クリーン環境または VM で。
 

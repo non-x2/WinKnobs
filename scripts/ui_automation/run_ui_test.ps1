@@ -20,7 +20,7 @@ param(
     [ValidateSet("Local", "VM")]
     [string]$Mode = "Local",
 
-    [string[]]$TestCase = @("smoke", "dialog_open", "visual_ui", "dialog_choices", "dialog_inputs", "destructive_actions", "bug1_regression", "bug2_regression"),
+    [string[]]$TestCase = @("smoke", "dialog_open", "visual_ui", "dialog_choices", "dialog_inputs", "destructive_actions", "maintenance_protection", "bug1_regression", "bug2_regression"),
 
     [string]$ResultJson = "",
 
@@ -54,9 +54,14 @@ if ($Mode -eq "VM") {
         exit 1
     }
 
-    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $isAdmin) {
-        Write-Host "FATAL: VM モードは管理者 PowerShell 必須"
+    # 🆕 2026-06-05：昇格ガード緩和。VM 操作（PowerShell Direct / Copy-VMFile / Checkpoint-VM）は
+    # Hyper-V Administrators グループ所属だけで非昇格でも動作する（MS 公式 Ben Armstrong 明言・UAC フィルタ対象外 SID）。
+    # → 「完全管理者 OR Hyper-V Administrators（SID S-1-5-32-578）」を許可。実証：2026-06-05 非昇格で tc_maintenance_protection を VM 実行成功。
+    $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+    $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $isHyperVAdmin = $principal.IsInRole((New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-578")))
+    if (-not ($isAdmin -or $isHyperVAdmin)) {
+        Write-Host "FATAL: VM モードは『完全管理者 PowerShell』または『Hyper-V Administrators グループ所属』が必要です"
         exit 1
     }
 
@@ -100,7 +105,8 @@ if ($Mode -eq "VM") {
         @{ Source = "$scriptRoot\testcases\tc_startup_add.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_add.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_startup_delete.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_delete.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_startup_admin.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_admin.ps1" },
-        @{ Source = "$scriptRoot\testcases\tc_network_smoke.ps1"; Dest = "$VMScriptsDir\testcases\tc_network_smoke.ps1" }
+        @{ Source = "$scriptRoot\testcases\tc_network_smoke.ps1"; Dest = "$VMScriptsDir\testcases\tc_network_smoke.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_protection.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_protection.ps1" }
     )
     foreach ($f in $filesToCopy) {
         Copy-VMFile -Name $VMName -SourcePath $f.Source -DestinationPath $f.Dest -FileSource Host -Force
@@ -294,6 +300,7 @@ $tcFiles = @{
     "startup_delete"   = "tc_startup_delete.ps1" # R-3 削除（HKCU 事前作成→削除・cleanup あり）
     "startup_admin"    = "tc_startup_admin.ps1"  # R-3 HKLM 編集の昇格ダイアログ起動確認（管理者時は INFO スキップ）
     "network_smoke"    = "tc_network_smoke.ps1"  # v0.1.7 ネットワークカテゴリ 閲覧UI 動作確認（書込なし）
+    "maintenance_protection" = "tc_maintenance_protection.ps1"  # v0.1.15/16 システムの保護 ON/OFF 確認ダイアログ（非破壊・はい押さない・管理者不要）
 }
 
 foreach ($tc in $TestCase) {
@@ -406,6 +413,7 @@ foreach ($tc in $TestCase) {
         "startup_delete"   { "Invoke-StartupDelete" }
         "startup_admin"    { "Invoke-StartupAdmin" }
         "network_smoke"    { "Invoke-NetworkSmoke" }
+        "maintenance_protection" { "Invoke-MaintenanceProtection" }
     }
 
     Write-Log ("===== TestCase: " + $tc + " =====")
