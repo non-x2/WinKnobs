@@ -356,38 +356,71 @@ public partial class MainViewModel : ObservableObject
     // 既存「復元ポイントを作成」(CreateRestorePoint) と同じ作法（PowerShell 管理者・結果ダイアログ）。
     // 実行は SystemProtectionService（Enable/Disable-ComputerRestore）。最終確認は VM 実機検証（管理者操作）。
 
-    [RelayCommand]
-    private void EnableSystemProtection() => ToggleSystemProtection(true);
+    /// <summary>
+    /// システムの保護の切替が実行中か（v0.1.16 cross-reviewer 重要②）。
+    /// true の間は Enable/Disable 両コマンドを CanExecute=false で封じ、PowerShell の二重起動を防ぐ。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableSystemProtectionCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableSystemProtectionCommand))]
+    private bool _isSystemProtectionBusy;
 
-    [RelayCommand]
-    private void DisableSystemProtection() => ToggleSystemProtection(false);
+    private bool CanToggleSystemProtection() => !IsSystemProtectionBusy;
 
-    private void ToggleSystemProtection(bool enable)
+    [RelayCommand(CanExecute = nameof(CanToggleSystemProtection))]
+    private Task EnableSystemProtection() => ToggleSystemProtection(true);
+
+    [RelayCommand(CanExecute = nameof(CanToggleSystemProtection))]
+    private Task DisableSystemProtection() => ToggleSystemProtection(false);
+
+    private async Task ToggleSystemProtection(bool enable)
     {
         var verb = enable ? "有効" : "無効";
         var msg = enable
             ? "システムの保護（システムの復元）を C ドライブで有効にします。\n（管理者権限が必要）\n\n有効にすると復元ポイントを作成できるようになります。\n続行しますか？"
             : "システムの保護（システムの復元）を C ドライブで無効にします。\n（管理者権限が必要）\n\n⚠️ 無効にすると、既存の復元ポイントが削除され、新しい復元ポイントを作成できなくなります。\n続行しますか？";
-        var ok = _dialogs.Confirm(msg, $"システムの保護を{verb}化");
+        // 無効化＝既存の復元ポイント全削除（不可逆）。既定ボタン「いいえ」の ConfirmDestructive で
+        // Enter 連打等の誤操作による誤爆を防ぐ（v0.1.16 cross-reviewer 重要①・設計ドラフト v0.1.14 の要件）。
+        var ok = enable
+            ? _dialogs.Confirm(msg, $"システムの保護を{verb}化")
+            : _dialogs.ConfirmDestructive(msg, $"システムの保護を{verb}化");
         if (!ok) return;
 
-        var result = _systemProtection.SetProtection(enable, out var err);
-        switch (result)
+        IsSystemProtectionBusy = true;
+        StatusMessage = $"⏳ システムの保護を{verb}化しています…";
+        try
         {
-            case SystemProtectionOutcome.Success:
-                _dialogs.Info($"✅ システムの保護を{verb}にしました。", "成功");
-                StatusMessage = $"✅ システムの保護を{verb}化";
-                break;
-            case SystemProtectionOutcome.AccessDenied:
-                _dialogs.Warn(
-                    "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
-                    "権限不足");
-                StatusMessage = "❌ 権限不足（管理者が必要）";
-                break;
-            default:
-                _dialogs.Error($"システムの保護の{verb}化に失敗しました：\n{err}", "失敗");
-                StatusMessage = $"❌ {verb}化失敗";
-                break;
+            // UI スレッドを最大 60 秒ブロックしないよう別スレッドで実行（v0.1.16 cross-reviewer 重要②）。
+            // out 引数はラムダ内ローカルで受け、タプルで返す。
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _systemProtection.SetProtection(enable, out var e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case SystemProtectionOutcome.Success:
+                    _dialogs.Info($"✅ システムの保護を{verb}にしました。", "成功");
+                    StatusMessage = $"✅ システムの保護を{verb}化";
+                    break;
+                case SystemProtectionOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                default:
+                    // err が空（無音で異常終了）でも「失敗しました：」だけにならないようフォールバック（cross-reviewer 軽微④）。
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error($"システムの保護の{verb}化に失敗しました：\n{detail}", "失敗");
+                    StatusMessage = $"❌ {verb}化失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsSystemProtectionBusy = false;
         }
     }
 
@@ -432,7 +465,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.15\n" +
+            "🪟 WinKnobs v0.1.16\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +

@@ -23,11 +23,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.16] - 2026-06-05
+
+### Fixed
+- **🔒 システムの保護「無効化」の誤爆防止**（cross-reviewer 重要①）：無効化の確認を `Confirm`（既定＝はい）から `ConfirmDestructive`（既定＝いいえ・⚠アイコン）へ。Enter 連打等の誤操作で既存の復元ポイントが全削除される事故を防ぐ。設計ドラフト v0.1.14 の「ConfirmDestructive 必須」要件の実装漏れを是正（有効化は非破壊のため `Confirm` のまま）
+- **⏳ UI フリーズ＋二重起動の防止**（cross-reviewer 重要②）：`SetProtection`（最大60秒ブロック）を `await Task.Run(...)` で別スレッド化し UI スレッドの「応答なし」を解消。`IsSystemProtectionBusy` ＋ `CanExecute` で実行中は Enable/Disable を封じ、PowerShell の二重起動を防止。処理中は「⏳ …化しています…」を表示
+- **🧹 タイムアウト時のプロセスリーク防止**（cross-reviewer 軽微③）：`WaitForExit(60s)` 失敗時に `p.Kill(entireProcessTree: true)` で powershell.exe を確実終了（best-effort）
+- **🈳 失敗ダイアログのフォールバック**（cross-reviewer 軽微④）：失敗時に出力が空でも「失敗しました：」だけにならないよう「（詳細不明）」を表示
+- **📝 ドキュメント修正**（cross-reviewer 軽微⑤）：[0.1.15] のメニュー記載「ファイル」→正しくは「ツール」
+
+### Notes
+- バージョン bump：v0.1.15 → v0.1.16（csproj 3箇所 / MainWindow / MainViewModel）
+- v0.1.15 の @cross-reviewer 再点検（観点別5並列＋敵対的検証・26指摘）の反映。**致命ゼロを確認**（前回「日本語 stderr 文字化け」は今回も誤検知と再確定）。重要2件＋軽微3件を本リリースで修正
+- 監視のみ（今回スコープ外・記録）：Classify "administrator" 過広一致（exitCode!=0 前提で実害低）／ no-op 時 ExitCode（VM 管理者検証で確認）／ Contains 重複（Rule of Three 未達）／ `RestorePointService` も同型のタイムアウトリーク・同期ブロック（横展開候補）
+
+---
+
 ## [0.1.15] - 2026-06-04
 
 ### Added
 - **🛠 システム・メンテナンス「システムの保護（システムの復元）ON/OFF」**（Phase 2・メニューコマンド）
-  - 「ファイル」メニューの「復元ポイントを作成」の隣に「システムの保護を有効にする / 無効にする (要管理者)」を追加。既存 `RestorePointService` と同じ作法（PowerShell・結果ダイアログ）を再利用
+  - 「ツール」メニューの「復元ポイントを作成」の隣に「システムの保護を有効にする / 無効にする (要管理者)」を追加。既存 `RestorePointService` と同じ作法（PowerShell・結果ダイアログ）を再利用
   - 実行：PowerShell `Enable-ComputerRestore` / `Disable-ComputerRestore -Drive 'C:\'`（**要管理者権限**）。管理者なしで失敗時は「管理者として実行し直して」と案内
   - ⚠️ 無効化の確認ダイアログに「既存の復元ポイントが削除される」旨を明記。確認必須
   - 新規 `Services/SystemProtectionHelper.cs`（純粋関数：NormalizeDrive / BuildCommand / Classify ＋ `SystemProtectionOutcome` enum）＋ `Services/SystemProtectionService.cs`（RestorePointService 同型・PowerShell 60秒タイムアウト）

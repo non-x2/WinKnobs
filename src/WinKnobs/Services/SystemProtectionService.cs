@@ -52,6 +52,8 @@ public class SystemProtectionService
             // 注意：大量出力するコマンドでは stdout/stderr パイプバッファ充填でデッドロックしうる（本サービスは小出力前提）。
             if (!p.WaitForExit(60_000))
             {
+                // タイムアウト時は powershell.exe を確実に終了させる（プロセスリーク防止・cross-reviewer 軽微③）。
+                try { p.Kill(entireProcessTree: true); } catch { /* 既に終了済み等は無視（best-effort） */ }
                 errorMessage = "システムの保護の切り替えがタイムアウトしました（60秒）。";
                 return SystemProtectionOutcome.Failed;
             }
