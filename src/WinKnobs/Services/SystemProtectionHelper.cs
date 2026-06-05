@@ -60,19 +60,10 @@ public static class SystemProtectionHelper
     {
         if (exitCode == 0) return SystemProtectionOutcome.Success;
 
-        var s = output ?? string.Empty;
-        if ((Contains(s, "access") && Contains(s, "denied")) ||
-            (Contains(s, "アクセス") && Contains(s, "拒否")) ||
-            Contains(s, "administrator") ||
-            Contains(s, "管理者") ||
-            Contains(s, "elevat") ||                 // requires elevation / elevated
-            Contains(s, "PrivilegeNotHeld") ||
-            Contains(s, "UnauthorizedAccess"))
+        // 権限不足キーワード集は ElevationClassifier に一元化（v0.1.17 で重複解消・MemoryCompression と共有）。
+        if (ElevationClassifier.LooksLikeAccessDenied(output))
             return SystemProtectionOutcome.AccessDenied;
 
         return SystemProtectionOutcome.Failed;
     }
-
-    private static bool Contains(string s, string keyword)
-        => s.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0;
 }
