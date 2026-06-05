@@ -163,3 +163,7 @@ docs/v0.2_候補項目集_v1.md
 
 # スタートアップ系 設計書（OSS 化可能だが計画書とセット運用のため除外）
 docs/スタートアップ系_設計書_v1.md
+
+# VM 作業の一時ログ（前セッション残骸・追跡しない）
+scripts/move_vm_log.txt
+scripts/*_vm_log.txt

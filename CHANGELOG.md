@@ -23,6 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.18] - 2026-06-05（コード層実装・**VM 実機検証は未／push 未**）
+
+### Added
+- **🛠 システム・メンテナンス Phase 4「リモートデスクトップ ON/OFF」（🔴Red・段階リリース第1弾＝無効化のみ）**：ツールメニューに「リモートデスクトップを無効にする (要管理者・🔴)」を追加（メモリ圧縮の隣・AutomationId `MenuDisableRemoteDesktop`）。WinKnobs 初の 🔴Red トグル。**非対称設計＝v0.1.18 は無効化(OFF)のみ**（攻撃面を閉じる安全方向）。有効化(ON)は v0.1.19（強警告UI＋接続往復VM検証込み）。
+  - 新規 `Services/RemoteDesktopHelper.cs`（純粋関数 `BuildDisableCommand` / `Classify`＝ElevationClassifier 再利用 / `IsRdpHostCapableEdition` ホワイトリスト ＋ `RemoteDesktopOutcome` enum）＋ `Services/RemoteDesktopService.cs`（MemoryCompressionService 同型・60秒タイムアウト・別スレッド・`IsCurrentSessionRemote`/`IsPolicyManaged`/`IsHostCapableEdition` の3判定）
+  - MainViewModel：`DisableRemoteDesktopCommand`＋`IsRemoteDesktopBusy`＋`DisableRemoteDesktop`。①Home 等ホスト非対応エディションは安全 no-op＋説明 ②GPO/MDM 管理中は変更不可案内 ③**自己セッション判定（リモート接続中なら「⚠️あなたは今リモート接続中です」強警告・既定いいえ）** ④通常時も `ConfirmDestructive`（既定いいえ）。App.xaml.cs に DI 登録
+  - 新規 `RemoteDesktopHelperTests`（+31）→ build 0/0・**xUnit 469 PASS**。起動スモーク（DI解決・クラッシュなし）OK
+
+### Changed
+- **実機照合で設計を修正（netsh → PowerShell）**：当初設計は FW を netsh `name=<安定ID>` で言語非依存に叩く想定だったが、**実機で netsh の `name=`/`group=` はローカライズされた表示名を取る**（安定IDでヒットしない）と判明。→ FW は PowerShell `Disable-NetFirewallRule -Name <安定ID>`（言語非依存）＋ fDeny を1つの `powershell.exe -Command` で実行（Phase 2/3 同型）。結果 ExitCode で分類でき `Classify(exitCode, output)` に統一（設計が避けようとした例外分類は不要に＝むしろ単純化）。順序は FW→fDeny の外→内・fail-closed
+- バージョン bump：v0.1.17 → v0.1.18（csproj 3箇所）。**併せて v0.1.17 で更新漏れだった UI 版表示2箇所**（MainWindow ステータスバー・MainViewModel バージョン情報＝いずれも v0.1.16 のままだった）を v0.1.18 に修正
+
+### Notes
+- スコープ判断（のんさん承認 1-①/2-Ⓐ）：v0.1.18 は「無効化＋強確認」のみ（メモリ圧縮と同型の軽スコープ）。状態表示/Home グレーアウトは v0.1.18.1 へ。**退避/RevertAll は持たない**（OFF は安全方向・Windows 設定から可逆＝メモリ圧縮同様。退避は ON を足す v0.1.19 で導入）
+- ⚠️ **次セッション必須**：VM 実機検証（実 Disable→fDeny=1・FW無効・fail-closed・GPO・既存セッション切断挙動）＋ @cross-reviewer ＋ push（のんさん承認）
+
+---
+
 ## [0.1.17] - 2026-06-05
 
 ### Added

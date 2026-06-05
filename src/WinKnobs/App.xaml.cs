@@ -39,6 +39,7 @@ public partial class App : Application
                 services.AddSingleton<RestorePointService>();
                 services.AddSingleton<SystemProtectionService>();   // v0.1.15 システム・メンテナンス Phase 2
                 services.AddSingleton<MemoryCompressionService>();   // v0.1.17 システム・メンテナンス Phase 3
+                services.AddSingleton<RemoteDesktopService>();        // v0.1.18 システム・メンテナンス Phase 4（🔴Red・無効化のみ）
                 services.AddSingleton<ThemeService>();
                 services.AddSingleton<ExternalLauncherService>();
                 services.AddSingleton<NetworkService>();      // v0.1.7：ネットワーク機能

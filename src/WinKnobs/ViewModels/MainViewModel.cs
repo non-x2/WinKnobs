@@ -29,6 +29,7 @@ public partial class MainViewModel : ObservableObject
     private readonly RestorePointService _restore;
     private readonly SystemProtectionService _systemProtection;
     private readonly MemoryCompressionService _memoryCompression;
+    private readonly RemoteDesktopService _remoteDesktop;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -102,6 +103,7 @@ public partial class MainViewModel : ObservableObject
         RestorePointService restore,
         SystemProtectionService systemProtection,
         MemoryCompressionService memoryCompression,
+        RemoteDesktopService remoteDesktop,
         RegistryService registry,
         StartupListViewModel startupListVM,
         NetworkListViewModel networkListVM)
@@ -114,6 +116,7 @@ public partial class MainViewModel : ObservableObject
         _restore = restore;
         _systemProtection = systemProtection;
         _memoryCompression = memoryCompression;
+        _remoteDesktop = remoteDesktop;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
@@ -496,6 +499,111 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // -------- リモートデスクトップ 無効化：v0.1.18 システム・メンテナンス Phase 4（🔴Red） --------
+    // メモリ圧縮(ToggleMemoryCompression) と同型（powershell 管理者・別スレッド・結果ダイアログ）。
+    // 実行は RemoteDesktopService（FW 無効化＋fDeny=1・外→内・fail-closed）。
+    // v0.1.18 は「無効化(OFF)」のみ＝攻撃面を閉じる安全方向。有効化(ON)は v0.1.19（強警告UI＋接続往復VM検証込み）。
+    // 🔴 唯一の本物の締め出し経路＝「自分がリモート接続中に無効化」。必ず自己セッション判定で強警告（ConfirmDestructive 既定いいえ）。
+
+    /// <summary>
+    /// リモートデスクトップ無効化が実行中か。true の間は Disable コマンドを CanExecute=false で封じ、
+    /// powershell の二重起動を防ぐ（SystemProtection / MemoryCompression 同様）。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(DisableRemoteDesktopCommand))]
+    private bool _isRemoteDesktopBusy;
+
+    private bool CanToggleRemoteDesktop() => !IsRemoteDesktopBusy;
+
+    [RelayCommand(CanExecute = nameof(CanToggleRemoteDesktop))]
+    private async Task DisableRemoteDesktop()
+    {
+        // 1) ホスト非対応エディション（Home 等）＝RDP を受けられない。安全に no-op＋説明（押せるが害なし）。
+        if (!_remoteDesktop.IsHostCapableEdition())
+        {
+            _dialogs.Info(
+                "このエディションの Windows は、リモートデスクトップの「受け側（ホスト）」になれません（Pro 以上が必要）。\n" +
+                "そのため無効化の操作は不要です。",
+                "リモートデスクトップ");
+            return;
+        }
+
+        // 2) GPO/MDM ポリシー管理中＝このツールでは変更できない（書いても効かない/戻される）。
+        if (_remoteDesktop.IsPolicyManaged())
+        {
+            _dialogs.Warn(
+                "リモートデスクトップは、グループポリシー（GPO/MDM）で管理されています。\n" +
+                "WinKnobs からは変更できません。組織の管理者にご確認ください。",
+                "ポリシー管理中");
+            return;
+        }
+
+        // 3) 自己セッション判定。リモート接続中なら強警告（既定いいえ）。これが v0.1.18 唯一の締め出しガード。
+        bool ok;
+        if (_remoteDesktop.IsCurrentSessionRemote())
+        {
+            ok = _dialogs.ConfirmDestructive(
+                "【重要】あなたは今このPCに『リモート接続』して操作しています。\n\n" +
+                "リモートデスクトップを無効にすると、この接続が切断され、\n" +
+                "このPCの前で直接操作しないと元に戻せなくなる可能性があります。\n\n" +
+                "それでも続行しますか？（推奨：いいえ）",
+                "⚠️ あなたは今リモート接続中です");
+        }
+        else
+        {
+            ok = _dialogs.ConfirmDestructive(
+                "リモートデスクトップを無効にします。（管理者権限が必要）\n\n" +
+                "外部からこのPCへの接続を受け付けなくなります（防御的な操作です）。\n" +
+                "ファイアウォールのリモートデスクトップ規則も同時に閉じます。\n" +
+                "※ Windows Defender ファイアウォールの該当規則のみが対象です。\n\n" +
+                "再び有効にしたい場合は Windows の「設定 > システム > リモート デスクトップ」から行えます。\n\n" +
+                "続行しますか？",
+                "リモートデスクトップを無効化");
+        }
+        if (!ok) return;
+
+        IsRemoteDesktopBusy = true;
+        StatusMessage = "⏳ リモートデスクトップを無効化しています…";
+        try
+        {
+            // UI スレッドを最大 60 秒ブロックしないよう別スレッドで実行（SystemProtection / MemoryCompression 同様）。
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _remoteDesktop.Disable(out var e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case RemoteDesktopOutcome.Success:
+                    _dialogs.Info(
+                        "✅ リモートデスクトップを無効にしました。\n外部からの接続を受け付けません。",
+                        "成功");
+                    StatusMessage = "✅ リモートデスクトップを無効化";
+                    break;
+                case RemoteDesktopOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                default:
+                    // fail-closed：FW は閉じられた可能性が高いが OS 側 fDeny が未書込のことがある旨を添える（cross-reviewer 軽微同様のフォールバック）。
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error(
+                        $"リモートデスクトップの無効化に失敗しました：\n{detail}\n\n" +
+                        "（ファイアウォールは閉じられた可能性があります。OS 側の拒否設定は管理者で再実行してください）",
+                        "失敗");
+                    StatusMessage = "❌ 無効化失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsRemoteDesktopBusy = false;
+        }
+    }
+
     // -------- ヘルプメニュー --------
     [RelayCommand]
     private void CopyEnvironmentInfo()
@@ -537,7 +645,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.16\n" +
+            "🪟 WinKnobs v0.1.18\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
