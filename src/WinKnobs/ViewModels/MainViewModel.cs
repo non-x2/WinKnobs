@@ -28,6 +28,7 @@ public partial class MainViewModel : ObservableObject
     private readonly BackupService _backup;
     private readonly RestorePointService _restore;
     private readonly SystemProtectionService _systemProtection;
+    private readonly MemoryCompressionService _memoryCompression;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -100,6 +101,7 @@ public partial class MainViewModel : ObservableObject
         BackupService backup,
         RestorePointService restore,
         SystemProtectionService systemProtection,
+        MemoryCompressionService memoryCompression,
         RegistryService registry,
         StartupListViewModel startupListVM,
         NetworkListViewModel networkListVM)
@@ -111,6 +113,7 @@ public partial class MainViewModel : ObservableObject
         _backup = backup;
         _restore = restore;
         _systemProtection = systemProtection;
+        _memoryCompression = memoryCompression;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
@@ -421,6 +424,75 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             IsSystemProtectionBusy = false;
+        }
+    }
+
+    // -------- メモリ圧縮 ON/OFF：v0.1.17 システム・メンテナンス Phase 3 --------
+    // システムの保護(ToggleSystemProtection) と同型（PowerShell 管理者・別スレッド・結果ダイアログ）。
+    // 実行は MemoryCompressionService（Enable/Disable-MMAgent -mc）。最終確認は VM 実機検証（管理者操作）。
+    // メモリ圧縮は有効化/無効化とも可逆（データ消失なし）＝両方とも通常 Confirm（ConfirmDestructive 不要）。
+
+    /// <summary>
+    /// メモリ圧縮の切替が実行中か。true の間は Enable/Disable 両コマンドを CanExecute=false で封じ、
+    /// PowerShell の二重起動を防ぐ（SystemProtection 同様）。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableMemoryCompressionCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableMemoryCompressionCommand))]
+    private bool _isMemoryCompressionBusy;
+
+    private bool CanToggleMemoryCompression() => !IsMemoryCompressionBusy;
+
+    [RelayCommand(CanExecute = nameof(CanToggleMemoryCompression))]
+    private Task EnableMemoryCompression() => ToggleMemoryCompression(true);
+
+    [RelayCommand(CanExecute = nameof(CanToggleMemoryCompression))]
+    private Task DisableMemoryCompression() => ToggleMemoryCompression(false);
+
+    private async Task ToggleMemoryCompression(bool enable)
+    {
+        var verb = enable ? "有効" : "無効";
+        // 中立説明（一律推奨しない・feedback_no_text_scaling 同様の中立方針）。
+        var msg = enable
+            ? "メモリ圧縮を有効にします。\n（管理者権限が必要）\n\nメモリを圧縮して空きを増やす機能です。\n続行しますか？"
+            : "メモリ圧縮を無効にします。\n（管理者権限が必要）\n\nRAM の大きい PC では切ると CPU 負荷が減ることがあります。\nいつでも有効に戻せます。\n続行しますか？";
+        // 有効化/無効化とも可逆（再トグルで戻せる・データ消失なし）＝通常 Confirm でよい。
+        var ok = _dialogs.Confirm(msg, $"メモリ圧縮を{verb}化");
+        if (!ok) return;
+
+        IsMemoryCompressionBusy = true;
+        StatusMessage = $"⏳ メモリ圧縮を{verb}化しています…";
+        try
+        {
+            // UI スレッドを最大 60 秒ブロックしないよう別スレッドで実行（SystemProtection 同様）。
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _memoryCompression.SetCompression(enable, out var e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case MemoryCompressionOutcome.Success:
+                    _dialogs.Info($"✅ メモリ圧縮を{verb}にしました。", "成功");
+                    StatusMessage = $"✅ メモリ圧縮を{verb}化";
+                    break;
+                case MemoryCompressionOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                default:
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error($"メモリ圧縮の{verb}化に失敗しました：\n{detail}", "失敗");
+                    StatusMessage = $"❌ {verb}化失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsMemoryCompressionBusy = false;
         }
     }
 

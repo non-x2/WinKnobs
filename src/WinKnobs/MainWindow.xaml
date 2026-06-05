@@ -86,6 +86,8 @@
                 <MenuItem x:Name="MenuCreateRestorePoint" Header="復元ポイントを作成"      Command="{Binding CreateRestorePointCommand}"                       AutomationProperties.AutomationId="MenuCreateRestorePoint"/>
                 <MenuItem x:Name="MenuEnableSystemProtection"  Header="システムの保護を有効にする (要管理者)"  Command="{Binding EnableSystemProtectionCommand}"  AutomationProperties.AutomationId="MenuEnableSystemProtection"/>
                 <MenuItem x:Name="MenuDisableSystemProtection" Header="システムの保護を無効にする (要管理者)" Command="{Binding DisableSystemProtectionCommand}" AutomationProperties.AutomationId="MenuDisableSystemProtection"/>
+                <MenuItem x:Name="MenuEnableMemoryCompression"  Header="メモリ圧縮を有効にする (要管理者)"  Command="{Binding EnableMemoryCompressionCommand}"  AutomationProperties.AutomationId="MenuEnableMemoryCompression"/>
+                <MenuItem x:Name="MenuDisableMemoryCompression" Header="メモリ圧縮を無効にする (要管理者)" Command="{Binding DisableMemoryCompressionCommand}" AutomationProperties.AutomationId="MenuDisableMemoryCompression"/>
                 <Separator/>
                 <MenuItem x:Name="MenuLogoff"           Header="ログオフ"                  Command="{Binding LogoffCommand}"                                    AutomationProperties.AutomationId="MenuLogoff"/>
                 <MenuItem x:Name="MenuRestart"          Header="再起動"                    Command="{Binding RestartCommand}"                                   AutomationProperties.AutomationId="MenuRestart"/>

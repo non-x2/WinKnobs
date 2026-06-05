@@ -14,12 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - v0.2.0：Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）
+  - v0.2.0：Quick Win 4 項目（Power Throttling / Sysmain / 夜間モード / 透明効果）※メモリ圧縮は v0.1.17 で前倒し実装済
   - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目
   - v0.2.2：IME / 音声 / Network 完成 6 項目
   - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.1.17] - 2026-06-05
+
+### Added
+- **🛠 システム・メンテナンス Phase 3「メモリ圧縮 ON/OFF」**：ツールメニューに「メモリ圧縮を有効/無効にする (要管理者)」2項目を追加（システムの保護の隣・AutomationId 付）。PowerShell `Enable-MMAgent -mc` / `Disable-MMAgent -mc` を呼ぶ（要管理者）。`docs/v0.2_候補項目集` の Quick Win から前倒し実装（二重計上回避のため v0.2.0 リストから削除）
+  - 新規 `Services/MemoryCompressionHelper.cs`（純粋関数 `BuildCommand` / `Classify` ＋ `MemoryCompressionOutcome` enum）＋ `Services/MemoryCompressionService.cs`（SystemProtectionService 同型・60秒タイムアウト・別スレッド実行・プロセスリーク防止）
+  - メモリ圧縮は有効化/無効化とも**可逆（再トグルで戻せる・データ消失なし）**＝両方とも通常 `Confirm`（ConfirmDestructive 不要）。説明は中立（一律推奨しない）
+  - MainViewModel：`Enable/DisableMemoryCompressionCommand` ＋ `IsMemoryCompressionBusy`（実行中は二重起動を封じる）＋ AccessDenied は「管理者で実行し直して」案内。App.xaml.cs に DI 登録
+  - xUnit：`MemoryCompressionHelperTests`（BuildCommand / Classify ・SystemProtection 同型）
+
+### Notes
+- バージョン bump：v0.1.16 → v0.1.17（csproj 3箇所 / MainWindow / MainViewModel）
+- ⚠️ 実トグル（Enable/Disable-MMAgent の実行・権限不足時の実出力）は **VM 実機検証の領域**（管理者操作）。純粋関数は xUnit 済
+- @cross-reviewer 多角点検（セキュリティ/perf/UX/保守性/エッジ）：**致命・重要ゼロ**。ConfirmDestructive 不要判断（可逆性で分岐）・`-mc` スイッチ・冪等方式いずれも妥当と確認
+- 🔭 **監視のみ（次の宿題）**：`Classify` の権限不足キーワード集が `SystemProtectionHelper` と2クラスにコピー存在＝Rule of Three 到達。**今回は抽出せず（機能追加スコープ・回帰リスク回避）**だが、**Phase 4 着手前に共通化（`ElevationClassifier` 等）を判断**する。片方だけキーワード追加して齟齬が出るリスク源のため
+- 残：Phase 4 リモートデスクトップ ON/OFF（🔴最高リスク・最後）
 
 ---
 
