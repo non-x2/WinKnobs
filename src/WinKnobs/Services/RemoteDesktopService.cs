@@ -46,6 +46,12 @@ public class RemoteDesktopService
     /// RDP が GPO/MDM ポリシーで管理（強制）されているか。
     /// ポリシーキーに fDenyTSConnections 値が存在すれば、`Control\Terminal Server` を書いても効かない／戻されるため
     /// 本ツールでは変更不可。存在すれば true。
+    ///
+    /// ■ 既知の限界（cross-reviewer 重要①・2026-06-06）：本判定は fDenyTSConnections ポリシーのみを見る。
+    ///   GPO/MDM が**ファイアウォールを別経路で管理**している環境では、本ツールが Defender FW の該当規則を
+    ///   無効化しても GPO が規則を開いたまま／開け直すことがあり、攻撃面が閉じきらない場合がある。
+    ///   （確認ダイアログに「※ Windows Defender ファイアウォールの該当規則のみが対象」と明記済み。
+    ///    GPO による FW 強制の検出は v0.1.18 のスコープ外＝割り切り。）
     /// </summary>
     public bool IsPolicyManaged()
     {

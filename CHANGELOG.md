@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.18] - 2026-06-05（コード層実装・**VM 実機検証は未／push 未**）
+## [0.1.18] - 2026-06-06（リモートデスクトップ無効化・**VM 実機検証 PASS／@cross-reviewer 致命0 完了**）
 
 ### Added
 - **🛠 システム・メンテナンス Phase 4「リモートデスクトップ ON/OFF」（🔴Red・段階リリース第1弾＝無効化のみ）**：ツールメニューに「リモートデスクトップを無効にする (要管理者・🔴)」を追加（メモリ圧縮の隣・AutomationId `MenuDisableRemoteDesktop`）。WinKnobs 初の 🔴Red トグル。**非対称設計＝v0.1.18 は無効化(OFF)のみ**（攻撃面を閉じる安全方向）。有効化(ON)は v0.1.19（強警告UI＋接続往復VM検証込み）。
@@ -37,7 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 - スコープ判断（のんさん承認 1-①/2-Ⓐ）：v0.1.18 は「無効化＋強確認」のみ（メモリ圧縮と同型の軽スコープ）。状態表示/Home グレーアウトは v0.1.18.1 へ。**退避/RevertAll は持たない**（OFF は安全方向・Windows 設定から可逆＝メモリ圧縮同様。退避は ON を足す v0.1.19 で導入）
-- ⚠️ **次セッション必須**：VM 実機検証（実 Disable→fDeny=1・FW無効・fail-closed・GPO・既存セッション切断挙動）＋ @cross-reviewer ＋ push（のんさん承認）
+- ✅ **VM 実機検証 完了（2026-06-06）**：Hyper-V `WinKnobs-Test` で実 Disable→`fDenyTSConnections` 0→1・FW 規則 True→False を実測。no-op も ExitCode=0（冪等）。全経路 PASS・baseline 復帰・CP 削除済（[テスト結果](docs/テスト結果_2026-06-06_v0.1.18_VMリモートデスクトップ.md)・スクリプト `scripts/_vm_remotedesktop_verify.ps1`）
+- ✅ **@cross-reviewer 完了（2026-06-06）**：🔴最高リスク機能を5観点でレビュー → **致命0**。重要3点（GPO×FW別管理の限界／出力読み順デッドロック潜在／fail-closed 中途半端状態）はいずれもロジック修正不要（文言・コメント・実機実証で対応）。軽微1（Failed 文言）反映済
+- ✅ **UIA 非破壊テスト追加**：`tc_maintenance_remotedesktop`（確認ダイアログ出現＋既定いいえ＋いいえで非実行＋fDeny 不変・🔴締め出し防止）。ランナー登録済
+- 軽微 fix：Failed 時の文言を「FW は閉じた前提」→「一部または全部 適用されていない可能性」に緩和（cross-reviewer 軽微④）。`IsPolicyManaged` に GPO×FW 別管理の既知の限界コメントを追記（重要①）
 
 ---
 

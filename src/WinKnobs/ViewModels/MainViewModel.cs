@@ -588,11 +588,13 @@ public partial class MainViewModel : ObservableObject
                     StatusMessage = "❌ 権限不足（管理者が必要）";
                     break;
                 default:
-                    // fail-closed：FW は閉じられた可能性が高いが OS 側 fDeny が未書込のことがある旨を添える（cross-reviewer 軽微同様のフォールバック）。
+                    // fail-closed：途中失敗ではロールバックしない（防御方向）。ただし FW 規則の無効化自体が
+                    // 失敗（規則名不在等）した場合は FW が閉じていないこともあるため「閉じた前提」とは断定しない。
                     var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
                     _dialogs.Error(
                         $"リモートデスクトップの無効化に失敗しました：\n{detail}\n\n" +
-                        "（ファイアウォールは閉じられた可能性があります。OS 側の拒否設定は管理者で再実行してください）",
+                        "（ファイアウォール規則や OS の拒否設定が、一部または全部 適用されていない可能性があります。\n" +
+                        "Windows の設定でリモートデスクトップの状態を確認してください）",
                         "失敗");
                     StatusMessage = "❌ 無効化失敗";
                     break;
