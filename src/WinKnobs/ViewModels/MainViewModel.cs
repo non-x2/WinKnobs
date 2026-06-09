@@ -122,6 +122,9 @@ public partial class MainViewModel : ObservableObject
         StartupListVM = startupListVM;
         NetworkListVM = networkListVM;
 
+        // v0.1.19：ON 退避の有無を起動時に 1 回読む（「元に戻す」メニューの初期活性判定）。
+        _hasRdpBackup = _backup.HasMaintenanceOriginal(RemoteDesktopService.FeatureKey);
+
         // テーマ初期化＋変更追従（2026-05-16：MenuItem IsChecked 連動）
         _currentThemeMode = _theme.CurrentMode;
         _theme.ThemeChanged += mode => CurrentThemeMode = mode;
@@ -511,9 +514,34 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(DisableRemoteDesktopCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EnableRemoteDesktopCommand))]   // v0.1.19：ON も同じ排他で封じる
+    [NotifyCanExecuteChangedFor(nameof(RestoreRemoteDesktopCommand))]  // v0.1.19：元に戻すも実行中は封じる
     private bool _isRemoteDesktopBusy;
 
     private bool CanToggleRemoteDesktop() => !IsRemoteDesktopBusy;
+
+    /// <summary>
+    /// v0.1.19：ON 用の退避（first-touch）が存在するか＝「リモートデスクトップを元に戻す」が使えるか。
+    /// CommandManager の頻繁な再評価でディスクを叩かないようキャッシュし、各コマンド完了時に <see cref="RefreshRdpBackupState"/> で更新する。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RestoreRemoteDesktopCommand))]
+    private bool _hasRdpBackup;
+
+    /// <summary>
+    /// v0.1.19：ホスト対応エディションかのキャッシュ（plan-validator #6）。
+    /// <see cref="EnvironmentInfoService.Collect"/> はフル収集で重く、CanExecute は頻繁に再評価されるため
+    /// エディション（実行中に変わらない）を 1 回だけ取得して使い回す。
+    /// </summary>
+    private bool? _rdpHostCapableCache;
+    private bool RdpHostCapable() => _rdpHostCapableCache ??= _remoteDesktop.IsHostCapableEdition();
+
+    /// <summary>退避の有無を 1 回だけ読み直して <see cref="HasRdpBackup"/> に反映（ユーザー操作ごと＝ホットパス外）。</summary>
+    private void RefreshRdpBackupState()
+    {
+        try { HasRdpBackup = _backup.HasMaintenanceOriginal(RemoteDesktopService.FeatureKey); }
+        catch { /* 読めない時は据え置き */ }
+    }
 
     [RelayCommand(CanExecute = nameof(CanToggleRemoteDesktop))]
     private async Task DisableRemoteDesktop()
@@ -606,6 +634,182 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // -------- リモートデスクトップ 有効化（ON）：v0.1.19 システム・メンテナンス Phase 4（🔴Red 最終弾） --------
+    // plan-validator #3（スレッド順序の固定）：
+    //   ① UI スレッドで ReadStatus → ② UI スレッドで Red ダイアログ ShowDialog（Task.Run 内での UI 生成は即例外）
+    //   → ③ 同意時のみ await Task.Run(Enable) → ④ await 後 UI スレッドで結果表示。
+    //   IsRemoteDesktopBusy は**ダイアログ表示中から**立てる（表示中の再 Invoke も封じる）。
+    // CanExecute（問3-A）：Home/ポリシー管理時は自動グレー（RdpHostCapable キャッシュ＋IsPolicyManaged）。
+
+    private bool CanEnableRemoteDesktop()
+        => !IsRemoteDesktopBusy && RdpHostCapable() && !_remoteDesktop.IsPolicyManaged();
+
+    [RelayCommand(CanExecute = nameof(CanEnableRemoteDesktop))]
+    private async Task EnableRemoteDesktop()
+    {
+        // defense-in-depth（通常は CanExecute でグレーだが、念のため UI スレッドで再ガード）。
+        if (!RdpHostCapable())
+        {
+            _dialogs.Info(
+                "このエディションの Windows は、リモートデスクトップの「受け側（ホスト）」になれません（Pro 以上が必要）。",
+                "リモートデスクトップ");
+            return;
+        }
+        if (_remoteDesktop.IsPolicyManaged())
+        {
+            _dialogs.Warn(
+                "リモートデスクトップは、グループポリシー（GPO/MDM）で管理されています。\n" +
+                "WinKnobs からは変更できません。組織の管理者にご確認ください。",
+                "ポリシー管理中");
+            return;
+        }
+
+        // ダイアログ表示中から排他（plan-validator #3）。
+        IsRemoteDesktopBusy = true;
+        try
+        {
+            // ① UI スレッドで現在状態を読む（ダイアログのコンテキスト提示用）。
+            RdpStatus status;
+            try
+            {
+                status = _remoteDesktop.ReadStatus();
+            }
+            catch (Exception ex)
+            {
+                _dialogs.Error($"現在の状態を読み取れませんでした：\n{ex.Message}", "リモートデスクトップ");
+                StatusMessage = "❌ 状態読取失敗";
+                return;
+            }
+
+            // ② UI スレッドで Red 専用 強確認ダイアログ（ShowDialog は UI スレッド必須）。
+            var consented = _dialogs.ConfirmRemoteDesktopEnable(status);
+            if (!consented)
+            {
+                StatusMessage = "リモートデスクトップの有効化をキャンセルしました。";
+                return;
+            }
+
+            // ③ 同意時のみ別スレッドで適用（UI を最大 60 秒ブロックしない）。
+            StatusMessage = "⏳ リモートデスクトップを有効化しています…";
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _remoteDesktop.Enable(out var e);
+                return (r, e);
+            });
+
+            // ④ await 後は UI スレッド。4 分岐 switch（plan-validator #1）。
+            switch (result)
+            {
+                case RemoteDesktopOutcome.Success:
+                    var lanText = status.LanIPv4.Count > 0
+                        ? string.Join(" / ", status.LanIPv4)
+                        : "（取得できませんでした）";
+                    var note = string.IsNullOrWhiteSpace(err) ? "" : $"\n\n{err}"; // UDP best-effort 警告等
+                    _dialogs.Info(
+                        "✅ リモートデスクトップを有効にしました。\n\n" +
+                        $"・ユーザー：{status.UserName}\n" +
+                        $"・LAN IP：{lanText}\n" +
+                        $"・ポート：{status.Port}\n" +
+                        "・NLA（ネットワークレベル認証）を必須にしました（安全側）。\n\n" +
+                        "※ NLA を必須にしたので、古いクライアント（未更新の mstsc・一部 Mac/thin client）は\n" +
+                        "　つながらない場合があります。その時はクライアント側を更新してください。" + note,
+                        "成功");
+                    StatusMessage = "✅ リモートデスクトップを有効化";
+                    break;
+
+                case RemoteDesktopOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+
+                case RemoteDesktopOutcome.LeftExposed:
+                    // 🔴 最重要：FW を開けた後に失敗し、巻き戻しでも閉じ直せなかった＝攻撃口が開いたまま。
+                    var leDetail = string.IsNullOrWhiteSpace(err) ? "" : $"\n\n{err}";
+                    _dialogs.Error(
+                        "🔴 外部接続を受け付ける状態のまま、有効化に失敗しました。\n\n" +
+                        "今すぐ『リモートデスクトップを無効にする』を管理者で実行するか、\n" +
+                        "Windows の「設定 > システム > リモート デスクトップ」で状態を確認してください。" + leDetail,
+                        "🔴 攻撃口が開いたままです");
+                    StatusMessage = "🔴 攻撃口が開いたまま（今すぐ無効化を）";
+                    break;
+
+                default: // Failed：途中失敗は元へ巻き戻し済み＝攻撃口は開いていない。
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error(
+                        $"リモートデスクトップの有効化に失敗しました：\n{detail}\n\n" +
+                        "変更は元の状態に巻き戻しました（攻撃口は開いていません）。",
+                        "失敗");
+                    StatusMessage = "❌ 有効化失敗（巻き戻し済み）";
+                    break;
+            }
+        }
+        finally
+        {
+            IsRemoteDesktopBusy = false;
+            RefreshRdpBackupState(); // 退避が増減した可能性 → 「元に戻す」活性を更新
+        }
+    }
+
+    // -------- リモートデスクトップ 元に戻す（first-touch 復元）：v0.1.19 --------
+    // 専用「元に戻す」で first-touch 退避へワンクリック復帰（plan-validator #2b）。
+    // ※ 横断「ぜんぶ戻す」への統合は Maintenance RevertAll を作る v0.2.x まで待つ（問4-A）。
+
+    private bool CanRestoreRemoteDesktop() => !IsRemoteDesktopBusy && HasRdpBackup;
+
+    [RelayCommand(CanExecute = nameof(CanRestoreRemoteDesktop))]
+    private async Task RestoreRemoteDesktop()
+    {
+        var ok = _dialogs.Confirm(
+            "リモートデスクトップの設定を、WinKnobs で初めて変更する前の状態に戻します。\n（管理者権限が必要）\n\n続行しますか？",
+            "リモートデスクトップを元に戻す");
+        if (!ok) return;
+
+        IsRemoteDesktopBusy = true;
+        StatusMessage = "⏳ リモートデスクトップを元に戻しています…";
+        try
+        {
+            var dict = _backup.LoadMaintenanceOriginals();
+            if (!dict.TryGetValue(RemoteDesktopService.FeatureKey, out var json))
+            {
+                _dialogs.Info("戻せる退避情報が見つかりませんでした。", "元に戻す");
+                StatusMessage = "退避情報なし";
+                return;
+            }
+
+            string? err = null;
+            var restored = await Task.Run(() =>
+            {
+                try { _remoteDesktop.RestoreRemoteDesktop(json); return true; }
+                catch (Exception ex) { err = ex.Message; return false; }
+            });
+
+            if (restored)
+            {
+                // 完全成功時のみ退避を後始末（部分失敗時は残して再試行可能に）。
+                _backup.RemoveMaintenanceOriginal(RemoteDesktopService.FeatureKey);
+                _dialogs.Info("✅ リモートデスクトップを、変更前の状態に戻しました。", "成功");
+                StatusMessage = "✅ リモートデスクトップを元に戻しました";
+            }
+            else
+            {
+                // RestoreRemoteDesktop は失敗時に安全側へ寄せて例外送出（退避は残す＝管理者で再試行可能）。
+                var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                _dialogs.Error(
+                    $"元に戻す処理に失敗しました：\n{detail}\n\n" +
+                    "安全のため『無効』寄りに留めています。管理者で起動し直して、もう一度お試しください。",
+                    "失敗");
+                StatusMessage = "❌ 元に戻す失敗（安全側に留置）";
+            }
+        }
+        finally
+        {
+            IsRemoteDesktopBusy = false;
+            RefreshRdpBackupState();
+        }
+    }
+
     // -------- ヘルプメニュー --------
     [RelayCommand]
     private void CopyEnvironmentInfo()
@@ -647,7 +851,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.18\n" +
+            "🪟 WinKnobs v0.1.19\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +

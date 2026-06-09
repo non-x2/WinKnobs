@@ -20,7 +20,7 @@ param(
     [ValidateSet("Local", "VM")]
     [string]$Mode = "Local",
 
-    [string[]]$TestCase = @("smoke", "dialog_open", "visual_ui", "dialog_choices", "dialog_inputs", "destructive_actions", "maintenance_protection", "maintenance_remotedesktop", "bug1_regression", "bug2_regression"),
+    [string[]]$TestCase = @("smoke", "dialog_open", "visual_ui", "dialog_choices", "dialog_inputs", "destructive_actions", "maintenance_protection", "maintenance_remotedesktop", "maintenance_remotedesktop_enable", "bug1_regression", "bug2_regression"),
 
     [string]$ResultJson = "",
 
@@ -107,7 +107,8 @@ if ($Mode -eq "VM") {
         @{ Source = "$scriptRoot\testcases\tc_startup_admin.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_admin.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_network_smoke.ps1"; Dest = "$VMScriptsDir\testcases\tc_network_smoke.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_maintenance_protection.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_protection.ps1" },
-        @{ Source = "$scriptRoot\testcases\tc_maintenance_remotedesktop.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_remotedesktop.ps1" }
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_remotedesktop.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_remotedesktop.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_remotedesktop_enable.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_remotedesktop_enable.ps1" }
     )
     foreach ($f in $filesToCopy) {
         Copy-VMFile -Name $VMName -SourcePath $f.Source -DestinationPath $f.Dest -FileSource Host -Force
@@ -303,6 +304,7 @@ $tcFiles = @{
     "network_smoke"    = "tc_network_smoke.ps1"  # v0.1.7 ネットワークカテゴリ 閲覧UI 動作確認（書込なし）
     "maintenance_protection" = "tc_maintenance_protection.ps1"  # v0.1.15/16 システムの保護 ON/OFF 確認ダイアログ（非破壊・はい押さない・管理者不要）
     "maintenance_remotedesktop" = "tc_maintenance_remotedesktop.ps1"  # v0.1.18 リモートデスクトップ無効化 確認ダイアログ（非破壊・はい押さない・🔴締め出し防止の既定いいえ確認）
+    "maintenance_remotedesktop_enable" = "tc_maintenance_remotedesktop_enable.ps1"  # v0.1.19 リモートデスクトップ有効化ON Red専用WPFダイアログ（非破壊・チェックもONも押さない・[有効化]非活性確認）
 }
 
 foreach ($tc in $TestCase) {
@@ -417,6 +419,7 @@ foreach ($tc in $TestCase) {
         "network_smoke"    { "Invoke-NetworkSmoke" }
         "maintenance_protection" { "Invoke-MaintenanceProtection" }
         "maintenance_remotedesktop" { "Invoke-MaintenanceRemoteDesktop" }
+        "maintenance_remotedesktop_enable" { "Invoke-MaintenanceRemoteDesktopEnable" }
     }
 
     Write-Log ("===== TestCase: " + $tc + " =====")

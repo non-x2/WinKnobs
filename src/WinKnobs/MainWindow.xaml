@@ -88,7 +88,11 @@
                 <MenuItem x:Name="MenuDisableSystemProtection" Header="システムの保護を無効にする (要管理者)" Command="{Binding DisableSystemProtectionCommand}" AutomationProperties.AutomationId="MenuDisableSystemProtection"/>
                 <MenuItem x:Name="MenuEnableMemoryCompression"  Header="メモリ圧縮を有効にする (要管理者)"  Command="{Binding EnableMemoryCompressionCommand}"  AutomationProperties.AutomationId="MenuEnableMemoryCompression"/>
                 <MenuItem x:Name="MenuDisableMemoryCompression" Header="メモリ圧縮を無効にする (要管理者)" Command="{Binding DisableMemoryCompressionCommand}" AutomationProperties.AutomationId="MenuDisableMemoryCompression"/>
+                <MenuItem x:Name="MenuEnableRemoteDesktop" Header="リモートデスクトップを有効にする (要管理者・🔴)" Command="{Binding EnableRemoteDesktopCommand}" AutomationProperties.AutomationId="MenuEnableRemoteDesktop"
+                          ToolTip="Home エディションや組織ポリシー（GPO/MDM）管理下では選べません（自動でグレーアウト）。"/>
                 <MenuItem x:Name="MenuDisableRemoteDesktop" Header="リモートデスクトップを無効にする (要管理者・🔴)" Command="{Binding DisableRemoteDesktopCommand}" AutomationProperties.AutomationId="MenuDisableRemoteDesktop"/>
+                <MenuItem x:Name="MenuRestoreRemoteDesktop" Header="リモートデスクトップを元に戻す (要管理者)" Command="{Binding RestoreRemoteDesktopCommand}" AutomationProperties.AutomationId="MenuRestoreRemoteDesktop"
+                          ToolTip="WinKnobs で初めて変更する前の状態に戻します。退避がある時だけ選べます（『ぜんぶ戻す』では戻りません）。"/>
                 <Separator/>
                 <MenuItem x:Name="MenuLogoff"           Header="ログオフ"                  Command="{Binding LogoffCommand}"                                    AutomationProperties.AutomationId="MenuLogoff"/>
                 <MenuItem x:Name="MenuRestart"          Header="再起動"                    Command="{Binding RestartCommand}"                                   AutomationProperties.AutomationId="MenuRestart"/>
@@ -251,7 +255,7 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="WinKnobs v0.1.18" FontSize="11"
+                <TextBlock Text="WinKnobs v0.1.19" FontSize="11"
                            Foreground="{DynamicResource Fg.Subtle}"/>
             </StatusBarItem>
         </StatusBar>

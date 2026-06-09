@@ -39,7 +39,7 @@ public partial class App : Application
                 services.AddSingleton<RestorePointService>();
                 services.AddSingleton<SystemProtectionService>();   // v0.1.15 システム・メンテナンス Phase 2
                 services.AddSingleton<MemoryCompressionService>();   // v0.1.17 システム・メンテナンス Phase 3
-                services.AddSingleton<RemoteDesktopService>();        // v0.1.18 システム・メンテナンス Phase 4（🔴Red・無効化のみ）
+                services.AddSingleton<RemoteDesktopService>();        // v0.1.18 OFF / v0.1.19 ON＋状態読取＋退避（システム・メンテナンス Phase 4・🔴Red・BackupService 依存）
                 services.AddSingleton<ThemeService>();
                 services.AddSingleton<ExternalLauncherService>();
                 services.AddSingleton<NetworkService>();      // v0.1.7：ネットワーク機能
@@ -60,12 +60,14 @@ public partial class App : Application
                 services.AddTransient<SettingDialogViewModel>();
                 services.AddTransient<StartupEntryEditViewModel>(); // Phase R-2
                 services.AddTransient<RestorePreviewViewModel>();   // v0.1.6 機能 C
+                services.AddTransient<RemoteDesktopEnableViewModel>(); // v0.1.19 Step3 Red ダイアログ
 
                 // View
                 services.AddTransient<MainWindow>();
                 services.AddTransient<SettingDialog>();
                 services.AddTransient<StartupEntryEditDialog>();    // Phase R-2
                 services.AddTransient<RestorePreviewDialog>();      // v0.1.6 機能 C
+                services.AddTransient<RemoteDesktopEnableDialog>();  // v0.1.19 Step3 Red ダイアログ
             })
             .Build();
     }

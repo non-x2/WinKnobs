@@ -200,6 +200,27 @@ public class DialogService
     }
 
     /// <summary>
+    /// v0.1.19 Step3：リモートデスクトップ **有効化（ON）** の Red 専用 強確認ダイアログを開く（🔴Red）。
+    /// 現在の状態（<see cref="RdpStatus"/>）をコンテキスト提示し、「リスクを理解しました」チェック後のみ [有効化] が活性。
+    /// 戻り値：true=ユーザーが同意して有効化を選択 / false=キャンセル。
+    ///
+    /// 素の <see cref="ConfirmDestructive"/>（MessageBox）では満たせない要件（チェック同意・状態提示）のための専用ダイアログ。
+    /// Owner 指定で MainWindow に従属（F-2 と同方針）。
+    /// </summary>
+    public bool ConfirmRemoteDesktopEnable(RdpStatus status)
+    {
+        var vm = _services.GetRequiredService<RemoteDesktopEnableViewModel>();
+        // 契約：Init は DataContext 設定より「前」（RestorePreviewViewModel と同流儀）。
+        vm.Init(status);
+
+        var dlg = _services.GetRequiredService<RemoteDesktopEnableDialog>();
+        dlg.DataContext = vm;
+        dlg.Owner = Owner;
+
+        return dlg.ShowDialog() == true;
+    }
+
+    /// <summary>
     /// SettingDialog を開く。既に開いていれば前面化のみ（E-3 対策）。
     /// </summary>
     public bool? OpenSettingItem(SettingItem item)

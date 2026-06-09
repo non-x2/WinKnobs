@@ -23,6 +23,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.19] - 2026-06-09（リモートデスクトップ**有効化 ON**・🔴最終弾／**VM 接続往復検証 PASS／@cross-reviewer 致命3件→修正完了**）
+
+### Added
+- **🛠 システム・メンテナンス Phase 4「リモートデスクトップ 有効化 (ON)」（🔴Red・段階リリース第2弾＝最終弾）**：ツールメニューに「リモートデスクトップを有効にする (要管理者・🔴)」「リモートデスクトップを元に戻す (要管理者)」を追加（AutomationId `MenuEnableRemoteDesktop` / `MenuRestoreRemoteDesktop`）。ON は **3389 ポートを開けて外部ログイン受付を増やす唯一の操作**＝WinKnobs 最高リスク機能。
+  - **🔴 Red 専用 WPF 確認ダイアログ**（`Views/RemoteDesktopEnableDialog` ＋ `ViewModels/RemoteDesktopEnableViewModel`・AutomationId `RemoteDesktopEnableDialog`）：チェックボックス「リスクを理解しました」(`CheckUnderstandRisk`) を ON にして初めて [有効化](`BtnEnable`) が活性化（明示同意ジェスチャ・Enter 連打/誤クリック封じ・`IsDefault` 無し）。既定フォーカス＝[キャンセル](`BtnCancel`)。現在状態（ON/OFF・NLA・ポート・自分がリモートか・LAN IP・ユーザー名）と推奨対策・戻し方を提示。リモート接続中／GPO 管理中は警告を表示。
+  - **原子性は C# 側 done-stack**（`RemoteDesktopService.Enable`）：適用順＝内→外（NLA=1 → fDeny=0 → FW-TCP Enable → FW-UDP best-effort）。途中失敗は成功分を逆順ロールバック。結果は4分岐 `Success / AccessDenied / Failed / **LeftExposed**`（巻き戻し後も到達可能＝攻撃口が開いたまま＝🔴強警告）。FW は TCP 必須・UDP は best-effort。
+  - **状態読み取り** `ReadStatus`（非昇格可・各項目独立 try・NLA 不能環境は「不明」許容）。**first-touch 退避**を network ストアと別系統の `backup\maintenance\originals.json` に保存（`BackupService` に Maintenance 専用3メソッド・`NetworkService.RevertAll` の道連れを構造で遮断）＋専用「元に戻す」メニュー（退避時のみ活性）。
+  - 新規純粋関数（`RemoteDesktopHelper`）：`BuildSetDwordCommand` / `BuildRemoveValueCommand` / `BuildFirewallCommand` / `IsRdpEnabled` / `DescribeRdpState` / `TryParseBackup`。xUnit **520 → 530 PASS**。
+
+### Fixed（@cross-reviewer 致命3件・同日修正）
+- **S-1/M-1 ロールバックの原子性の穴**：forward は PowerShell（ExitCode で失敗検知）なのに rollback は C# Registry API（`DeleteValue` が失敗を握って false を返し throw しない）＝非対称で「fDeny=0 を消せなかったのに巻き戻し済みと誤報告」しうる穴を修正。ロールバックの fDeny/NLA 書き込みを forward と同じ PowerShell 経路に統一（`BuildRemoveValueCommand`＝削除→残存なら throw）。事後検証の露出判定を「fDeny=0 単独残存」でも LeftExposed 警告に拡張（FW 別管理環境の fail-safe）。
+- **E-1 退避 JSON 部分破損**：`JsonSerializer` が `{}` やフィールド欠落を全 default の record にして「正常」と誤認→意図せぬ無効化、を `TryParseBackup`（nullable DTO で全フィールド存在検査・破損は null→安全側）で修正。
+- **E-2 事後検証不能時**：fDeny=0 書込後＆巻き戻し失敗の可能性があれば安全側で LeftExposed を返す（露出見逃しより過警告）。
+- **S-2**：UDP 成功分を rollback に積まない理由（最終ステップ）をコメント明記＋将来ステップ追加時の指示。
+
+### Changed
+- バージョン bump：v0.1.18 → v0.1.19（csproj 3箇所 / MainWindow ステータスバー / MainViewModel バージョン情報）。
+
+### Notes
+- ✅ **VM 接続往復検証 完了（2026-06-09）**：Hyper-V `WinKnobs-Test`（Default Switch）で Enable→**ホスト→VM:3389 到達 OK**→Disable→**到達不可** を実 TCP 到達性で実証。done-stack 部分失敗ロールバックで fDeny 復帰・退避 JSON 厳密パース（`{}`破損検知）も実機確認。全7項目 PASS・baseline 復帰・CP 削除済（[テスト結果](docs/テスト結果_2026-06-09_v0.1.19_VM接続往復_Enable.md)・スクリプト `scripts/_vm_remotedesktop_enable_verify.ps1`）。
+- ✅ **@cross-reviewer 完了（2026-06-09）**：🔴最高リスク機能を5観点＋RunPowerShell 重点でレビュー→致命3件（S-1/M-1/E-1）検出→同日修正→530 PASS（[レビュー結果](docs/レビュー結果_2026-06-09_v0.1.19_Step6_cross-reviewer.md)）。監視のみ（P-1 PS 起動回数 / R-1 WaitForExit 順 / U-1 ポリシー時 Restore）は据え置き（実害小・設計上正しい）。
+- ✅ **起動スモーク OK**：メニュー3項目正常配線・「元に戻す」は退避無しでグレーアウト（CanExecute 正常）。
+- ✅ **UIA 非破壊テスト追加**：`tc_maintenance_remotedesktop_enable`（Red ダイアログ出現＋チェック未投入で[有効化]非活性＋既定キャンセル＋fDeny 不変・非対応/GPO 時はメニュー非活性 INFO 降格）。ランナー登録済（VM 実機実行は v0.1.19 ビルド再配備後）。
+- **plan-validator 反映（設計ドラフト）**：done-stack 方式・退避ストア分離・ShowDialog UI スレッド・NLA 不能許容・エディション判定を設計に織込済。
+
+---
+
 ## [0.1.18] - 2026-06-06（リモートデスクトップ無効化・**VM 実機検証 PASS／@cross-reviewer 致命0 完了**）
 
 ### Added

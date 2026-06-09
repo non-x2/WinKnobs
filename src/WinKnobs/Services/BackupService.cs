@@ -27,6 +27,8 @@ public class BackupService
     private readonly string _startupBackupDir;
     private readonly string _networkBackupDir;       // v0.1.7：ネットワーク退避ストア
     private readonly string _networkOriginalsPath;   // v0.1.7：原状 JSON（first-touch-wins）
+    private readonly string _maintenanceBackupDir;       // v0.1.19：システム・メンテナンス退避ストア
+    private readonly string _maintenanceOriginalsPath;   // v0.1.19：原状 JSON（first-touch-wins）
     private readonly string _regExePath;
 
     public BackupService()
@@ -46,6 +48,14 @@ public class BackupService
         Directory.CreateDirectory(_networkBackupDir);
         _networkOriginalsPath = Path.Combine(_networkBackupDir, "originals.json");
 
+        // v0.1.19（plan-validator #2）：システム・メンテナンス退避ストアは network と**別系統**に分離。
+        // 理由：network/originals.json に同居させると NetworkService.RevertAll（固定3キー配列）の対象外なのに
+        //   同一ファイルを共有し、DoH 退避の道連れ破損／「ぜんぶ戻す」で戻らない孤児 UX 事故を招く。
+        //   構造で「これは Maintenance 専用＝NetworkService.RevertAll は触らない」を明示する。
+        _maintenanceBackupDir = Path.Combine(_backupDir, "maintenance");
+        Directory.CreateDirectory(_maintenanceBackupDir);
+        _maintenanceOriginalsPath = Path.Combine(_maintenanceBackupDir, "originals.json");
+
         // E-4：reg.exe はフルパス指定
         _regExePath = Path.Combine(Environment.SystemDirectory, "reg.exe");
     }
@@ -58,6 +68,9 @@ public class BackupService
 
     /// <summary>ネットワーク退避ストア専用ディレクトリ（v0.1.7）。</summary>
     public string NetworkBackupDirectory => _networkBackupDir;
+
+    /// <summary>システム・メンテナンス退避ストア専用ディレクトリ（v0.1.19）。</summary>
+    public string MaintenanceBackupDirectory => _maintenanceBackupDir;
 
     // =================== v0.1.7：ネットワーク原状退避（JSON・first-touch-wins） ===================
     // plan-validator #4 反映：配信最適化 .reg(ExportKey) を使わず、各機能の原状を JSON 集約。
@@ -126,6 +139,55 @@ public class BackupService
         var tmp = _networkOriginalsPath + ".tmp";
         File.WriteAllText(tmp, json);
         File.Copy(tmp, _networkOriginalsPath, overwrite: true);
+        try { File.Delete(tmp); } catch { /* 無害 */ }
+    }
+
+    // =================== v0.1.19：システム・メンテナンス原状退避（JSON・first-touch-wins） ===================
+    // plan-validator #2（2026-06-06）：network 版の薄いコピー。保存先のみ backup\maintenance\originals.json に分離し、
+    // NetworkService.RevertAll（固定3キー配列）の対象外であることを構造で保証する（孤児 UX 事故・道連れ破損を断つ）。
+    // 「戻す」の意味は「WinKnobs が触る前の原状へ復帰」なので機能キー単位で初回のみ退避（first-touch-wins）。
+
+    /// <summary>機能キーの原状を JSON で退避（既に退避済みなら何もしない＝first-touch-wins）。</summary>
+    public void SaveMaintenanceOriginalIfAbsent(string featureKey, string jsonPayload)
+    {
+        var dict = LoadMaintenanceOriginals();
+        if (dict.ContainsKey(featureKey)) return;
+        dict[featureKey] = jsonPayload;
+        SaveMaintenanceOriginals(dict);
+    }
+
+    /// <summary>退避済みの全原状（機能キー→JSON ペイロード）を読む。</summary>
+    public Dictionary<string, string> LoadMaintenanceOriginals()
+    {
+        try
+        {
+            if (!File.Exists(_maintenanceOriginalsPath)) return new();
+            var json = File.ReadAllText(_maintenanceOriginalsPath);
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    /// <summary>指定機能キーの原状退避があるか（個別「元に戻す」メニューの有効化判定）。</summary>
+    public bool HasMaintenanceOriginal(string featureKey) => LoadMaintenanceOriginals().ContainsKey(featureKey);
+
+    /// <summary>指定機能キーの原状退避を削除（個別復元の完全成功後の後始末）。</summary>
+    public void RemoveMaintenanceOriginal(string featureKey)
+    {
+        var dict = LoadMaintenanceOriginals();
+        if (dict.Remove(featureKey)) SaveMaintenanceOriginals(dict);
+    }
+
+    private void SaveMaintenanceOriginals(Dictionary<string, string> dict)
+    {
+        // network 版と同じ原子的置換（temp 書込 → コピー上書き → temp 削除）。
+        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+        var tmp = _maintenanceOriginalsPath + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Copy(tmp, _maintenanceOriginalsPath, overwrite: true);
         try { File.Delete(tmp); } catch { /* 無害 */ }
     }
 

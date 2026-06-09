@@ -10,7 +10,14 @@ public enum RemoteDesktopOutcome
     /// <summary>管理者権限不足（昇格が必要）。</summary>
     AccessDenied,
     /// <summary>その他の失敗。</summary>
-    Failed
+    Failed,
+    /// <summary>
+    /// plan-validator（2026-06-06・ON 専用）：FW を開けた後に後続処理が失敗し、ロールバックでも
+    /// 閉じ直せなかった＝**外部接続を受け付ける攻撃口が開いたまま**の危険状態。
+    /// この時だけ 🔴強警告（「今すぐ『無効にする』を管理者で実行してください」）を出す。
+    /// Enable() の done-stack 巻き戻し後の事後検証（fDeny=0 かつ FW-TCP 開）で判定する。
+    /// </summary>
+    LeftExposed
 }
 
 /// <summary>
@@ -89,6 +96,10 @@ public static class RemoteDesktopHelper
     /// Pro / Enterprise / Education 系は可。Home（EditionID="Core" 系）は不可。
     /// 読取失敗・未知・空文字は **false（安全側＝機能を見せない/無効化）**。
     /// 入力は <see cref="EnvironmentInfoService"/> が非昇格で読む `EditionID`。
+    ///
+    /// ■ plan-validator（2026-06-06）：ServerStandard / IoTEnterprise / Cloud(Win11 SE) は接頭辞に一致せず false。
+    ///   サーバ/IoT は本来 RDP ホスト可だが**過剰グレーアウト（実害小・安全側）**として許容。
+    ///   Home 系を誤って通す穴は無い（誤って ON を活性化する危険方向の漏れはゼロ）。
     /// </summary>
     public static bool IsRdpHostCapableEdition(string? editionId)
     {
@@ -107,5 +118,171 @@ public static class RemoteDesktopHelper
             return true;
 
         return false; // Core(Home) / CoreSingleLanguage / Starter / 未知 / 空 → 非対応扱い
+    }
+
+    // ============================================================
+    // v0.1.19 ON（有効化）用の純粋関数群
+    //
+    // ■ 原子性は C# 側 done-stack で担う（plan-validator 反映・2026-06-06）：
+    //   単発 powershell の try/catch ロールバックは「catch 自身の失敗が握れない／-Command 内 throw の
+    //   ExitCode が 0 素通りし得る／FW 開放後の巻き戻し失敗で攻撃口が開いたまま」になり原子性を担保できない。
+    //   よって ON は <see cref="RemoteDesktopService"/> が **1ステップずつ powershell を実行し、成功分を
+    //   done に積んで失敗時に逆順ロールバック**する（NetworkService.ApplyDoh 同型）。本クラスは各ステップの
+    //   コマンド文字列生成と状態解析（I/O 無し）だけを担う＝完全テスト可能。
+    // ============================================================
+
+    /// <summary>NLA(ネットワークレベル認証) を持つレジストリキー（RDP-Tcp）。PS -LiteralPath 用（コロン有り）。</summary>
+    public const string RdpTcpKeyPath =
+        @"HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp";
+
+    /// <summary><see cref="RegistryService"/>.ReadValue 用（コロン無し）。NLA/PortNumber 読み取り。</summary>
+    public const string RdpTcpKeyPathNoColon =
+        @"HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp";
+
+    /// <summary>fDeny 親キーの <see cref="RegistryService"/>.ReadValue 用（コロン無し）。</summary>
+    public const string TerminalServerKeyPathNoColon =
+        @"HKLM\System\CurrentControlSet\Control\Terminal Server";
+
+    /// <summary>NLA 値名。1=必須(推奨・ON 時に強制) / 0=不要。REG_DWORD。</summary>
+    public const string NlaValueName = "UserAuthentication";
+
+    /// <summary>RDP 待ち受けポート値名（既定 3389）。REG_DWORD。</summary>
+    public const string PortValueName = "PortNumber";
+
+    /// <summary>
+    /// HKLM の REG_DWORD を value に設定する単一ステップ PowerShell -Command。
+    /// -ErrorAction Stop で非終了エラーも terminating 化し powershell.exe の ExitCode!=0 を保証。
+    /// done-stack の1ステップとして C# から個別実行する（fDeny / NLA 共用）。
+    /// </summary>
+    public static string BuildSetDwordCommand(string psLiteralPath, string valueName, int value)
+        => $"Set-ItemProperty -LiteralPath '{psLiteralPath}' -Name {valueName} -Value {value} -Type DWord -ErrorAction Stop";
+
+    /// <summary>
+    /// HKLM の REG_DWORD 値を削除する単一ステップ PowerShell -Command（ロールバック/復元の「既定へ戻す」用）。
+    /// まず SilentlyContinue で削除 → なお残っていれば <c>throw</c>（powershell.exe の ExitCode!=0）で
+    /// **削除失敗を確実に観測**する。値が元々無ければ no-op（冪等）。
+    ///
+    /// ■ S-1（2026-06-09 cross-reviewer）：done-stack 巻き戻しを forward と同じ PowerShell 経路に統一し、
+    ///   C# Registry API（<see cref="RegistryService.DeleteValue"/> が失敗を握って false を返し throw しない）の
+    ///   無言失敗で原子性が破れる穴を塞ぐ。これにより「fDeny=0 を消せなかったのに巻き戻し済みと誤報告」を防ぐ。
+    /// </summary>
+    public static string BuildRemoveValueCommand(string psLiteralPath, string valueName)
+        => $"Remove-ItemProperty -LiteralPath '{psLiteralPath}' -Name {valueName} -ErrorAction SilentlyContinue; " +
+           $"if (Get-ItemProperty -LiteralPath '{psLiteralPath}' -Name {valueName} -ErrorAction SilentlyContinue) {{ throw 'remove-value-failed' }}";
+
+    /// <summary>
+    /// 退避 JSON を <see cref="RemoteDesktopBackup"/> へ**厳密**にパースする（純粋関数・I/O 無し）。
+    ///
+    /// ■ E-1（2026-06-09 cross-reviewer）：<see cref="System.Text.Json.JsonSerializer"/> は <c>{}</c> やフィールド欠落を
+    ///   例外でなく全 default(0/false) の record にしてしまう。それを「正常な退避」と誤認すると、ユーザーの実原状
+    ///   （例：元々 ON）を破壊して無言で無効化する事故になる。よって**全フィールドが JSON に存在する場合のみ**
+    ///   復元値を返し、破損（malformed / 欠落 / null / 空）は <c>null</c> を返す。呼び出し側は null を安全側
+    ///   （無効へフォールバック＋通知）として扱う。
+    /// </summary>
+    public static RemoteDesktopBackup? TryParseBackup(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var dto = System.Text.Json.JsonSerializer.Deserialize<BackupDto>(json);
+            if (dto == null) return null;
+            if (!dto.FDenyExisted.HasValue || !dto.FDenyValue.HasValue
+                || !dto.FwTcpWasEnabled.HasValue || !dto.FwUdpWasEnabled.HasValue
+                || !dto.NlaExisted.HasValue || !dto.NlaValue.HasValue)
+                return null;
+            return new RemoteDesktopBackup(
+                dto.FDenyExisted.Value, dto.FDenyValue.Value,
+                dto.FwTcpWasEnabled.Value, dto.FwUdpWasEnabled.Value,
+                dto.NlaExisted.Value, dto.NlaValue.Value);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// <see cref="TryParseBackup"/> 専用の中間 DTO。全フィールド nullable にして「JSON に存在したか」を
+    /// HasValue で検査できるようにする（record の positional パラメータは欠落時に default が入り検知できないため）。
+    /// プロパティ名は <see cref="RemoteDesktopBackup"/> のシリアライズ名（PascalCase）と一致させる。
+    /// </summary>
+    private sealed class BackupDto
+    {
+        public bool? FDenyExisted { get; set; }
+        public int? FDenyValue { get; set; }
+        public bool? FwTcpWasEnabled { get; set; }
+        public bool? FwUdpWasEnabled { get; set; }
+        public bool? NlaExisted { get; set; }
+        public int? NlaValue { get; set; }
+    }
+
+    /// <summary>
+    /// FW 規則を Enable/Disable する単一ステップ PowerShell -Command（-Name 安定ID・言語非依存）。
+    /// names 省略時は TCP/UDP 両方（<see cref="FirewallRuleNames"/>）。ロールバックでは個別の規則名を渡す。
+    /// </summary>
+    public static string BuildFirewallCommand(bool enable, string[]? ruleNames = null)
+    {
+        var verb = enable ? "Enable-NetFirewallRule" : "Disable-NetFirewallRule";
+        var target = ruleNames ?? FirewallRuleNames;
+        var names = string.Join(",", System.Array.ConvertAll(target, n => $"'{n}'"));
+        return $"{verb} -Name {names} -ErrorAction Stop";
+    }
+
+    /// <summary>
+    /// 1つの FW 規則の Enabled 状態を読む PowerShell -Command（出力は <see cref="ParseFirewallEnabled"/> で解析）。
+    /// 読み取りは非昇格で可能。
+    /// </summary>
+    public static string BuildReadFirewallCommand(string ruleName)
+        => $"(Get-NetFirewallRule -Name '{ruleName}' -ErrorAction Stop).Enabled";
+
+    /// <summary>
+    /// Get-NetFirewallRule の `.Enabled` 出力から「有効か」を判定。
+    /// PowerShell の Enabled enum は "True"/"False"。netsh 風 "Yes"/"はい"/"Enabled"/"1" も保険対応。
+    /// 読めない/空/未知は **false（不明＝安全側で『有効でない』扱い）**。
+    /// </summary>
+    public static bool ParseFirewallEnabled(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return false;
+        var s = output.Trim();
+
+        // 明示 false 系を先に判定（過検出防止）。
+        if (s.Equals("False", System.StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Disabled", System.StringComparison.OrdinalIgnoreCase)
+            || s.Equals("No", System.StringComparison.OrdinalIgnoreCase)
+            || s == "2"
+            || s.Contains("いいえ"))
+            return false;
+
+        if (s.Contains("True", System.StringComparison.OrdinalIgnoreCase)
+            || s.Contains("Enabled", System.StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Yes", System.StringComparison.OrdinalIgnoreCase)
+            || s == "1"
+            || s.Contains("はい"))
+            return true;
+
+        return false; // 未知の出力は安全側
+    }
+
+    /// <summary>
+    /// RDP が「到達可能（有効）」か。fDeny=0 かつ FW(TCP) 有効。
+    /// NLA は到達性の必須条件ではない（ラベルで別途注記）ため判定に含めない。
+    /// </summary>
+    public static bool IsRdpEnabled(int fDeny, bool fwTcpEnabled) => fDeny == 0 && fwTcpEnabled;
+
+    /// <summary>
+    /// 状態ラベル（到達性を保証しない but-caveat 込み）。nla: 1=必須 / 0=不要 / null=不明。
+    /// fDeny と FW が食い違う片肺は「一部だけ有効（要注意）」として明示。
+    /// </summary>
+    public static string DescribeRdpState(int fDeny, bool fwTcpEnabled, int? nla)
+    {
+        string core;
+        if (fDeny == 0 && fwTcpEnabled) core = "有効";
+        else if (fDeny != 0 && !fwTcpEnabled) core = "無効";
+        else core = "一部だけ有効（要注意）"; // OS 許可だが FW 閉、または その逆
+
+        string nlaLabel = nla switch
+        {
+            1 => "NLA：必須",
+            0 => "NLA：不要",
+            _ => "NLA：不明"
+        };
+        return $"{core} / {nlaLabel}";
     }
 }
