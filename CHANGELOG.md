@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.19.1] - 2026-06-09（RestorePointService 同型ハードニング・パッチ）
+
+### Fixed
+- **「復元ポイントを作成」のプロセスリーク防止**：`RestorePointService.Create` のタイムアウト（60秒）時に `powershell.exe` を `Kill(entireProcessTree: true)`（best-effort）で確実に終了。`using` の Dispose ではプロセスは Kill されないため、タイムアウト時に powershell が残存するリークを修正（v0.1.16 で `SystemProtectionService` に施した対策の横展開）。
+- **「復元ポイントを作成」の UI フリーズ解消＋二重起動防止**：`MainViewModel.CreateRestorePoint` を同期コマンドから `async Task` ＋ `await Task.Run` に変更し、`Checkpoint-Computer`（最大60秒）実行中の UI フリーズを解消。`IsCreatingRestorePoint` Busy ガード（`CanExecute`）で実行中は再実行を封じ、PowerShell の二重起動を防止。失敗時に詳細が空でも「（詳細不明）」とフォールバック表示。`ToggleSystemProtection` / `ToggleMemoryCompression` と完全同型。
+
+### Notes
+- xUnit **530 PASS / 0 FAIL**（v0.1.19 と同数＝回帰なし）。`dotnet build -c Release` 0 警告 0 エラー。@cross-reviewer 致命 0。
+- 既知の限界（既存同型と同じ・実害低）：`RedirectStandardOutput=true` のため、タイムアウト前に stdout/stderr を読まない（小出力前提）。`Create(string)` bool 旧 API は現在未使用（将来削除候補）。
+
+---
+
 ## [0.1.19] - 2026-06-09（リモートデスクトップ**有効化 ON**・🔴最終弾／**VM 接続往復検証 PASS／@cross-reviewer 致命3件→修正完了**）
 
 ### Added

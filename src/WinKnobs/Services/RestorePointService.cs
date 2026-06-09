@@ -64,8 +64,14 @@ public class RestorePointService
                 return RestorePointResult.FailedOther;
             }
 
+            // 小出力（Checkpoint-Computer はメッセージ少）のため WaitForExit 後の読み取りで十分。
+            // 注意：大量出力するコマンドでは stdout/stderr パイプバッファ充填でデッドロックしうる（本サービスは小出力前提・
+            // SystemProtectionService と同注記）。
             if (!p.WaitForExit(60_000))
             {
+                // タイムアウト時は powershell.exe を確実に終了させる（プロセスリーク防止・同型ハードニング 2026-06-09／
+                // SystemProtectionService 軽微③と同手法）。using の Dispose ではプロセスは Kill されないため明示する。
+                try { p.Kill(entireProcessTree: true); } catch { /* 既に終了済み等は無視（best-effort） */ }
                 errorMessage = "復元ポイント作成がタイムアウトしました（60秒）。";
                 return RestorePointResult.FailedOther;
             }

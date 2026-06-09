@@ -323,41 +323,69 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = $"📦 バックアップフォルダ: {_backup.BackupDirectory}";
     }
 
-    [RelayCommand]
-    private void CreateRestorePoint()
+    /// <summary>
+    /// 復元ポイント作成が実行中か（同型ハードニング 2026-06-09・SystemProtection 重要②と同手法）。
+    /// true の間は作成コマンドを CanExecute=false で封じ、PowerShell（Checkpoint-Computer）の二重起動を防ぐ。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CreateRestorePointCommand))]
+    private bool _isCreatingRestorePoint;
+
+    private bool CanCreateRestorePoint() => !IsCreatingRestorePoint;
+
+    [RelayCommand(CanExecute = nameof(CanCreateRestorePoint))]
+    private async Task CreateRestorePoint()
     {
         var ok = _dialogs.Confirm(
             "システムの復元ポイントを作成します。\n（管理者権限が必要・24時間に1回まで）\n\n続行しますか？",
             "復元ポイント");
         if (!ok) return;
 
-        var result = _restore.Create("WinKnobs Manual Checkpoint", out var err);
-        switch (result)
+        IsCreatingRestorePoint = true;
+        StatusMessage = "⏳ 復元ポイントを作成しています…";
+        try
         {
-            case RestorePointResult.Success:
-                _dialogs.Info("✅ 復元ポイントを作成しました。", "成功");
-                StatusMessage = "✅ 復元ポイント作成完了";
-                break;
-            case RestorePointResult.FailedFrequency:
-                _dialogs.Warn(
-                    "24時間以内に既に復元ポイントが作成されています。\n（Windowsの仕様で同日内に1回のみ）",
-                    "24時間制限");
-                StatusMessage = "⚠️ 24時間制限のためスキップ";
-                break;
-            case RestorePointResult.FailedAccessDenied:
-                _dialogs.Warn("管理者権限が必要です。", "権限不足");
-                StatusMessage = "❌ 権限不足";
-                break;
-            case RestorePointResult.FailedProtectionDisabled:
-                _dialogs.Warn(
-                    "システム保護が無効化されています。\nコントロールパネル → 回復 → システムの復元の構成 で有効化できます。",
-                    "システム保護無効");
-                StatusMessage = "❌ システム保護無効";
-                break;
-            default:
-                _dialogs.Error($"作成失敗: {err}", "失敗");
-                StatusMessage = $"❌ {err}";
-                break;
+            // UI スレッドを最大 60 秒ブロックしないよう別スレッドで実行（同型ハードニング・SystemProtection 重要②と同手法）。
+            // out 引数はラムダ内ローカルで受け、タプルで返す。
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _restore.Create("WinKnobs Manual Checkpoint", out var e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case RestorePointResult.Success:
+                    _dialogs.Info("✅ 復元ポイントを作成しました。", "成功");
+                    StatusMessage = "✅ 復元ポイント作成完了";
+                    break;
+                case RestorePointResult.FailedFrequency:
+                    _dialogs.Warn(
+                        "24時間以内に既に復元ポイントが作成されています。\n（Windowsの仕様で同日内に1回のみ）",
+                        "24時間制限");
+                    StatusMessage = "⚠️ 24時間制限のためスキップ";
+                    break;
+                case RestorePointResult.FailedAccessDenied:
+                    _dialogs.Warn("管理者権限が必要です。", "権限不足");
+                    StatusMessage = "❌ 権限不足";
+                    break;
+                case RestorePointResult.FailedProtectionDisabled:
+                    _dialogs.Warn(
+                        "システム保護が無効化されています。\nコントロールパネル → 回復 → システムの復元の構成 で有効化できます。",
+                        "システム保護無効");
+                    StatusMessage = "❌ システム保護無効";
+                    break;
+                default:
+                    // err が空（無音で異常終了）でも「作成失敗: 」だけにならないようフォールバック（SystemProtection 軽微④と同手法）。
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error($"作成失敗: {detail}", "失敗");
+                    StatusMessage = $"❌ {detail}";
+                    break;
+            }
+        }
+        finally
+        {
+            IsCreatingRestorePoint = false;
         }
     }
 
@@ -851,7 +879,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.19\n" +
+            "🪟 WinKnobs v0.1.19.1\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
