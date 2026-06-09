@@ -9,6 +9,11 @@
 #     .\run_ui_test.ps1 -Mode VM -AutoLaunch
 #     .\run_ui_test.ps1 -Mode VM -TestCase bug1_regression,bug2_regression -AutoLaunch
 #
+#   再配備直後の初回（コールドスタート対策）：-ColdStart を付けると
+#   「捨て起動でDefender初回スキャン消化(ウォームアップ) + マーカー待ち600秒」になる:
+#     .\run_ui_test.ps1 -Mode VM -TestCase maintenance_remotedesktop_enable -AutoLaunch -ColdStart
+#   （個別指定も可：-WarmUp / -VMMarkerTimeoutSec 600）
+#
 #   テストケースを絞る:
 #     .\run_ui_test.ps1 -Mode Local -TestCase smoke
 #     .\run_ui_test.ps1 -Mode Local -TestCase smoke,dialog_open
@@ -39,7 +44,20 @@ param(
     # VM モード専用パラメータ
     [string]$VMName = "WinKnobs-Test",
     [string]$VMCredPath = "C:\AI\Claudo\アプリ\WinKnobs\scripts\vm_cred.xml",
-    [string]$VMScriptsDir = "C:\ui_automation"
+    [string]$VMScriptsDir = "C:\ui_automation",
+
+    # 🆕 2026-06-09：コールドスタート対策（再配備直後の Defender 初回スキャン + HDD(D:) I/O 遅延対策）
+    # 背景：再配備直後の初回は単一ファイル exe(127MB) の Defender 初回スキャンで初回メニュー操作が
+    #       50〜60秒ストール → 既定300秒では余裕が無く 1〜2回目タイムアウトしていた（ウォーム後は76秒PASS）。
+    #       詳細：docs/テスト結果_2026-06-09_v0.1.19_UIA_tc_maintenance_remotedesktop_enable.md
+    # VM内マーカー待ちタイムアウト（秒）。既定300。明示指定が無く -ColdStart 時は自動で600へ。
+    [int]$VMMarkerTimeoutSec = 300,
+
+    # テスト本実行前に VM内 WinKnobs を「捨て起動15秒 → 停止」してウォームアップ（Defender 初回スキャンを先に消化）
+    [switch]$WarmUp,
+
+    # 再配備直後の初回専用ショートカット：-WarmUp 有効化 + マーカー待ちを 600 秒へ自動延長
+    [switch]$ColdStart
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,6 +86,15 @@ if ($Mode -eq "VM") {
     Write-Host "==== VM モード ===="
     Write-Host "VM: $VMName"
     Write-Host "TestCase: $($TestCase -join ', ')"
+
+    # 🆕 2026-06-09：コールドスタート対策の実効値を決定
+    # -ColdStart は -WarmUp を含意し、マーカー待ちを 600 秒へ（VMMarkerTimeoutSec を明示指定していない場合のみ）
+    $effectiveWarmUp = [bool]($WarmUp -or $ColdStart)
+    $effectiveMarkerTimeout = $VMMarkerTimeoutSec
+    if ($ColdStart -and -not $PSBoundParameters.ContainsKey('VMMarkerTimeoutSec')) {
+        $effectiveMarkerTimeout = 600
+    }
+    Write-Host "ColdStart: $([bool]$ColdStart) / WarmUp: $effectiveWarmUp / MarkerTimeout: $effectiveMarkerTimeout 秒"
 
     $cred = Import-Clixml $VMCredPath
 
@@ -123,7 +150,7 @@ if ($Mode -eq "VM") {
     $vmUser = $cred.UserName
     $vmPass = $cred.GetNetworkCredential().Password
     $vmResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-        param($scriptsDir, $testCases, $vmUser, $vmPass)
+        param($scriptsDir, $testCases, $vmUser, $vmPass, $markerTimeout, $warmUp)
         try { Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction Stop } catch { }
 
         # --- 切断(Disc)セッションを console へ再接続して Active 化（vmconnect を開かなくても UIA が効くように・2026-05-30）---
@@ -137,6 +164,27 @@ if ($Mode -eq "VM") {
                 $sessInfo = "session=$sid before=$st after=`n" + ((quser 2>&1 | Out-String).Trim())
             } else { $sessInfo = "ユーザーセッション未検出:`n" + $before.Trim() }
         } catch { $sessInfo = "session活性化 例外: $($_.Exception.Message)" }
+
+        # --- 🆕 2026-06-09：ウォームアップ（再配備直後の Defender 初回スキャンを本テスト前に消化）---
+        # 全 WinKnobs 停止（累積インスタンス排除）→ 捨て起動15秒（Defender がexeを初回スキャン）→ 停止。
+        # exe ファイル単位のスキャンなので Session0 からの起動でも初回スキャンは消化される。
+        $warmInfo = "warmup skip (-WarmUp 未指定)"
+        if ($warmUp) {
+            try {
+                Get-Process WinKnobs -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                $warmExe = "C:\WinKnobs\WinKnobs.exe"
+                if (Test-Path $warmExe) {
+                    Start-Process $warmExe
+                    Start-Sleep -Seconds 15
+                    Get-Process WinKnobs -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                    $warmInfo = "warmup OK (捨て起動15秒→停止・Defender初回スキャン消化)"
+                } else {
+                    $warmInfo = "warmup skip (exe 不在: $warmExe)"
+                }
+            } catch { $warmInfo = "warmup 例外: $($_.Exception.Message)" }
+        }
 
         $taskName  = "WinKnobsUiaTest"
         $resultDir = Join-Path $scriptsDir "results"
@@ -173,11 +221,11 @@ if ($Mode -eq "VM") {
             $runOut = "(create失敗のためスキップ)"
         }
 
-        # 完了待ち（マーカー出現を最大 300 秒ポーリング・30 秒毎に進捗）
+        # 完了待ち（マーカー出現を最大 $markerTimeout 秒ポーリング・30 秒毎に進捗）
         $waited = 0
-        while ($waited -lt 300 -and -not (Test-Path $doneMarker)) {
+        while ($waited -lt $markerTimeout -and -not (Test-Path $doneMarker)) {
             Start-Sleep -Seconds 5; $waited += 5
-            if ($waited % 30 -eq 0) { Write-Host "    ...VM内テスト実行中（$waited 秒経過 / 最大300秒）" }
+            if ($waited % 30 -eq 0) { Write-Host "    ...VM内テスト実行中（$waited 秒経過 / 最大$markerTimeout 秒）" }
         }
         $finished = Test-Path $doneMarker
 
@@ -198,20 +246,23 @@ if ($Mode -eq "VM") {
             RunOut      = $runOut
             ErrText     = $errTxt
             SessInfo    = $sessInfo
+            WarmInfo    = $warmInfo
             DiagUser    = "vmLocalUser=$vmLocalUser / vmUser(host)=$vmUser"
         }
-    } -ArgumentList $VMScriptsDir, $TestCase, $vmUser, $vmPass
+    } -ArgumentList $VMScriptsDir, $TestCase, $vmUser, $vmPass, $effectiveMarkerTimeout, $effectiveWarmUp
 
     # VM 診断をクリーンな utf8 ファイルに保存（Claude が直接読む・文字化け回避・2026-05-30）
     @(
         "Finished=$($vmResult.Finished) WaitedSec=$($vmResult.WaitedSec) ExitCode=$($vmResult.ExitCode)",
         "User: $($vmResult.DiagUser)",
+        "--- WarmInfo ---", $vmResult.WarmInfo,
         "--- SessInfo ---", $vmResult.SessInfo,
         "--- CreateOut ---", $vmResult.CreateOut,
         "--- RunOut ---", $vmResult.RunOut,
         "--- ErrText ---", $vmResult.ErrText
     ) | Out-File -Encoding utf8 "$scriptRoot\vm_diag.txt"
 
+    if ($vmResult.WarmInfo) { Write-Host ("    [ウォームアップ] " + $vmResult.WarmInfo) }
     if ($vmResult.SessInfo) { Write-Host ("    [session活性化]`n" + $vmResult.SessInfo) }
     Write-Host "    VM 内実行完了（Finished=$($vmResult.Finished) / 待機 $($vmResult.WaitedSec)秒 / ExitCode=$($vmResult.ExitCode)）"
     if ($vmResult.CreateOut) { Write-Host ("    [schtasks create] " + ($vmResult.CreateOut.Trim())) }
