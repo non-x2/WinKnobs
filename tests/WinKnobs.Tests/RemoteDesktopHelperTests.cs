@@ -283,4 +283,65 @@ public class RemoteDesktopHelperTests
             "\"NlaExisted\":true,\"NlaValue\":1}";
         Assert.Null(RemoteDesktopHelper.TryParseBackup(json));
     }
+
+    // ============================================================
+    // DescribeMenuStatusLabel（v0.1.20・メニュー常設「現在の状態」ラベル）
+    // ============================================================
+
+    [Fact]
+    public void MenuStatusLabel_non_host_capable_takes_priority()
+    {
+        // 非対応エディションは、ポリシーや実状態に関係なく最優先で「非対応」を表示。
+        var label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+            isHostCapable: false, isPolicyManaged: true,
+            fDeny: 0, fwTcpEnabled: true, nla: 1, port: 3389);
+        Assert.Equal("現在の状態：このエディションは非対応（Pro 以上が必要）", label);
+    }
+
+    [Fact]
+    public void MenuStatusLabel_policy_managed_when_host_capable()
+    {
+        // ホスト可だが GPO/MDM 管理中 → 「ポリシー管理中」を表示（実状態より優先）。
+        var label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+            isHostCapable: true, isPolicyManaged: true,
+            fDeny: 0, fwTcpEnabled: true, nla: 1, port: 3389);
+        Assert.Equal("現在の状態：ポリシー管理中（GPO/MDM・このツールでは変更不可）", label);
+    }
+
+    [Fact]
+    public void MenuStatusLabel_enabled_with_nla_and_port()
+    {
+        var label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+            isHostCapable: true, isPolicyManaged: false,
+            fDeny: 0, fwTcpEnabled: true, nla: 1, port: 3389);
+        Assert.Equal("現在の状態：有効 / NLA：必須（ポート 3389）", label);
+    }
+
+    [Fact]
+    public void MenuStatusLabel_disabled_state()
+    {
+        var label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+            isHostCapable: true, isPolicyManaged: false,
+            fDeny: 1, fwTcpEnabled: false, nla: null, port: 3389);
+        Assert.Equal("現在の状態：無効 / NLA：不明（ポート 3389）", label);
+    }
+
+    [Fact]
+    public void MenuStatusLabel_partial_state_is_flagged()
+    {
+        // fDeny=0（OS 許可）だが FW 閉＝片肺。「一部だけ有効（要注意）」を出す。
+        var label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+            isHostCapable: true, isPolicyManaged: false,
+            fDeny: 0, fwTcpEnabled: false, nla: 0, port: 3389);
+        Assert.Equal("現在の状態：一部だけ有効（要注意） / NLA：不要（ポート 3389）", label);
+    }
+
+    [Fact]
+    public void MenuStatusLabel_reflects_custom_port()
+    {
+        var label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+            isHostCapable: true, isPolicyManaged: false,
+            fDeny: 0, fwTcpEnabled: true, nla: 1, port: 13389);
+        Assert.Equal("現在の状態：有効 / NLA：必須（ポート 13389）", label);
+    }
 }

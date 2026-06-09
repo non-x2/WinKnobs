@@ -125,6 +125,10 @@ public partial class MainViewModel : ObservableObject
         // v0.1.19：ON 退避の有無を起動時に 1 回読む（「元に戻す」メニューの初期活性判定）。
         _hasRdpBackup = _backup.HasMaintenanceOriginal(RemoteDesktopService.FeatureKey);
 
+        // v0.1.20：メニュー常設の「現在の状態」ラベルを起動時に非同期で1回更新（ReadStatus は FW 読取で
+        // powershell.exe を起動するため UI スレッドをブロックしない・コンストラクタは UI スレッド＝await 後 UI へ戻る）。
+        _ = RefreshRemoteDesktopStatusLabelAsync();
+
         // テーマ初期化＋変更追従（2026-05-16：MenuItem IsChecked 連動）
         _currentThemeMode = _theme.CurrentMode;
         _theme.ThemeChanged += mode => CurrentThemeMode = mode;
@@ -546,7 +550,52 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(RestoreRemoteDesktopCommand))]  // v0.1.19：元に戻すも実行中は封じる
     private bool _isRemoteDesktopBusy;
 
-    private bool CanToggleRemoteDesktop() => !IsRemoteDesktopBusy;
+    // v0.1.20：Disable も Enable と同条件でグレーアウト（Home 非対応／GPO 管理中は押せない＝常設ラベルで理由を提示）。
+    // 旧 v0.1.18 は「押せるが no-op＋説明」だったが、状態が常時見える今は「押せない＋理由表示」が一貫した UX。
+    // DisableRemoteDesktop 内の Home/GPO 分岐は defense-in-depth として残す（CanExecute をすり抜けても安全側）。
+    // ※ cross-reviewer 軽微③（2026-06-09）：Enable と活性条件が完全同一のため <see cref="CanEnableRemoteDesktop"/>
+    //   へ委譲して単一ソース化（片方だけ条件を変えて Enable/Disable の活性がズレる事故を防ぐ）。
+    private bool CanToggleRemoteDesktop() => CanEnableRemoteDesktop();
+
+    /// <summary>
+    /// v0.1.20：メニュー常設の「現在の状態」ラベル（読み取り専用 MenuItem に表示）。
+    /// 起動時＋各 RDP 操作完了時に <see cref="RefreshRemoteDesktopStatusLabelAsync"/> で更新する。
+    /// </summary>
+    [ObservableProperty]
+    private string _remoteDesktopStatusLabel = "現在の状態：確認中…";
+
+    /// <summary>
+    /// ラベル更新の世代番号（cross-reviewer 重要②・2026-06-09）。`Refresh...` を呼ぶたびに UI スレッドで +1 し、
+    /// await から戻った時に自分の世代が最新でなければ書き込みを破棄する。連続操作で複数の `Task.Run(ReadStatus)` が
+    /// 走り、**完了順が前後して古い状態でラベルを上書きする**レースを防ぐ（呼び出しは全て UI スレッド＝lock 不要）。
+    /// </summary>
+    private int _rdpStatusLabelGeneration;
+
+    /// <summary>
+    /// 現在の RDP 状態を読み直してメニュー常設ラベルへ反映する（v0.1.20）。
+    /// ReadStatus は FW 読取で powershell.exe を起動し得る＝別スレッド実行で UI を止めない。
+    /// await 後の継続は UI スレッド（呼び出しは UI 同期コンテキスト）でプロパティ設定する。
+    /// </summary>
+    private async Task RefreshRemoteDesktopStatusLabelAsync()
+    {
+        var gen = ++_rdpStatusLabelGeneration; // UI スレッドで採番（呼び出し元は全て UI スレッド）
+        string label;
+        try
+        {
+            var status = await Task.Run(() => _remoteDesktop.ReadStatus());
+            label = RemoteDesktopHelper.DescribeMenuStatusLabel(
+                status.IsHostCapable, status.IsPolicyManaged,
+                status.FDeny, status.FwTcpEnabled, status.Nla, status.Port);
+        }
+        catch
+        {
+            label = "現在の状態：取得できませんでした";
+        }
+
+        // 自分より後に発行された更新があれば、古い結果でラベルを上書きしない（最新だけが勝つ）。
+        if (gen == _rdpStatusLabelGeneration)
+            RemoteDesktopStatusLabel = label;
+    }
 
     /// <summary>
     /// v0.1.19：ON 用の退避（first-touch）が存在するか＝「リモートデスクトップを元に戻す」が使えるか。
@@ -659,6 +708,7 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             IsRemoteDesktopBusy = false;
+            _ = RefreshRemoteDesktopStatusLabelAsync(); // v0.1.20：状態が変わった可能性 → 常設ラベル更新
         }
     }
 
@@ -777,6 +827,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsRemoteDesktopBusy = false;
             RefreshRdpBackupState(); // 退避が増減した可能性 → 「元に戻す」活性を更新
+            _ = RefreshRemoteDesktopStatusLabelAsync(); // v0.1.20：状態が変わった可能性 → 常設ラベル更新
         }
     }
 
@@ -835,6 +886,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsRemoteDesktopBusy = false;
             RefreshRdpBackupState();
+            _ = RefreshRemoteDesktopStatusLabelAsync(); // v0.1.20：状態が変わった可能性 → 常設ラベル更新
         }
     }
 
@@ -879,7 +931,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.19.1\n" +
+            "🪟 WinKnobs v0.1.20\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +

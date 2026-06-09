@@ -285,4 +285,33 @@ public static class RemoteDesktopHelper
         };
         return $"{core} / {nlaLabel}";
     }
+
+    /// <summary>
+    /// メニュー常設の「現在の状態」ラベル文言を組み立てる（v0.1.20・状態表示／グレーアウト常設ラベル）。
+    /// 表示は読み取り専用 MenuItem（IsEnabled=false）に出す。優先順は **非対応 → ポリシー管理 → 実状態**。
+    ///
+    /// - 非対応エディション（Home 等）：そもそもホストになれない＝Enable/Disable はグレーアウト。理由を常設表示。
+    /// - GPO/MDM 管理中：本ツールで変更不可＝同じくグレーアウト。理由を常設表示。
+    /// - それ以外：<see cref="DescribeRdpState"/> の「有効/無効/一部だけ有効」＋NLA に待ち受けポートを添える。
+    /// </summary>
+    /// <param name="isHostCapable">RDP ホスト可エディションか（<see cref="IsRdpHostCapableEdition"/>）。</param>
+    /// <param name="isPolicyManaged">GPO/MDM で fDeny が管理されているか。</param>
+    /// <param name="fDeny">fDenyTSConnections（0=許可/ON・1=拒否/OFF）。</param>
+    /// <param name="fwTcpEnabled">FW(TCP) 規則が有効か。</param>
+    /// <param name="nla">UserAuthentication（1=必須/0=不要/null=不明）。</param>
+    /// <param name="port">RDP 待ち受けポート（既定 3389）。</param>
+    public static string DescribeMenuStatusLabel(
+        bool isHostCapable, bool isPolicyManaged, int fDeny, bool fwTcpEnabled, int? nla, int port)
+    {
+        const string prefix = "現在の状態：";
+
+        if (!isHostCapable)
+            return prefix + "このエディションは非対応（Pro 以上が必要）";
+
+        if (isPolicyManaged)
+            return prefix + "ポリシー管理中（GPO/MDM・このツールでは変更不可）";
+
+        var state = DescribeRdpState(fDeny, fwTcpEnabled, nla);
+        return $"{prefix}{state}（ポート {port}）";
+    }
 }

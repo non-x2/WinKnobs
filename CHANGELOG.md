@@ -23,6 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.20] - 2026-06-09（リモートデスクトップ：状態表示／Home・GPO グレーアウト常設ラベル）
+
+> ℹ️ もとは「v0.1.18.1」として計画した積み残し（v0.1.18 で先送りした状態表示／グレーアウト）。
+> v0.1.19 / v0.1.19.1 が先に出荷済みのため、版番号を後退させず **v0.1.20** として前進リリース（機能内容は計画どおり）。
+
+### Added
+- **リモートデスクトップ「現在の状態」常設ラベル**：ツールメニューに読み取り専用の状態表示を追加（AutomationId `MenuRemoteDesktopStatus`）。`有効/無効/一部だけ有効（要注意）` ＋ `NLA：必須/不要/不明` ＋ 待ち受けポートを常時表示。起動時＋各 RDP 操作（有効化／無効化／元に戻す）完了時に自動更新。状態読み取り（`ReadStatus`・FW 読取で powershell 起動）は別スレッドで行い UI をブロックしない。
+
+### Changed
+- **Home／GPO 管理時は「無効化」もグレーアウト**：従来 v0.1.18 では「無効化」を Home/非対応エディションや GPO/MDM 管理下でも押せて「安全 no-op＋説明ダイアログ」を出していたが、状態が常時見える今は「有効化」と同条件でグレーアウトし、理由は常設ラベル（「非対応（Pro 以上が必要）」「ポリシー管理中（GPO/MDM）」）で提示する一貫 UX に変更。`DisableRemoteDesktop` 内の Home/GPO 分岐は defense-in-depth として残置（CanExecute をすり抜けても安全側）。
+- 「無効化」メニューにグレーアウト理由の ToolTip を追加（「有効化」と同文）。
+
+### Notes
+- 純粋関数 `RemoteDesktopHelper.DescribeMenuStatusLabel`（状態ラベル文言）を新設し xUnit +6（**536 PASS / 0 FAIL**＝回帰なし）。`dotnet build` 0 警告 0 エラー。
+- 攻撃面・実行ロジックは不変（表示とグレーアウトのみ）。SECURITY.md の脅威面に変更なし。
+
+---
+
 ## [0.1.19.1] - 2026-06-09（RestorePointService 同型ハードニング・パッチ）
 
 ### Fixed
