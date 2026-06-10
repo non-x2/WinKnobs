@@ -30,6 +30,7 @@ public partial class MainViewModel : ObservableObject
     private readonly SystemProtectionService _systemProtection;
     private readonly MemoryCompressionService _memoryCompression;
     private readonly RemoteDesktopService _remoteDesktop;
+    private readonly SysmainService _sysmain;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -104,6 +105,7 @@ public partial class MainViewModel : ObservableObject
         SystemProtectionService systemProtection,
         MemoryCompressionService memoryCompression,
         RemoteDesktopService remoteDesktop,
+        SysmainService sysmain,
         RegistryService registry,
         StartupListViewModel startupListVM,
         NetworkListViewModel networkListVM)
@@ -117,6 +119,7 @@ public partial class MainViewModel : ObservableObject
         _systemProtection = systemProtection;
         _memoryCompression = memoryCompression;
         _remoteDesktop = remoteDesktop;
+        _sysmain = sysmain;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
@@ -534,6 +537,81 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // -------- Sysmain サービス ON/OFF：v0.2.0 Quick Win --------
+    // メモリ圧縮(ToggleMemoryCompression) と同型（PowerShell 管理者・別スレッド・結果ダイアログ）。
+    // 実行は SysmainService（Set-Service / Stop-Service / Start-Service）。最終確認は VM 実機検証（管理者操作）。
+    // 有効化/無効化とも可逆（再トグルで戻る・データ消失なし）＝両方とも通常 Confirm。
+    // 第4分類 ServiceNotFound（SysMain 不在エディション）を AccessDenied と区別して案内（plan-validator 指摘5）。
+
+    /// <summary>
+    /// Sysmain 切替が実行中か。true の間は Enable/Disable 両コマンドを CanExecute=false で封じ、
+    /// PowerShell の二重起動を防ぐ（SystemProtection / MemoryCompression 同様）。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableSysmainCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableSysmainCommand))]
+    private bool _isSysmainBusy;
+
+    private bool CanToggleSysmain() => !IsSysmainBusy;
+
+    [RelayCommand(CanExecute = nameof(CanToggleSysmain))]
+    private Task EnableSysmain() => ToggleSysmain(true);
+
+    [RelayCommand(CanExecute = nameof(CanToggleSysmain))]
+    private Task DisableSysmain() => ToggleSysmain(false);
+
+    private async Task ToggleSysmain(bool enable)
+    {
+        var verb = enable ? "有効" : "無効";
+        // 中立説明（一律推奨しない）。HDD では無効化でカクつき軽減の報告・SSD では既定 ON のままが無難。
+        var msg = enable
+            ? "Sysmain サービスを有効にします。\n（管理者権限が必要）\n\nよく使うアプリを先読みして起動を速くする機能です（旧 Superfetch）。\n続行しますか？"
+            : "Sysmain サービスを無効にします。\n（管理者権限が必要）\n\nHDD ではディスク負荷が下がりカクつきが軽くなる報告があります。\nSSD では既定の有効のままが無難です。いつでも有効に戻せます。\n続行しますか？";
+        var ok = _dialogs.Confirm(msg, $"Sysmain を{verb}化");
+        if (!ok) return;
+
+        IsSysmainBusy = true;
+        StatusMessage = $"⏳ Sysmain を{verb}化しています…";
+        try
+        {
+            // UI スレッドを最大 60 秒ブロックしないよう別スレッドで実行（SystemProtection / MemoryCompression 同様）。
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _sysmain.SetSysmain(enable, out var e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case SysmainOutcome.Success:
+                    _dialogs.Info($"✅ Sysmain を{verb}にしました。", "成功");
+                    StatusMessage = $"✅ Sysmain を{verb}化";
+                    break;
+                case SysmainOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                case SysmainOutcome.ServiceNotFound:
+                    _dialogs.Warn(
+                        "この PC には SysMain サービスが見つかりませんでした。\nWindows のエディションや構成によっては存在しません。変更は行われていません。",
+                        "サービスなし");
+                    StatusMessage = "❌ SysMain サービスが見つかりません";
+                    break;
+                default:
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error($"Sysmain の{verb}化に失敗しました：\n{detail}", "失敗");
+                    StatusMessage = $"❌ {verb}化失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsSysmainBusy = false;
+        }
+    }
+
     // -------- リモートデスクトップ 無効化：v0.1.18 システム・メンテナンス Phase 4（🔴Red） --------
     // メモリ圧縮(ToggleMemoryCompression) と同型（powershell 管理者・別スレッド・結果ダイアログ）。
     // 実行は RemoteDesktopService（FW 無効化＋fDeny=1・外→内・fail-closed）。
@@ -931,7 +1009,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.1.20\n" +
+            "🪟 WinKnobs v0.2.0\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -1380,6 +1458,84 @@ public partial class MainViewModel : ObservableObject
             RecommendedValue = true,      // 推奨：ON
             DefaultValue = false          // Windows デフォルト：OFF
         });
+
+        // ====================== v0.2.0 追加項目（2026-06-10 Quick Win） ======================
+
+        // Power Throttling 無効化（kernel.powerThrottlingOff）
+        Items.Add(BuildPowerThrottlingItem());
+    }
+
+    // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
+    //
+    // ⚠️ Boolean 型は不採用（plan-validator 致命1・2）：Boolean の復元は .reg キー削除マーカー経由＝
+    // 「PowerThrottling キーごと削除」になり、同居する他の値（将来 MS が置く既定値等）を巻き添えにする。
+    // Command 型＝StringBackup（ValueExisted）＋DeleteValue の「値単位復元」で安全側に（SmartScreen 同型）。
+    // 書込時のキー自動作成は RegistryService.WriteValue（CreateSubKey）が行うため CreateKey 不要。
+
+    private SettingItem BuildPowerThrottlingItem()
+    {
+        const string path = @"HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling";
+        const string valueName = "PowerThrottlingOff";
+        // 「既定」は値そのものを置かない（=削除）。0 を書く流儀もあるが、原状＝値なしに合わせる。
+        var choices = new[] { "既定（スロットリングする・省電力）", "無効化（スロットリングしない・性能優先）" };
+
+        // DeleteValue は例外を握りつぶして false を返すため（RegistryService.DeleteValue）、そのままだと
+        // HKLM 非昇格時に HandleElevationNeeded の catch（UnauthorizedAccessException）をすり抜けて
+        // 「既定に戻したつもりが何も変わっていない」サイレント失敗になる（@cross-reviewer 致命1）。
+        // → 削除失敗かつ値が残存している時は明示的に投げて昇格ダイアログ経路に乗せる。
+        void DeleteOrThrow()
+        {
+            if (!_registry.DeleteValue(path, valueName) &&
+                _registry.ReadValue<string>(path, valueName) != null)
+            {
+                throw new UnauthorizedAccessException(
+                    $"レジストリ値 {path}\\{valueName} を削除できませんでした（管理者権限が必要な可能性）。");
+            }
+        }
+
+        return new SettingItem
+        {
+            Id = "kernel.powerThrottlingOff",
+            Title = "Power Throttling（バックグラウンドCPU抑制）",
+            Description = "Windows がバックグラウンドのアプリの CPU クロックを下げて省電力する機能。無効化すると裏で動くアプリ（エンコード・AI 処理等）が遅くならない代わりに消費電力が増えます（ノート PC ではバッテリー持ちに影響）。非公式設定のため将来の Windows Update で無視される可能性あり。個別アプリだけ除外したい場合は「設定 > システム > 電源」の公式 UI を推奨。管理者権限必須。再起動で確実に反映。",
+            Category = CategoryType.Kernel,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま（一律推奨しない）
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    // DWORD でも ReadValue<string> なら「値なし=null」を判別できる（SmartScreen 同手法）。
+                    var v = _registry.ReadValue<string>(path, valueName);
+                    return v == "1" ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    if (label == choices[1])
+                        _registry.WriteValue(path, valueName, 1, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteOrThrow();   // 既定＝値を置かない（0 書込でなく原状の形へ・失敗は昇格経路へ）
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<string>(path, valueName);
+                    return JsonSerializer.Serialize(new StringBackup { ValueExisted = v != null, Value = v ?? "" });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<StringBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted && int.TryParse(bk.Value, out var dw))
+                        _registry.WriteValue(path, valueName, dw, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteOrThrow();   // 値単位削除（キーは消さない＝同居値を守る・失敗は昇格経路へ）
+                }
+            }
+        };
     }
 
     // ====================== PR3 SmartScreen（Command 3択） ======================

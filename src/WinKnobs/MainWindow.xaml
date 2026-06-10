@@ -88,6 +88,9 @@
                 <MenuItem x:Name="MenuDisableSystemProtection" Header="システムの保護を無効にする (要管理者)" Command="{Binding DisableSystemProtectionCommand}" AutomationProperties.AutomationId="MenuDisableSystemProtection"/>
                 <MenuItem x:Name="MenuEnableMemoryCompression"  Header="メモリ圧縮を有効にする (要管理者)"  Command="{Binding EnableMemoryCompressionCommand}"  AutomationProperties.AutomationId="MenuEnableMemoryCompression"/>
                 <MenuItem x:Name="MenuDisableMemoryCompression" Header="メモリ圧縮を無効にする (要管理者)" Command="{Binding DisableMemoryCompressionCommand}" AutomationProperties.AutomationId="MenuDisableMemoryCompression"/>
+                <MenuItem x:Name="MenuEnableSysmain"  Header="Sysmain（先読み）を有効にする (要管理者)"  Command="{Binding EnableSysmainCommand}"  AutomationProperties.AutomationId="MenuEnableSysmain"/>
+                <MenuItem x:Name="MenuDisableSysmain" Header="Sysmain（先読み）を無効にする (要管理者)" Command="{Binding DisableSysmainCommand}" AutomationProperties.AutomationId="MenuDisableSysmain"
+                          ToolTip="HDD ではディスク負荷が下がる報告あり。SSD では既定の有効のままが無難。いつでも戻せます。"/>
                 <MenuItem x:Name="MenuRemoteDesktopStatus" Header="{Binding RemoteDesktopStatusLabel}" IsEnabled="False" AutomationProperties.AutomationId="MenuRemoteDesktopStatus"
                           ToolTip="リモートデスクトップの現在の状態（読み取り専用）。操作後に自動更新されます。"/>
                 <MenuItem x:Name="MenuEnableRemoteDesktop" Header="リモートデスクトップを有効にする (要管理者・🔴)" Command="{Binding EnableRemoteDesktopCommand}" AutomationProperties.AutomationId="MenuEnableRemoteDesktop"
@@ -258,7 +261,7 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="WinKnobs v0.1.20" FontSize="11"
+                <TextBlock Text="WinKnobs v0.2.0" FontSize="11"
                            Foreground="{DynamicResource Fg.Subtle}"/>
             </StatusBarItem>
         </StatusBar>

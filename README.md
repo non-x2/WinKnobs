@@ -73,8 +73,8 @@ WinKnobs は、Windows 11 の隠し設定や深い部分を、安全に・分か
 | v0.1.4 | HKLM 書込時の管理者権限ハンドリング（PrivilegeService）| ✅ 完了 |
 | v0.1.5 | スタートアップ管理 GUI（Run x6 + StartupApproved・追加 / 編集 / 削除 / トグル / snapshot 復元）+ OSS 化整備 | 🚧 公開準備中 |
 | v0.1.6 | snapshot SHA256 改ざん対策・差分件数警告・復元前プレビュー UI | 📅 設計済 |
-| v0.2.0 | Quick Win 5 項目（メモリ圧縮 / Power Throttling / Sysmain / 夜間モード / 透明効果）| 📅 予定 |
-| v0.2.1 | LDPlayer 解消・WSL・ゲーマー向け 6 項目 | 📅 予定 |
+| v0.2.0 | Quick Win（Power Throttling 無効化 / Sysmain サービス）※メモリ圧縮 v0.1.17・透明効果/クリップボード履歴は実装済だった | ✅ 完了 |
+| v0.2.1 | 夜間モード強度・色温度（v0.2.0 から送り）＋ LDPlayer 解消・WSL・ゲーマー向け 6 項目 | 📅 予定 |
 | v0.2.2 | IME / 音声 / Network 完成（6 項目）| 📅 予定 |
 | v0.3.0 | Gaming カテゴリ + プリセット機能（14 項目）| 📅 予定 |
 | v1.0.0 | 全項目完備・多言語対応 | 📅 将来 |

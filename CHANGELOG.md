@@ -14,12 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - v0.2.0：Quick Win 4 項目（Power Throttling / Sysmain / 夜間モード / 透明効果）※メモリ圧縮は v0.1.17 で前倒し実装済
-  - v0.2.1：LDPlayer 解消・WSL・ゲーマー向け 6 項目
+  - v0.2.1：夜間モード強度・色温度（v0.2.0 から送り・CloudStore バイナリの安全設計は[設計ドラフト](docs/v0.2.0_QuickWin_設計ドラフト.md) §3 済）＋ LDPlayer 解消・WSL・ゲーマー向け 6 項目
   - v0.2.2：IME / 音声 / Network 完成 6 項目
   - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.2.0] - 2026-06-10（Quick Win：Power Throttling ＋ Sysmain サービス）
+
+> 📝 **スコープ訂正**：候補集 v2 の「Quick Win 4 項目」のうち**透明効果とクリップボード履歴は実装済だった**
+> （2026-05-25 に `desktop.transparencyEffects` / `system.clipboardHistory` として追加済・二重計上を訂正）。
+> 夜間モード強度・色温度は非公式フォーマット（CloudStore バイナリ）のリスクを考慮し **v0.2.1 へ送り**。
+> 設計：[v0.2.0 Quick Win 設計ドラフト](docs/v0.2.0_QuickWin_設計ドラフト.md)（@plan-validator 済・致命2件反映）。
+
+### Added
+- **Power Throttling 無効化**（`kernel.powerThrottlingOff`・Kernel カテゴリ・⚠️Yellow・要管理者・再起動反映）：バックグラウンドアプリの CPU クロック抑制（省電力機能）を「既定／無効化」の 2 択で切替。`HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling` の `PowerThrottlingOff`（DWORD）。
+  - **Command 型＋値単位復元を採用**（@plan-validator 致命指摘）：Boolean 型だと復元が「.reg キー削除マーカー＝キーごと削除」になり、`PowerThrottling` キーに同居する他の値を巻き添えにするため、`StringBackup`（ValueExisted）＋`DeleteValue` で**値だけ**書き戻す／消す方式に。「既定」選択時は 0 を書かず値を削除（原状＝値なしに一致）。
+- **🛠 Sysmain サービス 有効/無効**（ツールメニュー・要管理者・AutomationId `MenuEnableSysmain` / `MenuDisableSysmain`）：先読み（旧 Superfetch）サービスを SCM 経由（PowerShell `Set-Service` / `Stop-Service` / `Start-Service`）で切替。レジストリ直叩き（`Start=4`）は実状態と乖離するため不採用。
+  - 新規 `SysmainHelper`（純粋関数・xUnit）＋ `SysmainService`（MemoryCompressionService 同型・60秒タイムアウト・`Kill(entireProcessTree)`）。
+  - **第4分類 `ServiceNotFound`**：SysMain が存在しないエディション/構成を AccessDenied と誤分類せず「サービスなし」と案内（権限不足判定より先に評価＝誤分類防止）。
+  - タイムアウト時は powershell プロセスのみ Kill し、サービスの強制停止はしない（中途半端な状態を残さない・「再起動で確定」案内）。
+  - 有効化＝種別 Automatic→Start／無効化＝Stop→Disabled の順序固定。可逆操作＝通常 Confirm（説明は中立：HDD では軽くなる報告・SSD は既定のまま無難）。
+
+### Fixed
+- **HKLM 値削除のサイレント失敗防止**（@cross-reviewer 致命1）：`RegistryService.DeleteValue` は例外を握りつぶして false を返すため、Power Throttling「既定」適用/復元が非昇格時に昇格ダイアログ経路（`HandleElevationNeeded` の `UnauthorizedAccessException` catch）をすり抜けて「戻したつもりが何も変わっていない」になる穴を、削除失敗かつ値残存時に明示 throw する `DeleteOrThrow` で閉じた（app.manifest は asInvoker＝標準権限起動あり）。
+- Sysmain タイムアウト時メッセージに現状確認導線（services.msc）を追加（@cross-reviewer 重要1）。
+
+### Notes
+- 新規 `SysmainHelperTests`。バージョン bump 0.1.20 → 0.2.0（csproj 3 行＋UI 2 箇所）。
+- Sysmain 状態ラベル（メニュー常設）は今回見送り＝fire-and-forget リフレッシュのレース複雑性を避けスコープ維持（必要なら v0.1.20 の世代カウンタパターンで追加可）。
 
 ---
 
