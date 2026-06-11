@@ -145,6 +145,13 @@ public class ExternalLauncherService
         => RunExe(Path.Combine(Environment.SystemDirectory, "ipconfig.exe"), args);
 
     /// <summary>
+    /// powercfg を実行して標準出力を取得（v0.2.1 Boost モード用）。
+    /// 例：RunPowerCfg("/getactivescheme") / RunPowerCfg("/setacvalueindex", guid, "SUB_PROCESSOR", "PERFBOOSTMODE", "2")
+    /// </summary>
+    public string RunPowerCfg(params string[] args)
+        => RunExe(Path.Combine(Environment.SystemDirectory, "powercfg.exe"), args);
+
+    /// <summary>
     /// 汎用 exe 実行ヘルパー（SystemDirectory のフルパス推奨）。
     /// </summary>
     private static string RunExe(string exePath, string[] args)
@@ -160,9 +167,18 @@ public class ExternalLauncherService
 
         using var p = Process.Start(psi)
             ?? throw new InvalidOperationException($"{Path.GetFileName(exePath)} 起動失敗");
+        // cross-reviewer I-2（2026-06-11）：stdout/stderr を同期で順に ReadToEnd すると、
+        // stderr 側のパイプバッファが先に埋まった場合にデッドロックする。stderr は非同期で吸い、
+        // タイムアウト（60秒）＋Kill(entireProcessTree) でハング経路も閉じる（HyperV/WSL 系と同水準）。
+        var stderrTask = p.StandardError.ReadToEndAsync();
         var stdout = p.StandardOutput.ReadToEnd();
-        var stderr = p.StandardError.ReadToEnd();
-        p.WaitForExit();
+        if (!p.WaitForExit(60_000))
+        {
+            try { p.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+            throw new InvalidOperationException(
+                $"{Path.GetFileName(exePath)} がタイムアウトしました（60秒）。");
+        }
+        var stderr = stderrTask.GetAwaiter().GetResult();
         if (p.ExitCode != 0)
         {
             throw new InvalidOperationException(

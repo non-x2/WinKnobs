@@ -25,7 +25,7 @@ param(
     [ValidateSet("Local", "VM")]
     [string]$Mode = "Local",
 
-    [string[]]$TestCase = @("smoke", "dialog_open", "visual_ui", "dialog_choices", "dialog_inputs", "destructive_actions", "maintenance_protection", "maintenance_remotedesktop", "maintenance_remotedesktop_enable", "maintenance_sysmain", "bug1_regression", "bug2_regression"),
+    [string[]]$TestCase = @("smoke", "dialog_open", "visual_ui", "dialog_choices", "dialog_inputs", "destructive_actions", "maintenance_protection", "maintenance_remotedesktop", "maintenance_remotedesktop_enable", "maintenance_sysmain", "maintenance_wsl", "maintenance_coreisolation", "maintenance_hyperv", "bug1_regression", "bug2_regression"),
 
     [string]$ResultJson = "",
 
@@ -136,7 +136,10 @@ if ($Mode -eq "VM") {
         @{ Source = "$scriptRoot\testcases\tc_maintenance_protection.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_protection.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_maintenance_remotedesktop.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_remotedesktop.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_maintenance_remotedesktop_enable.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_remotedesktop_enable.ps1" },
-        @{ Source = "$scriptRoot\testcases\tc_maintenance_sysmain.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_sysmain.ps1" }
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_sysmain.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_sysmain.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_wsl.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_wsl.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_coreisolation.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_coreisolation.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_maintenance_hyperv.ps1"; Dest = "$VMScriptsDir\testcases\tc_maintenance_hyperv.ps1" }
     )
     foreach ($f in $filesToCopy) {
         Copy-VMFile -Name $VMName -SourcePath $f.Source -DestinationPath $f.Dest -FileSource Host -Force
@@ -358,6 +361,9 @@ $tcFiles = @{
     "maintenance_remotedesktop" = "tc_maintenance_remotedesktop.ps1"  # v0.1.18 リモートデスクトップ無効化 確認ダイアログ（非破壊・はい押さない・🔴締め出し防止の既定いいえ確認）
     "maintenance_remotedesktop_enable" = "tc_maintenance_remotedesktop_enable.ps1"  # v0.1.19 リモートデスクトップ有効化ON Red専用WPFダイアログ（非破壊・チェックもONも押さない・[有効化]非活性確認）
     "maintenance_sysmain" = "tc_maintenance_sysmain.ps1"  # v0.2.0 Sysmain 有効/無効 確認ダイアログ（非破壊・はい押さない・Services\SysMain\Start 不変確認）
+    "maintenance_wsl" = "tc_maintenance_wsl.ps1"  # v0.2.1 WSL ON/OFF 確認ダイアログ（非破壊・はい押さない）
+    "maintenance_coreisolation" = "tc_maintenance_coreisolation.ps1"  # v0.2.1 コア分離 ON/OFF（非破壊・OFF側は既定いいえ確認・HVCI Enabled 不変確認）
+    "maintenance_hyperv" = "tc_maintenance_hyperv.ps1"  # v0.2.1 Hyper-V Red専用WPFダイアログ（非破壊・チェックもOFFも押さない・BitLocker警告表示確認）
 }
 
 foreach ($tc in $TestCase) {
@@ -474,6 +480,9 @@ foreach ($tc in $TestCase) {
         "maintenance_remotedesktop" { "Invoke-MaintenanceRemoteDesktop" }
         "maintenance_remotedesktop_enable" { "Invoke-MaintenanceRemoteDesktopEnable" }
         "maintenance_sysmain" { "Invoke-MaintenanceSysmain" }
+        "maintenance_wsl" { "Invoke-MaintenanceWsl" }
+        "maintenance_coreisolation" { "Invoke-MaintenanceCoreIsolation" }
+        "maintenance_hyperv" { "Invoke-MaintenanceHyperV" }
     }
 
     Write-Log ("===== TestCase: " + $tc + " =====")

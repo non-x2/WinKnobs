@@ -34,4 +34,25 @@ public static class ElevationClassifier
 
     private static bool Contains(string s, string keyword)
         => s.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+    /// <summary>
+    /// 現在のプロセスが管理者として実行中か（v0.2.1 cross-reviewer I-4）。
+    /// bcdedit /enum や Get-WindowsOptionalFeature は**読取が非昇格でも通る**ため、書込段階まで
+    /// 権限不足が遅延し、出力キーワード分類の取りこぼしで Failed 扱いになる経路があった。
+    /// 書込系サービスは実行前にこれで早期 AccessDenied を返す（PrivilegeService と同実装・
+    /// サービス層から DI なしで使えるよう static で提供）。
+    /// </summary>
+    public static bool IsRunningAsAdministrator()
+    {
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;   // 判定不能は安全側（非管理者扱い）。実書込の失敗分類が最後の防衛線
+        }
+    }
 }

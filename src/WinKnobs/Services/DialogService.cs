@@ -221,6 +221,26 @@ public class DialogService
     }
 
     /// <summary>
+    /// v0.2.1 Step5：Hyper-V **無効化（OFF）** の Red 専用 強確認ダイアログを開く（🔴Red）。
+    /// 現在の launchtype とコア分離状態をコンテキスト提示し、「リスクを理解しました」チェック後のみ [無効化] が活性。
+    /// 戻り値：true=ユーザーが同意して無効化を選択 / false=キャンセル。
+    /// <see cref="ConfirmRemoteDesktopEnable"/> と同流儀（Init は DataContext 設定より「前」・Owner 指定）。
+    /// </summary>
+    /// <param name="currentStateLabel">HyperVHelper.DescribeMenuStatusLabel の生成ラベル。</param>
+    /// <param name="isCoreIsolationOn">コア分離（HVCI）が有効か（true で依存ガイドを表示・plan-validator 致命2）。</param>
+    public bool ConfirmHyperVDisable(string currentStateLabel, bool isCoreIsolationOn)
+    {
+        var vm = _services.GetRequiredService<HyperVDisableViewModel>();
+        vm.Init(currentStateLabel, isCoreIsolationOn);
+
+        var dlg = _services.GetRequiredService<HyperVDisableDialog>();
+        dlg.DataContext = vm;
+        dlg.Owner = Owner;
+
+        return dlg.ShowDialog() == true;
+    }
+
+    /// <summary>
     /// SettingDialog を開く。既に開いていれば前面化のみ（E-3 対策）。
     /// </summary>
     public bool? OpenSettingItem(SettingItem item)

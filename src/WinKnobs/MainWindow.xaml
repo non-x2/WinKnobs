@@ -91,6 +91,22 @@
                 <MenuItem x:Name="MenuEnableSysmain"  Header="Sysmain（先読み）を有効にする (要管理者)"  Command="{Binding EnableSysmainCommand}"  AutomationProperties.AutomationId="MenuEnableSysmain"/>
                 <MenuItem x:Name="MenuDisableSysmain" Header="Sysmain（先読み）を無効にする (要管理者)" Command="{Binding DisableSysmainCommand}" AutomationProperties.AutomationId="MenuDisableSysmain"
                           ToolTip="HDD ではディスク負荷が下がる報告あり。SSD では既定の有効のままが無難。いつでも戻せます。"/>
+                <MenuItem x:Name="MenuEnableWsl"  Header="WSL（Linux 実行環境）を有効にする (要管理者・再起動)"  Command="{Binding EnableWslCommand}"  AutomationProperties.AutomationId="MenuEnableWsl"
+                          ToolTip="WSL 本体と仮想マシン プラットフォームの2機能を有効化します。処理に数分かかる場合があります。"/>
+                <MenuItem x:Name="MenuDisableWsl" Header="WSL（Linux 実行環境）を無効にする (要管理者・再起動)" Command="{Binding DisableWslCommand}" AutomationProperties.AutomationId="MenuDisableWsl"
+                          ToolTip="Linux のデータは削除されません（再有効化で戻る）。仮想マシン プラットフォームは残します。"/>
+                <MenuItem x:Name="MenuEnableCoreIsolation"  Header="コア分離（メモリ整合性）を有効にする (要管理者・再起動)"  Command="{Binding EnableCoreIsolationCommand}"  AutomationProperties.AutomationId="MenuEnableCoreIsolation"
+                          ToolTip="ドライバ悪用攻撃への防壁。古い周辺機器ドライバが非対応だと機器が動かなくなる場合あり。組織ポリシー管理下では選べません。"/>
+                <MenuItem x:Name="MenuDisableCoreIsolation" Header="コア分離（メモリ整合性）を無効にする (要管理者・再起動・🔴)" Command="{Binding DisableCoreIsolationCommand}" AutomationProperties.AutomationId="MenuDisableCoreIsolation"
+                          ToolTip="セキュリティ防壁を外します（ゲーム互換/性能目的の一時OFF想定）。用が済んだら有効へ戻すのを推奨。組織ポリシー管理下では選べません。"/>
+                <MenuItem x:Name="MenuHyperVStatus" Header="{Binding HyperVStatusLabel}" IsEnabled="False" AutomationProperties.AutomationId="MenuHyperVStatus"
+                          ToolTip="ハイパーバイザー起動設定（hypervisorlaunchtype）の現在値（読み取り専用）。操作後に自動更新されます。"/>
+                <MenuItem x:Name="MenuEnableHyperV"  Header="Hyper-V（ハイパーバイザー）を有効に戻す (要管理者・再起動)"  Command="{Binding EnableHyperVCommand}"  AutomationProperties.AutomationId="MenuEnableHyperV"
+                          ToolTip="hypervisorlaunchtype を auto に戻します。WSL2・サンドボックス・Hyper-V VM が再び使えます。"/>
+                <MenuItem x:Name="MenuDisableHyperV" Header="Hyper-V（ハイパーバイザー）を無効にする (要管理者・再起動・🔴)" Command="{Binding DisableHyperVCommand}" AutomationProperties.AutomationId="MenuDisableHyperV"
+                          ToolTip="LDPlayer 等のエミュレータ向け。WSL2・サンドボックス・コア分離・Hyper-V VM がすべて止まります（元に戻せます）。"/>
+                <MenuItem x:Name="MenuRestoreHyperV" Header="Hyper-V を元に戻す (要管理者・再起動)" Command="{Binding RestoreHyperVCommand}" AutomationProperties.AutomationId="MenuRestoreHyperV"
+                          ToolTip="WinKnobs で初めて変更する前の起動設定に戻します。退避がある時だけ選べます。"/>
                 <MenuItem x:Name="MenuRemoteDesktopStatus" Header="{Binding RemoteDesktopStatusLabel}" IsEnabled="False" AutomationProperties.AutomationId="MenuRemoteDesktopStatus"
                           ToolTip="リモートデスクトップの現在の状態（読み取り専用）。操作後に自動更新されます。"/>
                 <MenuItem x:Name="MenuEnableRemoteDesktop" Header="リモートデスクトップを有効にする (要管理者・🔴)" Command="{Binding EnableRemoteDesktopCommand}" AutomationProperties.AutomationId="MenuEnableRemoteDesktop"
@@ -261,7 +277,7 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="WinKnobs v0.2.0" FontSize="11"
+                <TextBlock Text="WinKnobs v0.2.1" FontSize="11"
                            Foreground="{DynamicResource Fg.Subtle}"/>
             </StatusBarItem>
         </StatusBar>

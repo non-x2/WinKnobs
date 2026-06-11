@@ -22,6 +22,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] - 2026-06-11（LDPlayer ユーザー獲得スプリント：6 項目）
+
+> 📝 設計：[v0.2.1 設計ドラフト](docs/v0.2.1_設計ドラフト.md)（@plan-validator 12 点反映済・「🔧反映」節が本文より優先）。
+> 夜間モード色温度（最難関・CloudStore バイナリ）は **v0.2.2 へ送り**（安全設計は v0.2.0 ドラフト §3 完成済）。
+
+### Added
+- **マウス加速 OFF**（`gaming.mouseAcceleration`・KeyboardMouse・🟢・昇格不要・即時反映）：`HKCU\Control Panel\Mouse` の 3 値セット（`MouseSpeed`/`MouseThreshold1`/`MouseThreshold2`）を「既定（加速あり）／OFF（1:1・ゲーマー向け）」で切替。`SystemParametersInfo(SPI_SETMOUSE)` P/Invoke で即時反映＋失敗時はレジストリのみ＋再ログオン案内（フェイルソフト）。新規 `MouseAccelHelper`（SPI 配列並び `{T1,T2,Speed}` の変換を純粋関数化・plan-validator 重要3）＋ `MouseParamsService`。
+- **Network Throttling Index**（`network.throttlingIndex`・Network ペイン「くわしい設定」・🟡・要管理者・再起動反映）：「既定（10）／無効（0xffffffff）」の 2 択・中立説明（配信/DAW 併用時は既定が安定する場合あり）。既定側は値削除でなく 0xa を書く（OS 既定は値が存在するため・Power Throttling と逆）。
+- **プロセッサー Boost モード**（`system.processorBoost`・Kernel・🟡・要管理者・即時反映）：PERFBOOSTMODE を「無効／有効／アグレッシブ（既定）」の 3 択で AC/DC 両方に書込（4/5=効率的系はハイブリッド CPU 専用のため出さない・plan-validator 重要7）。**実 GUID 固定**（`scheme_current` 文字列は TOCTOU のため不使用・致命1）＋ロケール非依存パース（新規 `PowerCfgHelper`）。
+- **🛠 WSL ON/OFF**（ツールメニュー・🟡・要管理者・再起動反映・`MenuEnableWsl`/`MenuDisableWsl`）：ON＝WSL 本体＋VirtualMachinePlatform の 2 機能を C# done-stack（片方失敗で逆順ロールバック・両失敗は **`PartiallyEnabled`** を正直に報告）。OFF＝WSL 本体のみ（VMP は WSA 等の巻き添え防止で残す）。タイムアウト 300 秒（DISM 系）。新規 `WslHelper`/`WslService`。
+- **🛠 コア分離（メモリ整合性・HVCI）ON/OFF**（ツールメニュー・🔴・要管理者・再起動反映・`MenuEnableCoreIsolation`/`MenuDisableCoreIsolation`）：HVCI `Enabled` の値単位書込（`WasEnabledBy` 等同居値は不触）。OFF＝ConfirmDestructive（既定いいえ）。GPO/MDM 管理下はグレーアウト。UEFI ロック環境を考慮し成功表示は「設定しました＋再起動後に Windows セキュリティで確認」止まり。新規 `CoreIsolationHelper`/`CoreIsolationService`。
+- **🛠 Hyper-V（ハイパーバイザー起動）ON/OFF**（ツールメニュー・🔴・要管理者・再起動反映・`MenuEnableHyperV`/`MenuDisableHyperV`/`MenuRestoreHyperV`＋常設状態ラベル `MenuHyperVStatus`）：`bcdedit /set hypervisorlaunchtype off|auto` 一本（DISM 機能削除は VM 構成消失リスクで不採用＝完全可逆）。OFF＝**専用 Red 強確認ダイアログ**（`HyperVDisableDialog`・連鎖影響列挙＋**コア分離 ON 検知時の依存ガイド**＋**BitLocker 回復キー警告の無条件常時表示**＝plan-validator 致命2）。適用前 first-touch 退避（maintenance ストア）＋「元に戻す」。新規 `HyperVHelper`/`HyperVService`。
+
+### Changed
+- 再起動系メンテ機能（WSL/コア分離/Hyper-V）を**共通 `IsSystemFeatureBusy` で直列化**（DISM グローバル mutex 衝突防止・plan-validator エッジ3）。
+- `ExternalLauncherService.RunExe`：stderr 非同期読み＋60 秒タイムアウト＋`Kill(entireProcessTree)`（パイプデッドロック・ハング経路を閉鎖・cross-reviewer I-2）。
+- `ElevationClassifier.IsRunningAsAdministrator()` 新設：読取が非昇格で通る系（bcdedit/DISM）の書込前に早期 AccessDenied（cross-reviewer I-4）。
+
+### Fixed
+- **Boost モードの powercfg クエリを `/query` → `/qh`（隠し設定込み）に修正**：PERFBOOSTMODE は既定で hidden 属性のため `/query` では設定ブロックが出力されず、Read=常に既定表示・Backup=常に失敗→Apply 常に中止（機能が事実上死んでいた）。VM 実機検証（2026-06-11）で発見・ホストでも再現確認・/qh で AC/DC 読取/書込/復元の往復を VM 実証。
+- Hyper-V 退避トークンを Auto/Off ホワイトリスト化＋想定外値（Other）検出時は変更自体を中止（「保存したら必ず戻せる」原子性・cross-reviewer C-1 致命）。
+- Boost の Backup→Apply で電源プラン GUID を使い回し（プラン切替 TOCTOU・cross-reviewer I-1）。
+- `DeleteOrThrow`（Power Throttling / Network Throttling 復元）：「値の不在を正の確認で示せた時だけ成功」に強化（読取例外の null 化によるサイレント成功を閉鎖・cross-reviewer I-3）。
+
+---
+
 ## [0.2.0] - 2026-06-10（Quick Win：Power Throttling ＋ Sysmain サービス）
 
 > 📝 **スコープ訂正**：候補集 v2 の「Quick Win 4 項目」のうち**透明効果とクリップボード履歴は実装済だった**

@@ -107,6 +107,9 @@ cd C:\AI\Claudo\アプリ\WinKnobs\scripts\ui_automation
 | `maintenance_remotedesktop` | リモートデスクトップ無効化（v0.1.18・🔴Red）：ツールメニュー1項目→確認ダイアログ出現→ConfirmDestructive既定いいえ（🔴締め出し防止）→いいえで非実行 | なし（「はい」を押さない・fDenyTSConnections不変を確認） | ✅ | ✅ |
 | `maintenance_remotedesktop_enable` | リモートデスクトップ有効化ON（v0.1.19・🔴Red）：MenuEnableRemoteDesktop→🔴Red専用WPFダイアログ(RemoteDesktopEnableDialog)出現→**チェック未投入で[有効化]非活性**→既定キャンセル→キャンセルで非実行 | なし（チェックも[有効化]も押さない・fDenyTSConnections不変を確認・非対応/GPO時はメニュー非活性INFO降格） | ✅ | ✅ |
 | `maintenance_sysmain` | Sysmain 有効/無効（v0.2.0）：ツールメニュー2項目→確認ダイアログ出現→いいえで非実行 | なし（「はい」を押さない・Services\SysMain\Start 不変を確認） | ✅ | ✅ |
+| `maintenance_wsl` | WSL ON/OFF（v0.2.1）：ツールメニュー2項目→確認ダイアログ出現→いいえで非実行 | なし（「はい」を押さない・機能状態は要昇格のためINFO） | ✅ | ✅ |
+| `maintenance_coreisolation` | コア分離 ON/OFF（v0.2.1・🔴）：ツールメニュー2項目→確認ダイアログ→OFF側はConfirmDestructive既定いいえ→いいえで非実行 | なし（「はい」を押さない・HVCI Enabled 不変を確認・GPO時はメニュー非活性INFO降格） | ✅ | ✅ |
+| `maintenance_hyperv` | Hyper-V ON/OFF（v0.2.1・🔴Red）：メニュー4項目検出→MenuDisableHyperV→🔴Red専用WPFダイアログ(HyperVDisableDialog)→**チェック未投入で[無効化]非活性**＋**BitLocker警告表示**→キャンセルで非実行→有効化Confirmもいいえで非実行 | なし（チェックも[無効化]も押さない・launchtypeは要昇格のためINFO・Off済環境はno-op INFO降格） | ✅ | ✅ |
 
 > **bug1_regression は実適用が発生**します。ホスト直接実行はテスト用クリーン環境または VM で。
 

@@ -40,6 +40,9 @@ public partial class App : Application
                 services.AddSingleton<SystemProtectionService>();   // v0.1.15 システム・メンテナンス Phase 2
                 services.AddSingleton<MemoryCompressionService>();   // v0.1.17 システム・メンテナンス Phase 3
                 services.AddSingleton<SysmainService>();              // v0.2.0 Quick Win：Sysmain サービス 有効/無効
+                services.AddSingleton<WslService>();                  // v0.2.1 Step3：WSL 2 機能 ON/OFF（2機能 done-stack・300秒）
+                services.AddSingleton<CoreIsolationService>();        // v0.2.1 Step4：コア分離（HVCI）ON/OFF（🔴・レジストリ直・RegistryService 依存）
+                services.AddSingleton<HyperVService>();               // v0.2.1 Step5：Hyper-V launchtype ON/OFF（🔴・bcdedit・BackupService 依存）
                 services.AddSingleton<RemoteDesktopService>();        // v0.1.18 OFF / v0.1.19 ON＋状態読取＋退避（システム・メンテナンス Phase 4・🔴Red・BackupService 依存）
                 services.AddSingleton<ThemeService>();
                 services.AddSingleton<ExternalLauncherService>();
@@ -62,6 +65,7 @@ public partial class App : Application
                 services.AddTransient<StartupEntryEditViewModel>(); // Phase R-2
                 services.AddTransient<RestorePreviewViewModel>();   // v0.1.6 機能 C
                 services.AddTransient<RemoteDesktopEnableViewModel>(); // v0.1.19 Step3 Red ダイアログ
+                services.AddTransient<HyperVDisableViewModel>();       // v0.2.1 Step5 Red ダイアログ
 
                 // View
                 services.AddTransient<MainWindow>();
@@ -69,6 +73,7 @@ public partial class App : Application
                 services.AddTransient<StartupEntryEditDialog>();    // Phase R-2
                 services.AddTransient<RestorePreviewDialog>();      // v0.1.6 機能 C
                 services.AddTransient<RemoteDesktopEnableDialog>();  // v0.1.19 Step3 Red ダイアログ
+                services.AddTransient<HyperVDisableDialog>();        // v0.2.1 Step5 Red ダイアログ
             })
             .Build();
     }

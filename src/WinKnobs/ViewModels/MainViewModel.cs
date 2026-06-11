@@ -31,6 +31,9 @@ public partial class MainViewModel : ObservableObject
     private readonly MemoryCompressionService _memoryCompression;
     private readonly RemoteDesktopService _remoteDesktop;
     private readonly SysmainService _sysmain;
+    private readonly WslService _wsl;
+    private readonly CoreIsolationService _coreIsolation;
+    private readonly HyperVService _hyperV;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -106,6 +109,9 @@ public partial class MainViewModel : ObservableObject
         MemoryCompressionService memoryCompression,
         RemoteDesktopService remoteDesktop,
         SysmainService sysmain,
+        WslService wsl,
+        CoreIsolationService coreIsolation,
+        HyperVService hyperV,
         RegistryService registry,
         StartupListViewModel startupListVM,
         NetworkListViewModel networkListVM)
@@ -120,6 +126,9 @@ public partial class MainViewModel : ObservableObject
         _memoryCompression = memoryCompression;
         _remoteDesktop = remoteDesktop;
         _sysmain = sysmain;
+        _wsl = wsl;
+        _coreIsolation = coreIsolation;
+        _hyperV = hyperV;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
@@ -131,6 +140,10 @@ public partial class MainViewModel : ObservableObject
         // v0.1.20：メニュー常設の「現在の状態」ラベルを起動時に非同期で1回更新（ReadStatus は FW 読取で
         // powershell.exe を起動するため UI スレッドをブロックしない・コンストラクタは UI スレッド＝await 後 UI へ戻る）。
         _ = RefreshRemoteDesktopStatusLabelAsync();
+
+        // v0.2.1 Step5：Hyper-V 退避有無＋状態ラベル（RDP と同パターン）。
+        _hasHyperVBackup = _backup.HasMaintenanceOriginal(HyperVService.FeatureKey);
+        _ = RefreshHyperVStatusLabelAsync();
 
         // テーマ初期化＋変更追従（2026-05-16：MenuItem IsChecked 連動）
         _currentThemeMode = _theme.CurrentMode;
@@ -612,6 +625,423 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // -------- WSL 2 機能 ON/OFF：v0.2.1 Step3 --------
+    // Sysmain(ToggleSysmain) と同型（PowerShell 管理者・別スレッド・結果ダイアログ）＋以下の差分：
+    //   - 有効化は2機能（VirtualMachinePlatform→WSL本体）の done-stack（WslService 内・片方失敗で逆順ロールバック）
+    //   - 無効化は WSL 本体のみ（VirtualMachinePlatform は WSA 等の巻き添え防止で残す）
+    //   - 反映は再起動後（-NoRestart・再起動はユーザー判断）
+    //   - Busy は共通の IsSystemFeatureBusy（plan-validator エッジ3＝DISM グローバル mutex 衝突防止。
+    //     Step4 コア分離 / Step5 Hyper-V も同じ Busy に乗せて再起動系メンテを直列化する）
+
+    /// <summary>
+    /// 再起動系メンテ機能（WSL / コア分離 / Hyper-V）の共通 Busy。
+    /// DISM・bcdedit 等のグローバルロック衝突を防ぐため、これら全コマンドを1本で直列化する。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableWslCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableWslCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EnableCoreIsolationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableCoreIsolationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EnableHyperVCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableHyperVCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RestoreHyperVCommand))]
+    private bool _isSystemFeatureBusy;
+
+    private bool CanToggleSystemFeature() => !IsSystemFeatureBusy;
+
+    [RelayCommand(CanExecute = nameof(CanToggleSystemFeature))]
+    private Task EnableWsl() => ToggleWsl(true);
+
+    [RelayCommand(CanExecute = nameof(CanToggleSystemFeature))]
+    private Task DisableWsl() => ToggleWsl(false);
+
+    private async Task ToggleWsl(bool enable)
+    {
+        var verb = enable ? "有効" : "無効";
+        // 中立説明（一律推奨しない）。無効化でもディストリビューションのデータは消えない（再有効化で戻る）。
+        var msg = enable
+            ? "WSL（Windows Subsystem for Linux）を有効にします。\n（管理者権限が必要・反映には再起動が必要）\n\nWSL 本体と実行基盤（仮想マシン プラットフォーム）の2つの Windows 機能を有効化します。\n処理に数分かかる場合があります。\n続行しますか？"
+            : "WSL（Windows Subsystem for Linux）を無効にします。\n（管理者権限が必要・反映には再起動が必要）\n\nLinux ディストリビューションのデータ（ext4.vhdx）は削除されません。再有効化すれば戻ります。\n仮想マシン プラットフォームは他機能（WSA 等）が使うため残します。\n続行しますか？";
+        var ok = _dialogs.Confirm(msg, $"WSL を{verb}化");
+        if (!ok) return;
+
+        IsSystemFeatureBusy = true;
+        StatusMessage = $"⏳ WSL を{verb}化しています…（数分かかる場合があります）";
+        try
+        {
+            // DISM 系は最大 300 秒 × 複数ステップ。UI スレッドをブロックしないよう別スレッドで実行。
+            var (result, err) = await Task.Run(() =>
+            {
+                string? e;
+                var r = enable ? _wsl.Enable(out e) : _wsl.Disable(out e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case WslOutcome.Success:
+                    _dialogs.Info($"✅ WSL を{verb}にしました。\n反映には PC の再起動が必要です（他の変更とまとめて1回の再起動で OK）。", "成功");
+                    StatusMessage = $"✅ WSL を{verb}化（再起動で反映）";
+                    break;
+                case WslOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                case WslOutcome.FeatureNotFound:
+                    _dialogs.Warn(
+                        "この Windows には WSL の機能が見つかりませんでした。\nエディションやビルドによっては利用できません。変更は行われていません。",
+                        "機能なし");
+                    StatusMessage = "❌ WSL 機能が見つかりません";
+                    break;
+                case WslOutcome.PartiallyEnabled:
+                    _dialogs.Error(
+                        "⚠️ 2つの機能のうち片方だけが有効化された状態で止まりました（巻き戻しにも失敗）。\n" +
+                        "「Windows の機能の有効化または無効化」（OptionalFeatures.exe）で\n" +
+                        "『Linux 用 Windows サブシステム』と『仮想マシン プラットフォーム』の状態を確認してください。\n\n詳細：\n" +
+                        (string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err),
+                        "中途半端な状態");
+                    StatusMessage = "⚠️ WSL が中途半端な状態（要手動確認）";
+                    break;
+                default:
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error($"WSL の{verb}化に失敗しました：\n{detail}", "失敗");
+                    StatusMessage = $"❌ {verb}化失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+        }
+    }
+
+    // -------- コア分離（メモリ整合性・HVCI）ON/OFF：v0.2.1 Step4（🔴Red） --------
+    // レジストリ DWORD 直接書込（CoreIsolationService・要管理者・再起動で確定）。
+    //   - OFF＝セキュリティ後退方向（ドライバ悪用攻撃への防壁を外す）→ ConfirmDestructive（既定いいえ）。
+    //   - ON も互換性リスクあり（非対応ドライバで機器の誤動作・まれに起動不能）→ 通常 Confirm に注意書き。
+    //   - GPO/MDM 管理下はグレーアウト（RDP CanEnableRemoteDesktop 同型・起動時1回キャッシュ）。
+    //   - UEFI ロック環境では書いても戻る場合あり → 成功と言い切らず「再起動後に Windows セキュリティで確認」。
+    //   - Busy は WSL と共通の IsSystemFeatureBusy（再起動系メンテ直列化・plan-validator エッジ3）。
+
+    /// <summary>HVCI が GPO/MDM 管理下か（起動時1回キャッシュ・RdpHostCapable 同パターン）。</summary>
+    private bool? _coreIsolationPolicyManagedCache;
+
+    private bool CoreIsolationPolicyManaged()
+    {
+        _coreIsolationPolicyManagedCache ??= _coreIsolation.IsPolicyManaged();
+        return _coreIsolationPolicyManagedCache.Value;
+    }
+
+    private bool CanToggleCoreIsolation() => !IsSystemFeatureBusy && !CoreIsolationPolicyManaged();
+
+    [RelayCommand(CanExecute = nameof(CanToggleCoreIsolation))]
+    private Task EnableCoreIsolation() => ToggleCoreIsolation(true);
+
+    [RelayCommand(CanExecute = nameof(CanToggleCoreIsolation))]
+    private Task DisableCoreIsolation() => ToggleCoreIsolation(false);
+
+    private async Task ToggleCoreIsolation(bool enable)
+    {
+        var verb = enable ? "有効" : "無効";
+        var current = _coreIsolation.ReadEnabled();
+        var currentLabel = CoreIsolationHelper.DescribeState(current);
+
+        bool ok;
+        if (enable)
+        {
+            // ON 方向：セキュリティ強化だが互換性リスクあり（非対応ドライバ）→ 通常 Confirm＋注意書き
+            ok = _dialogs.Confirm(
+                $"コア分離（メモリ整合性）を有効にします。\n（管理者権限が必要・反映には再起動が必要）\n\n現在の状態：{currentLabel}\n\n" +
+                "悪意あるドライバからシステムを守るセキュリティ機能です。\n" +
+                "⚠️ 古い周辺機器のドライバが非対応だと、その機器が動かなくなる場合があります。\n続行しますか？",
+                "コア分離を有効化");
+        }
+        else
+        {
+            // OFF 方向：防壁を外す（🔴）→ ConfirmDestructive（既定いいえ）
+            ok = _dialogs.ConfirmDestructive(
+                $"🔴 コア分離（メモリ整合性）を無効にします。\n（管理者権限が必要・反映には再起動が必要）\n\n現在の状態：{currentLabel}\n\n" +
+                "ドライバの悪用攻撃からシステムを守る防壁を外します。\n" +
+                "ゲームの互換性・性能目的の一時的な OFF を想定した機能です。用が済んだら有効に戻すことを強くおすすめします。\n\n本当に無効にしますか？",
+                "⚠️ コア分離を無効化");
+        }
+        if (!ok) return;
+
+        IsSystemFeatureBusy = true;
+        StatusMessage = $"⏳ コア分離を{verb}化しています…";
+        try
+        {
+            // レジストリ書込は速いが、Busy 直列化（WSL/Hyper-V と同枠）に乗せて再起動系メンテの同時実行を防ぐ。
+            var (result, err) = await Task.Run(() =>
+            {
+                var r = _coreIsolation.SetEnabled(enable, out var e);
+                return (r, e);
+            });
+
+            switch (result)
+            {
+                case CoreIsolationOutcome.Success:
+                    // UEFI ロック環境では戻る場合がある＝「設定しました」止まりで言い切らない（設計ドラフト §2-5）
+                    _dialogs.Info(
+                        $"コア分離（メモリ整合性）を{verb}に設定しました。\n反映には PC の再起動が必要です（他の変更とまとめて1回の再起動で OK）。\n\n" +
+                        "再起動後に「Windows セキュリティ > デバイス セキュリティ > コア分離」で実際の状態を確認してください\n（UEFI で保護された PC では設定が元に戻ることがあります）。",
+                        "設定完了（再起動で反映）");
+                    StatusMessage = $"✅ コア分離を{verb}化（再起動で反映）";
+                    break;
+                case CoreIsolationOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                default:
+                    var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                    _dialogs.Error($"コア分離の{verb}化に失敗しました：\n{detail}", "失敗");
+                    StatusMessage = $"❌ {verb}化失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+        }
+    }
+
+    // -------- Hyper-V（ハイパーバイザー起動）ON/OFF：v0.2.1 Step5（🔴Red） --------
+    // bcdedit /set hypervisorlaunchtype off|auto（HyperVService・PowerShell 経由・要管理者・再起動で確定）。
+    //   - OFF＝🔴 専用 Red 強確認ダイアログ（連鎖影響列挙＋コア分離依存ガイド＋BitLocker 警告＝plan-validator 致命2）。
+    //   - ON（auto）＝復旧方向 → 通常 Confirm。
+    //   - 適用前 first-touch 退避（maintenance ストア）＋「元に戻す」メニュー（RDP Restore 同型）。
+    //   - メニュー常設の状態ラベル（v0.1.20 世代カウンタパターン流用）。
+    //   - Busy は WSL/コア分離と共通の IsSystemFeatureBusy（再起動系メンテ直列化・plan-validator エッジ3）。
+
+    /// <summary>メニュー常設の「現在の状態」ラベル（hypervisorlaunchtype・読み取り専用 MenuItem に表示）。</summary>
+    [ObservableProperty]
+    private string _hyperVStatusLabel = "現在の状態：確認中…";
+
+    /// <summary>ラベル更新の世代番号（RDP _rdpStatusLabelGeneration と同じレース対策・最新だけが勝つ）。</summary>
+    private int _hyperVStatusLabelGeneration;
+
+    /// <summary>
+    /// 現在の hypervisorlaunchtype を読み直してメニュー常設ラベルへ反映する。
+    /// ReadLaunchType は powershell.exe（bcdedit）を起動する＝別スレッド実行で UI を止めない。
+    /// </summary>
+    private async Task RefreshHyperVStatusLabelAsync()
+    {
+        var gen = ++_hyperVStatusLabelGeneration; // UI スレッドで採番（呼び出し元は全て UI スレッド）
+        string label;
+        try
+        {
+            var (type, raw) = await Task.Run(() => _hyperV.ReadLaunchType());
+            label = HyperVHelper.DescribeMenuStatusLabel(type, raw);
+        }
+        catch
+        {
+            label = HyperVHelper.DescribeMenuStatusLabel(HyperVLaunchType.Unknown, null);
+        }
+
+        if (gen == _hyperVStatusLabelGeneration)
+            HyperVStatusLabel = label;
+    }
+
+    /// <summary>Hyper-V 退避（first-touch）が存在するか＝「元に戻す」の活性（HasRdpBackup 同パターン）。</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RestoreHyperVCommand))]
+    private bool _hasHyperVBackup;
+
+    /// <summary>退避の有無を 1 回だけ読み直して <see cref="HasHyperVBackup"/> に反映（ユーザー操作ごと＝ホットパス外）。</summary>
+    private void RefreshHyperVBackupState()
+    {
+        try { HasHyperVBackup = _backup.HasMaintenanceOriginal(HyperVService.FeatureKey); }
+        catch { /* 読めない時は据え置き */ }
+    }
+
+    /// <summary>
+    /// Hyper-V を有効に戻す（hypervisorlaunchtype auto・復旧方向＝通常 Confirm）。
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanToggleSystemFeature))]
+    private async Task EnableHyperV()
+    {
+        var ok = _dialogs.Confirm(
+            "Hyper-V（ハイパーバイザー）を有効に戻します。\n（管理者権限が必要・反映には再起動が必要）\n\n" +
+            "WSL2・Windows サンドボックス・Hyper-V 仮想マシンなどが再び使えるようになります。\n" +
+            "※ LDPlayer 等のエミュレータは再び遅くなる/動かなくなる場合があります。\n続行しますか？",
+            "Hyper-V を有効化");
+        if (!ok) return;
+
+        await ApplyHyperV(autoOn: true);
+    }
+
+    /// <summary>
+    /// Hyper-V を無効にする（hypervisorlaunchtype off・🔴 専用 Red 強確認ダイアログ）。
+    /// スレッド順序は RDP Enable と同じ（plan-validator #3）：
+    ///   ① UI で状態読取 → ② UI で Red ダイアログ ShowDialog → ③ 同意時のみ Task.Run(適用) → ④ UI で結果。
+    ///   Busy はダイアログ表示中から立てる。
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanToggleSystemFeature))]
+    private async Task DisableHyperV()
+    {
+        IsSystemFeatureBusy = true;
+        try
+        {
+            // ① 現在状態（launchtype＋コア分離）を読む。launchtype の読取は子プロセス＝別スレッド。
+            string currentLabel;
+            try
+            {
+                var (type, raw) = await Task.Run(() => _hyperV.ReadLaunchType());
+                currentLabel = HyperVHelper.DescribeMenuStatusLabel(type, raw);
+
+                // 既に Off なら no-op を案内して終了（ダイアログまで進めない）
+                if (type == HyperVLaunchType.Off)
+                {
+                    _dialogs.Info("ハイパーバイザー起動は既に Off に設定されています。\n（反映には再起動が必要です）", "Hyper-V");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _dialogs.Error($"現在の起動設定を読み取れませんでした：\n{ex.Message}", "Hyper-V");
+                StatusMessage = "❌ 状態読取失敗";
+                return;
+            }
+
+            // コア分離（HVCI）が ON のままだと off が効かない（plan-validator 致命2）→ ダイアログの依存ガイドへ
+            var coreIsolationOn = _coreIsolation.ReadEnabled() == 1;
+
+            // ② UI スレッドで Red 専用 強確認ダイアログ
+            var consented = _dialogs.ConfirmHyperVDisable(currentLabel, coreIsolationOn);
+            if (!consented)
+            {
+                StatusMessage = "Hyper-V の無効化をキャンセルしました。";
+                return;
+            }
+
+            // ③ 同意時のみ適用
+            await ApplyHyperVCore(autoOn: false);
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+            RefreshHyperVBackupState();
+            _ = RefreshHyperVStatusLabelAsync();
+        }
+    }
+
+    /// <summary>有効化（auto）側の共通適用（Busy 確保＋後始末込み）。</summary>
+    private async Task ApplyHyperV(bool autoOn)
+    {
+        IsSystemFeatureBusy = true;
+        try
+        {
+            await ApplyHyperVCore(autoOn);
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+            RefreshHyperVBackupState();
+            _ = RefreshHyperVStatusLabelAsync();
+        }
+    }
+
+    /// <summary>
+    /// bcdedit 適用＋結果表示（Busy 管理は呼び出し側）。
+    /// 成功文言は言い切らない（🔧反映2＝VBS 残存時は off が効かない／Secured-core では書いても戻る場合あり）。
+    /// </summary>
+    private async Task ApplyHyperVCore(bool autoOn)
+    {
+        var verb = autoOn ? "有効" : "無効";
+        StatusMessage = $"⏳ Hyper-V を{verb}化しています…";
+
+        var (result, err) = await Task.Run(() =>
+        {
+            var r = _hyperV.SetLaunchType(autoOn, out var e);
+            return (r, e);
+        });
+
+        switch (result)
+        {
+            case HyperVOutcome.Success:
+                var offNote = autoOn
+                    ? ""
+                    : "\n\n⚠️ コア分離（メモリ整合性）など仮想化ベースのセキュリティが有効なままの場合、\n" +
+                      "再起動してもハイパーバイザーは停止しません（効果が出ません）。\n" +
+                      "再起動後にツールメニューの状態表示と LDPlayer 等の動作で確認してください。";
+                _dialogs.Info(
+                    $"ハイパーバイザーの起動設定を変更しました（{(autoOn ? "auto" : "off")}）。\n" +
+                    "反映には PC の再起動が必要です（他の変更とまとめて1回の再起動で OK）。" + offNote,
+                    "設定完了（再起動で反映）");
+                StatusMessage = $"✅ Hyper-V を{verb}化（再起動で反映）";
+                break;
+            case HyperVOutcome.AccessDenied:
+                _dialogs.Warn(
+                    "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                    "権限不足");
+                StatusMessage = "❌ 権限不足（管理者が必要）";
+                break;
+            default:
+                var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                _dialogs.Error($"Hyper-V の{verb}化に失敗しました：\n{detail}", "失敗");
+                StatusMessage = $"❌ {verb}化失敗";
+                break;
+        }
+    }
+
+    private bool CanRestoreHyperV() => !IsSystemFeatureBusy && HasHyperVBackup;
+
+    /// <summary>Hyper-V の起動設定を first-touch 退避へ復元する（RDP Restore 同型）。</summary>
+    [RelayCommand(CanExecute = nameof(CanRestoreHyperV))]
+    private async Task RestoreHyperV()
+    {
+        var ok = _dialogs.Confirm(
+            "ハイパーバイザーの起動設定を、WinKnobs で初めて変更する前の状態に戻します。\n（管理者権限が必要・反映には再起動が必要）\n\n続行しますか？",
+            "Hyper-V を元に戻す");
+        if (!ok) return;
+
+        IsSystemFeatureBusy = true;
+        StatusMessage = "⏳ Hyper-V の設定を元に戻しています…";
+        try
+        {
+            var dict = _backup.LoadMaintenanceOriginals();
+            if (!dict.TryGetValue(HyperVService.FeatureKey, out var json))
+            {
+                _dialogs.Info("戻せる退避情報が見つかりませんでした。", "元に戻す");
+                StatusMessage = "退避情報なし";
+                return;
+            }
+
+            string? err = null;
+            var restored = await Task.Run(() =>
+            {
+                try { _hyperV.RestoreHyperV(json); return true; }
+                catch (Exception ex) { err = ex.Message; return false; }
+            });
+
+            if (restored)
+            {
+                // 完全成功時のみ退避を後始末（失敗時は残して再試行可能に）。
+                _backup.RemoveMaintenanceOriginal(HyperVService.FeatureKey);
+                _dialogs.Info("✅ ハイパーバイザーの起動設定を、変更前の状態に戻しました。\n反映には PC の再起動が必要です。", "成功");
+                StatusMessage = "✅ Hyper-V を元に戻しました（再起動で反映）";
+            }
+            else
+            {
+                var detail = string.IsNullOrWhiteSpace(err) ? "（詳細不明）" : err;
+                _dialogs.Error(
+                    $"元に戻す処理に失敗しました：\n{detail}\n\n退避は残してあります。管理者で起動し直して、もう一度お試しください。",
+                    "失敗");
+                StatusMessage = "❌ 元に戻す失敗（退避は保持）";
+            }
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+            RefreshHyperVBackupState();
+            _ = RefreshHyperVStatusLabelAsync();
+        }
+    }
+
     // -------- リモートデスクトップ 無効化：v0.1.18 システム・メンテナンス Phase 4（🔴Red） --------
     // メモリ圧縮(ToggleMemoryCompression) と同型（powershell 管理者・別スレッド・結果ダイアログ）。
     // 実行は RemoteDesktopService（FW 無効化＋fDeny=1・外→内・fail-closed）。
@@ -1009,7 +1439,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.2.0\n" +
+            "🪟 WinKnobs v0.2.1\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -1463,6 +1893,15 @@ public partial class MainViewModel : ObservableObject
 
         // Power Throttling 無効化（kernel.powerThrottlingOff）
         Items.Add(BuildPowerThrottlingItem());
+
+        // ====================== v0.2.1 追加項目（2026-06-11 Step1-2） ======================
+
+        // マウス加速 OFF（gaming.mouseAcceleration）
+        Items.Add(BuildMouseAccelerationItem());
+        // Network Throttling Index（network.throttlingIndex）
+        Items.Add(BuildNetworkThrottlingItem());
+        // プロセッサー Boost モード（system.processorBoost）
+        Items.Add(BuildProcessorBoostItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -1485,12 +1924,14 @@ public partial class MainViewModel : ObservableObject
         // → 削除失敗かつ値が残存している時は明示的に投げて昇格ダイアログ経路に乗せる。
         void DeleteOrThrow()
         {
-            if (!_registry.DeleteValue(path, valueName) &&
-                _registry.ReadValue<string>(path, valueName) != null)
-            {
-                throw new UnauthorizedAccessException(
-                    $"レジストリ値 {path}\\{valueName} を削除できませんでした（管理者権限が必要な可能性）。");
-            }
+            if (_registry.DeleteValue(path, valueName)) return;
+            // DeleteValue false＝キー無し or 例外（権限不足等）。「値の不在」を正の確認で示せた時だけ
+            // 成功扱いにする（cross-reviewer I-3：ReadValue は例外を null に倒すため、
+            // 「読めない（権限）」と「値が無い」を旧条件では区別できずサイレント成功し得た）。
+            if (!_registry.KeyExists(path)) return;   // キーごと無い＝値も無い（正の確認）
+            if (_registry.ReadValue<string>(path, valueName) == null) return;   // キーは読めて値が無い（正の確認）
+            throw new UnauthorizedAccessException(
+                $"レジストリ値 {path}\\{valueName} を削除できませんでした（管理者権限が必要な可能性）。");
         }
 
         return new SettingItem
@@ -1533,6 +1974,249 @@ public partial class MainViewModel : ObservableObject
                         _registry.WriteValue(path, valueName, dw, Microsoft.Win32.RegistryValueKind.DWord);
                     else
                         DeleteOrThrow();   // 値単位削除（キーは消さない＝同居値を守る・失敗は昇格経路へ）
+                }
+            }
+        };
+    }
+
+    // ====================== v0.2.1 マウス加速（Command 2択・3値連動＋SPI 即時反映） ======================
+    //
+    // HKCU\Control Panel\Mouse の MouseSpeed/MouseThreshold1/MouseThreshold2（REG_SZ・3値連動）。
+    // レジストリ書込だけでは再ログオンまで反映されないため SPI_SETMOUSE で即時反映（best-effort・
+    // 失敗してもレジストリは書けている＝再ログオンで反映＝フェイルソフト）。
+    // ⚠️ SPI の int[3] の並びはキー名の並びと違う（MouseAccelHelper.ToSpiArray に集約・plan-validator 重要3）。
+
+    private class MouseAccelBackup
+    {
+        public string Speed { get; set; } = MouseAccelHelper.DefaultSpeed;
+        public string Threshold1 { get; set; } = MouseAccelHelper.DefaultThreshold1;
+        public string Threshold2 { get; set; } = MouseAccelHelper.DefaultThreshold2;
+    }
+
+    private SettingItem BuildMouseAccelerationItem()
+    {
+        var choices = new[] { "既定（加速あり・ポインター精度を高める）", "OFF（加速なし・1:1 ゲーマー向け）" };
+
+        // 3値を一括書込 → SPI で即時反映（共通ローカル関数）
+        void WriteMouseValues(string speed, string t1, string t2)
+        {
+            _registry.WriteValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.SpeedValueName, speed, Microsoft.Win32.RegistryValueKind.String);
+            _registry.WriteValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.Threshold1ValueName, t1, Microsoft.Win32.RegistryValueKind.String);
+            _registry.WriteValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.Threshold2ValueName, t2, Microsoft.Win32.RegistryValueKind.String);
+            MouseParamsService.TryApply(MouseAccelHelper.ToSpiArray(speed, t1, t2));
+        }
+
+        return new SettingItem
+        {
+            Id = "gaming.mouseAcceleration",
+            Title = "マウス加速（ポインターの精度を高める）",
+            Description = "マウスを速く動かすとカーソルが余計に進む Windows の補正。OFF にすると物理移動量とカーソル移動量が 1:1 になり、FPS ゲーム等で照準が安定します（デスクトップ作業ではカーソル移動が重く感じる場合あり）。即時反映（まれに再ログオンが必要）。",
+            Category = CategoryType.KeyboardMouse,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま（一律推奨しない）
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var speed = _registry.ReadValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.SpeedValueName);
+                    return MouseAccelHelper.IsAccelerationOff(speed) ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    if (label == choices[1])
+                        WriteMouseValues(MouseAccelHelper.OffValue, MouseAccelHelper.OffValue, MouseAccelHelper.OffValue);
+                    else
+                        WriteMouseValues(MouseAccelHelper.DefaultSpeed, MouseAccelHelper.DefaultThreshold1, MouseAccelHelper.DefaultThreshold2);
+                },
+                Backup = () =>
+                {
+                    // 値なし（通常あり得ない）は Windows 既定で補完して退避＝Restore は常に「書く」だけで安全
+                    return JsonSerializer.Serialize(new MouseAccelBackup
+                    {
+                        Speed = _registry.ReadValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.SpeedValueName) ?? MouseAccelHelper.DefaultSpeed,
+                        Threshold1 = _registry.ReadValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.Threshold1ValueName) ?? MouseAccelHelper.DefaultThreshold1,
+                        Threshold2 = _registry.ReadValue<string>(MouseAccelHelper.MouseKeyPath, MouseAccelHelper.Threshold2ValueName) ?? MouseAccelHelper.DefaultThreshold2
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<MouseAccelBackup>(token);
+                    if (bk == null) return;
+                    WriteMouseValues(bk.Speed, bk.Threshold1, bk.Threshold2);
+                }
+            }
+        };
+    }
+
+    // ====================== v0.2.1 Network Throttling Index（Command 2択・値上書き復元） ======================
+    //
+    // HKLM\...\Multimedia\SystemProfile の NetworkThrottlingIndex（DWORD）。
+    // 既定=10（0xa・マルチメディア再生保護のため非メディア系ネット処理を 10 packets/ms に制限）／
+    // 無効=0xffffffff（制限なし）。OS 既定はこの値が「存在する」ため、既定側は値削除でなく 0xa を書く
+    // （Power Throttling と逆・plan-validator 重要4）。値が元々無かった環境の復元のみ DeleteOrThrow 型。
+
+    private SettingItem BuildNetworkThrottlingItem()
+    {
+        const string path = @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile";
+        const string valueName = "NetworkThrottlingIndex";
+        const string disabledDecimal = "4294967295";   // 0xffffffff の 10 進表現（ReadValue<string> 比較用）
+        var choices = new[] { "既定（10・マルチメディア再生を保護）", "無効（制限なし・スループット優先）" };
+
+        void DeleteOrThrow()
+        {
+            if (_registry.DeleteValue(path, valueName)) return;
+            // DeleteValue false＝キー無し or 例外（権限不足等）。「値の不在」を正の確認で示せた時だけ
+            // 成功扱いにする（cross-reviewer I-3：ReadValue は例外を null に倒すため、
+            // 「読めない（権限）」と「値が無い」を旧条件では区別できずサイレント成功し得た）。
+            if (!_registry.KeyExists(path)) return;   // キーごと無い＝値も無い（正の確認）
+            if (_registry.ReadValue<string>(path, valueName) == null) return;   // キーは読めて値が無い（正の確認）
+            throw new UnauthorizedAccessException(
+                $"レジストリ値 {path}\\{valueName} を削除できませんでした（管理者権限が必要な可能性）。");
+        }
+
+        return new SettingItem
+        {
+            Id = "network.throttlingIndex",
+            Title = "Network Throttling Index（非メディア系ネット制限）",
+            Description = "音楽・動画再生中の音飛び防止のため、Windows がメディア系以外のネットワーク処理を毎ミリ秒 10 パケットに制限する機能。無効にするとゲーム等のスループットが上がる場合がありますが、配信や DAW（音楽制作）併用時は既定のままが安定することもあります。管理者権限必須。再起動で確実に反映。",
+            Category = CategoryType.Network,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま（一律推奨しない）
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<string>(path, valueName);
+                    return v == disabledDecimal ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    if (label == choices[1])
+                        _registry.WriteValue(path, valueName, unchecked((int)0xffffffff), Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        _registry.WriteValue(path, valueName, 10, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<string>(path, valueName);
+                    return JsonSerializer.Serialize(new StringBackup { ValueExisted = v != null, Value = v ?? "" });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<StringBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted && long.TryParse(bk.Value, out var dw))
+                        _registry.WriteValue(path, valueName, unchecked((int)(uint)dw), Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteOrThrow();   // 元々値が無かった環境のみ（値単位削除・キーは消さない）
+                }
+            }
+        };
+    }
+
+    // ====================== v0.2.1 プロセッサー Boost モード（Command 3択・powercfg 実GUID固定） ======================
+    //
+    // powercfg SUB_PROCESSOR PERFBOOSTMODE。⚠️ plan-validator 致命1：scheme_current 文字列は使わず、
+    // 操作のたびに /getactivescheme で実 GUID を1回解決し Read/Write/Backup を同一 GUID に固定
+    // （カスタム/OEM プラン・TOCTOU 対策）。GUID 解決失敗時は Apply 中止（例外→既存エラー経路）。
+    // 5択でなく 3択（4/5=効率的系はハイブリッド CPU 専用＝非対応環境で「効かない選択肢」を出さない）。
+
+    private class BoostBackup
+    {
+        public string SchemeGuid { get; set; } = "";
+        public int Ac { get; set; } = 2;
+        public int Dc { get; set; } = 2;
+    }
+
+    private string ResolveActiveSchemeGuidOrThrow()
+    {
+        var output = _launcherForCommands.RunPowerCfg("/getactivescheme");
+        if (!PowerCfgHelper.TryParseActiveSchemeGuid(output, out var guid))
+            throw new InvalidOperationException("アクティブな電源プランの GUID を取得できませんでした（powercfg /getactivescheme）。");
+        return guid;
+    }
+
+    /// <summary>
+    /// Boost：直前の Backup() が解決した GUID（cross-reviewer I-1・2026-06-11）。
+    /// Backup と Apply が別々に /getactivescheme を解決すると、その間のプラン切替で
+    /// 「退避した場所」と「書き込む場所」が食い違う（致命1 TOCTOU の部分再導入）。
+    /// Backup→Apply は同一操作内で連続実行されるため、Backup の解決結果を Apply が使い回す。
+    /// Apply 単独呼び出し（Backup なし経路）では null のため従来どおり自前解決する。
+    /// </summary>
+    private string? _boostSchemeGuidFromBackup;
+
+    private SettingItem BuildProcessorBoostItem()
+    {
+        var choices = new[] { "無効（ブーストしない・発熱/静音優先）", "有効（控えめにブースト）", "アグレッシブ（既定・最大ブースト）" };
+        // choices のインデックス＝PERFBOOSTMODE の index（0/1/2）に一致させている
+
+        return new SettingItem
+        {
+            Id = "system.processorBoost",
+            Title = "プロセッサー Boost モード（Turbo Boost 制御）",
+            Description = "CPU が定格クロックを超えてブーストする挙動の制御。無効にすると発熱・ファン騒音・消費電力が下がる代わりに重い処理が遅くなります（AI ローカル実行や夏場の熱対策に）。現在アクティブな電源プランの AC/DC 両方に書き込みます。プランを切り替えると設定は引き継がれません。Windows 11 の「電源モード」スライダーが『推奨』以外だと反映されない場合があります。管理者権限必須。即時反映。",
+            Category = CategoryType.Kernel,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[2],   // 中立：Windows 既定（アグレッシブ）
+            DefaultValue = choices[2],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    try
+                    {
+                        var scheme = ResolveActiveSchemeGuidOrThrow();
+                        // ⚠️ /query でなく /qh（隠し設定込み）：PERFBOOSTMODE は既定で hidden 属性のため
+                        // /query では出力されない（VM 実機検証 2026-06-11 で発見・ホストでも再現）。
+                        var output = _launcherForCommands.RunPowerCfg(
+                            "/qh", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid);
+                        if (PowerCfgHelper.TryParseAcDcIndexes(output, out var ac, out _) && ac >= 0 && ac < choices.Length)
+                            return choices[ac];
+                    }
+                    catch { /* 読取失敗は既定表示（SmartScreen 同パターン） */ }
+                    return choices[2];   // 不明・3択外（4/5 等）は既定表示
+                },
+                Apply = label =>
+                {
+                    var idx = Array.IndexOf(choices, label);
+                    if (idx < 0) idx = 2;
+                    // I-1：Backup が解決した GUID を優先（退避先と書込先を同一プランに固定）。
+                    var scheme = _boostSchemeGuidFromBackup ?? ResolveActiveSchemeGuidOrThrow();   // 解決失敗は throw＝Apply 中止
+                    _boostSchemeGuidFromBackup = null;   // 使い捨て（次回操作に古い GUID を持ち越さない）
+                    _launcherForCommands.RunPowerCfg("/setacvalueindex", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, idx.ToString());
+                    _launcherForCommands.RunPowerCfg("/setdcvalueindex", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, idx.ToString());
+                    _launcherForCommands.RunPowerCfg("/setactive", scheme);   // 再適用で即時反映
+                },
+                Backup = () =>
+                {
+                    var scheme = ResolveActiveSchemeGuidOrThrow();
+                    // /qh（隠し設定込み）：PERFBOOSTMODE は hidden のため /query では空（Read と同じ）。
+                    var output = _launcherForCommands.RunPowerCfg(
+                        "/qh", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid);
+                    if (!PowerCfgHelper.TryParseAcDcIndexes(output, out var ac, out var dc))
+                        throw new InvalidOperationException("Boost モードの現在値を読み取れなかったため、適用を中止しました（復元不能な変更を避けるため）。");
+                    _boostSchemeGuidFromBackup = scheme;   // I-1：直後の Apply が同一 GUID を使う
+                    return JsonSerializer.Serialize(new BoostBackup { SchemeGuid = scheme, Ac = ac, Dc = dc });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<BoostBackup>(token);
+                    if (bk == null || string.IsNullOrEmpty(bk.SchemeGuid)) return;
+                    // 退避時の GUID に書き戻す（プランが切り替わっていても「退避した場所」へ正しく戻る）
+                    _launcherForCommands.RunPowerCfg("/setacvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, bk.Ac.ToString());
+                    _launcherForCommands.RunPowerCfg("/setdcvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, bk.Dc.ToString());
+                    _launcherForCommands.RunPowerCfg("/setactive", bk.SchemeGuid);
                 }
             }
         };
