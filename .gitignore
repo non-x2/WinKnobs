@@ -109,6 +109,8 @@ scripts/*.bat
 # vm_diag.txt は VM 実行の診断出力（個人 PC 固有・公開対象外）。
 scripts/_*
 scripts/ui_automation/vm_diag*.txt
+# 実機検証の使い捨て退避（夜間モード blob 等・個人 PC 固有・公開対象外・2026-06-11）。
+docs/_*
 
 # Phase R-1（2026-05-25）：スタートアップ系 UI Automation テストケース明示許可
 # 上の `scripts/*.ps1` は直下のみだが、将来パターンが広がっても

@@ -47,6 +47,7 @@ public partial class App : Application
                 services.AddSingleton<ThemeService>();
                 services.AddSingleton<ExternalLauncherService>();
                 services.AddSingleton<NetworkService>();      // v0.1.7：ネットワーク機能
+                services.AddSingleton<NicPowerService>();     // v0.2.2 Step2：NIC省電力プリセット（PowerShell・要管理者・BackupService 依存）
                 services.AddSingleton<EnvironmentInfoService>();
                 services.AddSingleton<DialogService>();
                 services.AddSingleton<PrivilegeService>();   // v0.1.4 BUG-3 対応

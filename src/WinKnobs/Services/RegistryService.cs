@@ -57,6 +57,19 @@ public class RegistryService
     }
 
     /// <summary>
+    /// REG_BINARY 値を生バイト列のまま読む（v0.2.2 夜間モード blob 用）。
+    /// 値が無い／型が byte[] でない／キー無しは null。ReadValue&lt;object&gt; は16進文字列へ
+    /// 整形してしまうため、blob 解析にはこちらを使う。
+    /// </summary>
+    public byte[]? ReadBinary(string keyPath, string valueName)
+    {
+        var (hive, subKey) = ParsePath(keyPath);
+        using var key = hive.OpenSubKey(subKey, false);
+        if (key == null) return null;
+        return key.GetValue(valueName) as byte[];
+    }
+
+    /// <summary>
     /// A3-2-c：バイト列を REG_BINARY として書込（plan-validator V-9）。
     /// Convert.ChangeType が byte[] に対応しないため WriteValue&lt;T&gt; とは別に専用メソッドを用意。
     /// </summary>

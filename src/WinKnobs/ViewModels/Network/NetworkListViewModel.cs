@@ -25,6 +25,11 @@ public partial class NetworkListViewModel : ObservableObject
     private readonly DialogService _dialogs;
     private readonly NetworkService _network;
     private readonly PrivilegeService _privilege;
+    private readonly NicPowerService _nic;            // v0.2.2：NIC省電力プリセット
+    private readonly RemoteDesktopService _rdp;       // v0.2.2：リモートセッション判定（締め出し警告）
+
+    /// <summary>NIC省電力の状態リフレッシュ世代（fire-and-forget の古い値上書きレース対策・見落とし事例 2026-06-09）。</summary>
+    private int _nicStatusGeneration;
 
     [ObservableProperty]
     private string _statusMessage =
@@ -59,16 +64,30 @@ public partial class NetworkListViewModel : ObservableObject
     /// <summary>詳細層：DNS 適用の対象アダプタ選択（既定＝全チェック＝現行の全件挙動・Phase 7c）。</summary>
     public ObservableCollection<AdapterSelect> Adapters { get; } = new();
 
+    // ── NIC省電力プリセット（v0.2.2）──
+    /// <summary>NIC省電力の操作中フラグ（PowerShell 120秒・UI フリーズ防止＋ペイン内直列化・🔧反映エッジ3）。</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyNicPowerSavingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RestoreNicPowerCommand))]
+    private bool _isNicPowerBusy;
+
+    /// <summary>NIC省電力の「今の状態」（省電力件数＋電源オフ許可の2軸・🔧反映エッジ2）。</summary>
+    [ObservableProperty] private string _nicPowerStatus = "（読み込み中）";
+
     public NetworkListViewModel(
         ExternalLauncherService launcher,
         DialogService dialogs,
         NetworkService network,
-        PrivilegeService privilege)
+        PrivilegeService privilege,
+        NicPowerService nic,
+        RemoteDesktopService rdp)
     {
         _launcher = launcher;
         _dialogs = dialogs;
         _network = network;
         _privilege = privilege;
+        _nic = nic;
+        _rdp = rdp;
     }
 
     /// <summary>
@@ -78,7 +97,32 @@ public partial class NetworkListViewModel : ObservableObject
     {
         RefreshStatus();
         RefreshAdapters();
+        RefreshNicPowerStatus();
         StatusMessage = "ネットワーク設定を開きました。「Windowsの画面を開く」はすぐに使えます。";
+    }
+
+    /// <summary>
+    /// NIC省電力の「今の状態」を非同期で読み直す（読取のみ・安全）。
+    /// 世代カウンタで古い結果の上書きを防ぐ（見落とし事例 2026-06-09）。対象＝選択アダプタの先頭。
+    /// </summary>
+    private async void RefreshNicPowerStatus()
+    {
+        var gen = ++_nicStatusGeneration;
+        var active = _network.GetActivePhysicalAdapters();
+        var target = Adapters.FirstOrDefault(a => a.IsSelected)?.Id
+                     ?? active.FirstOrDefault()?.Id;
+        if (target == null)
+        {
+            NicPowerStatus = "（有効な物理アダプタがありません）";
+            return;
+        }
+
+        NicPowerHelper.NicPowerSnapshot? snap = null;
+        try { snap = await System.Threading.Tasks.Task.Run(() => _nic.ReadSnapshot(target)); }
+        catch { /* 読取失敗は下の DescribeStatus(null) でフォールバック */ }
+
+        if (gen != _nicStatusGeneration) return;   // より新しいリフレッシュが走った → 破棄
+        NicPowerStatus = NicPowerHelper.DescribeStatus(snap);
     }
 
     /// <summary>「今の状態」（配信最適化・DNS）を読み直してプロパティへ反映。</summary>
@@ -152,7 +196,7 @@ public partial class NetworkListViewModel : ObservableObject
     [RelayCommand]
     private void SetBandwidth()
     {
-        if (_privilege.IsShutdownPending) return;
+        if (_privilege.IsShutdownPending || GuardNicBusy()) return;
 
         var ok = _dialogs.Confirm(
             "「通信を軽くする」を実行します。\n\n" +
@@ -208,7 +252,7 @@ public partial class NetworkListViewModel : ObservableObject
     [RelayCommand]
     private void ApplyDns(string? profileKey)
     {
-        if (_privilege.IsShutdownPending) return;
+        if (_privilege.IsShutdownPending || GuardNicBusy()) return;
 
         var (profile, label) = profileKey switch
         {
@@ -269,7 +313,7 @@ public partial class NetworkListViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanApplyCustomDns))]
     private void ApplyCustomDns()
     {
-        if (_privilege.IsShutdownPending) return;
+        if (_privilege.IsShutdownPending || GuardNicBusy()) return;
 
         var v4 = NetworkService.BuildDnsServers(CustomDnsV4Primary, CustomDnsV4Secondary);
         var v6 = NetworkService.BuildDnsServers(CustomDnsV6);
@@ -376,7 +420,7 @@ public partial class NetworkListViewModel : ObservableObject
     [RelayCommand]
     private void ApplyDoh(string? mode)
     {
-        if (_privilege.IsShutdownPending) return;
+        if (_privilege.IsShutdownPending || GuardNicBusy()) return;
         var enable = mode != "off";
 
         if (!_network.IsDohSupportedHere())
@@ -493,7 +537,7 @@ public partial class NetworkListViewModel : ObservableObject
     [RelayCommand]
     private void RevertAll()
     {
-        if (_privilege.IsShutdownPending) return;
+        if (_privilege.IsShutdownPending || GuardNicBusy()) return;
 
         if (!_network.HasBackup())
         {
@@ -540,6 +584,181 @@ public partial class NetworkListViewModel : ObservableObject
             _dialogs.Error($"元に戻す処理に失敗しました：\n{ex.Message}", "失敗");
             StatusMessage = $"❌ 失敗: {ex.Message}";
         }
+    }
+
+    // ============ NIC省電力プリセット（v0.2.2・くわしい設定 内） ============
+
+    /// <summary>NIC省電力操作が可能か（操作中でない）。DNS 等の同期操作との直列化は各コマンド先頭で相互チェック。</summary>
+    private bool CanOperateNicPower() => !IsNicPowerBusy;
+
+    /// <summary>
+    /// NIC省電力操作中に他のネットワーク変更を弾く（🔧反映エッジ3：同一アダプタへの再初期化競合防止）。
+    /// 操作中なら案内を出して true（呼び出し側は中止）。
+    /// </summary>
+    private bool GuardNicBusy()
+    {
+        if (!IsNicPowerBusy) return false;
+        _dialogs.Info(
+            "NICの省電力設定を変更中です。完了してから操作してください（数秒〜十数秒）。",
+            "処理中");
+        StatusMessage = "⏳ NIC省電力の処理中です。少しお待ちください。";
+        return true;
+    }
+
+    /// <summary>
+    /// 選択アダプタに「省電力OFFプリセット」を適用（EEE/ULPM 等を 0＋電源オフ許可を Disabled）。
+    /// 🟡・要管理者・即時反映＝適用時に数秒の通信断。適用前に GUID 単位 first-touch 退避。
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOperateNicPower))]
+    private async System.Threading.Tasks.Task ApplyNicPowerSaving()
+    {
+        if (_privilege.IsShutdownPending || IsNicPowerBusy) return;
+
+        var targets = ResolveSelectedAdapters();
+        if (targets == null) return;   // 対象なし／未選択（中で Info 表示済み）
+
+        // 🔴 締め出しガード（🔧反映ダメ出し2）：リモート（RDP）経由で NIC を触ると自分の接続が切れる。
+        var remoteWarn = _rdp.IsCurrentSessionRemote()
+            ? "\n\n⚠️ 今このPCに【リモートデスクトップ経由】で接続中のようです。\n" +
+              "ネットワーク設定の変更でこの接続が切れる可能性が高いです。本当に続けますか？"
+            : "";
+        var confirmTitle = "NICの省電力をOFFにする（安定重視）";
+        var body =
+            "選んだアダプタの省電力機能をOFFにします。\n\n" +
+            $"対象アダプタ：{string.Join("・", targets.Select(a => a.Name))}\n\n" +
+            "・省電力イーサネット(EEE)等をOFFにし、「電力節約のためにオフにできる」のチェックも外します。\n" +
+            "・ラグ・突然の切断対策に効きます（待機時の消費電力はわずかに増えます）。\n" +
+            "・⚡ 適用の瞬間、アダプタが再初期化され【数秒だけ通信が途切れる】ことがあります。\n" +
+            "・適用前の状態は自動で退避し、「↩ 省電力を元に戻す」でいつでも戻せます。\n\n" +
+            "実行しますか？" + remoteWarn;
+
+        // リモート時は破壊的確認（既定キャンセル）に切替。
+        var ok = _rdp.IsCurrentSessionRemote()
+            ? _dialogs.ConfirmDestructive(body, confirmTitle)
+            : _dialogs.Confirm(body, confirmTitle);
+        if (!ok) return;
+
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation("NIC省電力OFF", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
+                case ElevationChoice.ContinueAnyway: break;
+                case ElevationChoice.Cancel:
+                default: return;
+            }
+        }
+
+        IsNicPowerBusy = true;
+        StatusMessage = "⏳ NICの省電力をOFFにしています…（一瞬通信が途切れる場合があります）";
+        try
+        {
+            int ok2 = 0, partial = 0, failed = 0;
+            string? lastMsg = null;
+            foreach (var a in targets)
+            {
+                var (outcome, msg) = await System.Threading.Tasks.Task.Run(() =>
+                {
+                    var r = _nic.ApplyPowerSavingOff(a.Id, out var m);
+                    return (r, m);
+                });
+                lastMsg = msg ?? lastMsg;
+                switch (outcome)
+                {
+                    case NicPowerOutcome.Success: ok2++; break;
+                    case NicPowerOutcome.PartiallyApplied: partial++; break;
+                    default: failed++; break;
+                }
+            }
+            RefreshNicPowerStatus();
+            StatusMessage = BuildNicResultMessage("省電力OFF", targets.Count, ok2, partial, failed, lastMsg);
+        }
+        finally
+        {
+            IsNicPowerBusy = false;
+        }
+    }
+
+    /// <summary>選択アダプタの NIC省電力を退避から原状復帰（「↩ 省電力を元に戻す」）。要管理者。</summary>
+    [RelayCommand(CanExecute = nameof(CanOperateNicPower))]
+    private async System.Threading.Tasks.Task RestoreNicPower()
+    {
+        if (_privilege.IsShutdownPending || IsNicPowerBusy) return;
+
+        var targets = ResolveSelectedAdapters();
+        if (targets == null) return;
+
+        var restorable = targets.Where(a => _nic.HasBackup(a.Id)).ToList();
+        if (restorable.Count == 0)
+        {
+            _dialogs.Info(
+                "選んだアダプタに、省電力プリセットで戻せる変更がありません。\n" +
+                "（このツールで省電力OFFを適用すると、ここから戻せるようになります）",
+                "戻す対象なし");
+            StatusMessage = "ℹ️ NIC省電力の戻す対象がありません。";
+            return;
+        }
+
+        var ok = _dialogs.Confirm(
+            "NICの省電力設定を、適用前の状態に戻します。\n\n" +
+            $"対象アダプタ：{string.Join("・", restorable.Select(a => a.Name))}\n\n" +
+            "・⚡ この操作でも数秒だけ通信が途切れることがあります。\n\n実行しますか？",
+            "NIC省電力を元に戻す");
+        if (!ok) return;
+
+        if (!_privilege.IsRunningAsAdministrator())
+        {
+            var choice = _dialogs.ConfirmElevation("NIC省電力を元に戻す", isFromError: false);
+            switch (choice)
+            {
+                case ElevationChoice.RestartAsAdmin: RequestRestartAsAdministrator(); return;
+                case ElevationChoice.ContinueAnyway: break;
+                case ElevationChoice.Cancel:
+                default: return;
+            }
+        }
+
+        IsNicPowerBusy = true;
+        StatusMessage = "⏳ NICの省電力を元に戻しています…";
+        try
+        {
+            int ok2 = 0, partial = 0, failed = 0;
+            string? lastMsg = null;
+            foreach (var a in restorable)
+            {
+                var (outcome, msg) = await System.Threading.Tasks.Task.Run(() =>
+                {
+                    var r = _nic.RestoreOriginal(a.Id, out var m);
+                    return (r, m);
+                });
+                lastMsg = msg ?? lastMsg;
+                switch (outcome)
+                {
+                    case NicPowerOutcome.Success: ok2++; break;
+                    case NicPowerOutcome.PartiallyApplied: partial++; break;
+                    default: failed++; break;
+                }
+            }
+            RefreshNicPowerStatus();
+            StatusMessage = BuildNicResultMessage("省電力を元に戻す", restorable.Count, ok2, partial, failed, lastMsg);
+        }
+        finally
+        {
+            IsNicPowerBusy = false;
+        }
+    }
+
+    /// <summary>NIC 操作の集計メッセージ。全成功／一部／失敗を 1 行で。</summary>
+    private static string BuildNicResultMessage(
+        string label, int total, int ok, int partial, int failed, string? detail)
+    {
+        if (failed == 0 && partial == 0)
+            return $"✅ {label}を適用しました（{ok}/{total} アダプタ）。";
+        if (ok > 0 || partial > 0)
+            return $"⚠️ {label}：{ok} 件成功・{partial} 件一部・{failed} 件失敗（{total} 中）。" +
+                   (detail != null ? $"\n{detail}" : "");
+        return $"❌ {label}に失敗しました（{total} アダプタ）。" + (detail != null ? $"\n{detail}" : "");
     }
 
     // ============ 昇格ヘルパー（StartupListViewModel から複製・M-1 で共通化予定） ============

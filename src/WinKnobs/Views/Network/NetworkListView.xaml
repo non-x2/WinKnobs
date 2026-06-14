@@ -170,6 +170,24 @@
                                TextWrapping="Wrap" FontSize="11"
                                Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,10"/>
 
+                    <!-- NIC省電力プリセット（v0.2.2・選択アダプタに適用・要管理者・即時反映で数秒断） -->
+                    <TextBlock Text="🔌 NICの省電力（安定重視プリセット）" FontWeight="SemiBold" Margin="0,2,0,4"/>
+                    <TextBlock AutomationProperties.AutomationId="NicPowerStatus"
+                               Text="{Binding NicPowerStatus, StringFormat=今の状態：{0}}"
+                               TextWrapping="Wrap" FontSize="11"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,4"/>
+                    <WrapPanel Margin="0,0,0,4">
+                        <Button AutomationProperties.AutomationId="NicPowerOffButton"
+                                Command="{Binding ApplyNicPowerSavingCommand}"
+                                Content="🔌 省電力をOFFにする（安定重視）" MinWidth="220" Margin="0,0,6,6" Padding="8,4"/>
+                        <Button AutomationProperties.AutomationId="NicPowerRestoreButton"
+                                Command="{Binding RestoreNicPowerCommand}"
+                                Content="↩ 省電力を元に戻す" MinWidth="150" Margin="0,0,6,6" Padding="8,4"/>
+                    </WrapPanel>
+                    <TextBlock Text="※ 上の「対象アダプタ」で選んだアダプタに適用します。EEE/省電力イーサ等をOFFにしラグ・切断を防ぎます。⚡適用時に数秒だけ通信が途切れることがあります（リモート接続中は要注意）。"
+                               TextWrapping="Wrap" FontSize="11"
+                               Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,10"/>
+
                     <TextBlock Text="ネットワークの詳細項目（ダブルクリックで編集）"
                                TextWrapping="Wrap" FontSize="11"
                                Foreground="{DynamicResource Fg.Subtle}" Margin="0,0,0,6"/>

@@ -1902,6 +1902,11 @@ public partial class MainViewModel : ObservableObject
         Items.Add(BuildNetworkThrottlingItem());
         // プロセッサー Boost モード（system.processorBoost）
         Items.Add(BuildProcessorBoostItem());
+
+        // ====================== v0.2.2 追加項目（2026-06-11 Step3） ======================
+
+        // 夜間モード 色温度（desktop.nightLightStrength・CloudStore バイナリ blob・最難関）
+        Items.Add(BuildNightLightItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -2217,6 +2222,87 @@ public partial class MainViewModel : ObservableObject
                     _launcherForCommands.RunPowerCfg("/setacvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, bk.Ac.ToString());
                     _launcherForCommands.RunPowerCfg("/setdcvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, bk.Dc.ToString());
                     _launcherForCommands.RunPowerCfg("/setactive", bk.SchemeGuid);
+                }
+            }
+        };
+    }
+
+    // ====================== v0.2.2 夜間モード 色温度（Command プリセット・CloudStore blob） ======================
+    //
+    // ⚠️ 最難関：非公開バイナリ blob（HKCU CloudStore）。**全ロジックは NightLightHelper（純粋関数）に集約**し、
+    //   ここは「生 blob 読取 → パッチ → 書込／Base64 退避→書戻し」の I/O だけを担う。
+    // ・色温度2バイトだけ差し替え（他バイトは原本維持）＝形式揺れに強い。1バイトでも想定外なら Apply 中止。
+    // ・復元は blob 丸ごと書戻し（Base64・フォーマット解釈不要＝常に安全）。
+    // ・HKCU のため昇格不要。ON/OFF（別 blob）には触らない＝強度のみ。
+    //
+    // ⚠️ 即時反映しない（2026-06-11 ホスト Z370 実機検証で確定）：
+    //   夜間モードサービスは設定 blob をライブ監視していない。色温度2バイトの書込は成功・永続し
+    //   （CloudStore による巻き戻しも無し）、トグルしても値は保持されるが、**画面への反映には
+    //   夜間モードを一度 OFF→ON するか再ログオンが必要**。タイムスタンプを現在時刻に進めても
+    //   ライブ反映はしなかった＝bump は反映トリガーにならない。よって RestartScope=Logoff。
+    // ⚠️ タイムスタンプ bump は無効のまま（反映に寄与せず・誤エンコードは blob 破損リスクのため触らない）。
+    private const bool BumpTimestampOnApply = false;
+
+    private SettingItem BuildNightLightItem()
+    {
+        var choices = NightLightHelper.PresetLabels();
+        const string unreadable = "（読取不可・公式設定で変更してください）";
+
+        return new SettingItem
+        {
+            Id = "desktop.nightLightStrength",
+            Title = "夜間モード 色温度（ブルーライト軽減の強さ）",
+            Description = "Windows の夜間モードの「強さ（色温度）」をプリセットから選びます。数値が小さいほど暖色（赤み）が強くなります。" +
+                "夜間モードの ON/OFF やスケジュールは変更しません（強度のみ）。設定は Windows 非公開のバイナリ形式のため、" +
+                "WinKnobs は色温度の部分だけを安全に書き換え、元の値は丸ごと退避します。読み取れない／形式が想定外の場合は書き込みを中止します。" +
+                "⚠️ 画面にすぐ反映はされません：適用後に夜間モードを一度 OFF→ON する（アクションセンターの「夜間モード」タイル、または ms-settings:nightlight）か、" +
+                "再ログオンすると反映されます。管理者権限は不要。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = "4000K（標準）",   // 中立（一律に変更を勧めない・現在値の表示が主目的）
+            DefaultValue = "4000K（標準）",
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var blob = _registry.ReadBinary(NightLightHelper.SettingsKeyPath, NightLightHelper.ValueName);
+                    if (blob != null && NightLightHelper.TryParseSettings(blob, out var kelvin))
+                        return NightLightHelper.NearestPresetLabel(kelvin);
+                    return unreadable;   // 3択外＝SyncEditableFromOriginal で先頭に丸められる（クラッシュしない）
+                },
+                Apply = label =>
+                {
+                    if (!NightLightHelper.TryKelvinFromLabel(label, out var kelvin))
+                        throw new InvalidOperationException($"不明なプリセット「{label}」のため適用を中止しました。");
+
+                    var blob = _registry.ReadBinary(NightLightHelper.SettingsKeyPath, NightLightHelper.ValueName);
+                    var patched = NightLightHelper.BuildPatchedSettings(blob, kelvin, BumpTimestampOnApply);
+                    if (patched == null)
+                        throw new InvalidOperationException(
+                            "夜間モードの設定データが読み取れない／想定外の形式のため、安全のため書き込みを中止しました。" +
+                            "「設定 > システム > ディスプレイ > 夜間モード」（ms-settings:nightlight）から変更してください。");
+
+                    _registry.WriteBinary(NightLightHelper.SettingsKeyPath, NightLightHelper.ValueName, patched);
+                },
+                Backup = () =>
+                {
+                    // blob 丸ごとを Base64 で退避（無ければ空文字＝Restore は no-op）。
+                    var blob = _registry.ReadBinary(NightLightHelper.SettingsKeyPath, NightLightHelper.ValueName);
+                    return blob == null ? "" : Convert.ToBase64String(blob);
+                },
+                Restore = token =>
+                {
+                    if (string.IsNullOrEmpty(token)) return;   // 退避時に blob が無かった＝戻すものが無い
+                    // 🔴致命①候補（クロスレビュー 2026-06-14）：退避後に夜間モードのリセット／プロファイル再作成で
+                    // blob キー自体が消えている場合、WriteBinary（CreateSubKey）が非公開 CloudStore キーを
+                    // "復活生成" してしまう＝当方が構造を保証できないキーを外部から作る＝グレーアウト事故の温床。
+                    // キーが現存する時だけ書き戻す（消えていれば復元はスキップ＝壊さない最優先・OS の再生成に委ねる）。
+                    if (!_registry.KeyExists(NightLightHelper.SettingsKeyPath)) return;
+                    var blob = Convert.FromBase64String(token);
+                    _registry.WriteBinary(NightLightHelper.SettingsKeyPath, NightLightHelper.ValueName, blob);
                 }
             }
         };
