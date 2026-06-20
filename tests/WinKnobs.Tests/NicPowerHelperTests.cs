@@ -68,8 +68,10 @@ public class NicPowerHelperTests
         Assert.Contains("-RegistryKeyword 'ULPMode' -RegistryValue '0' -NoRestart", cmd);
         // 各 Set- ＋電源管理＝計3つの個別 try/catch（$fail++ 集計）
         Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(cmd, @"catch \{ \$fail\+\+").Count);
-        // 電源管理ロック＝広範な Disable- でなく Set- の AllowComputerToTurnOffDevice Disabled
-        Assert.Contains("Set-NetAdapterPowerManagement -Name $a.Name -AllowComputerToTurnOffDevice Disabled", cmd);
+        // 電源管理ロック＝広範な Disable- でなく Get→プロパティ書換→パイプ Set（2026-06-20 修正：直接パラメーターは無い）
+        Assert.Contains("Get-NetAdapterPowerManagement -Name $a.Name", cmd);
+        Assert.Contains("$pm.AllowComputerToTurnOffDevice='Disabled'", cmd);
+        Assert.Contains("$pm | Set-NetAdapterPowerManagement", cmd);
         Assert.DoesNotContain("Disable-NetAdapterPowerManagement", cmd);
         // 構造化結果＋件数で exit を分岐
         Assert.Contains(NicPowerHelper.ResultMarker, cmd);
@@ -96,8 +98,9 @@ public class NicPowerHelperTests
 
         Assert.Contains("-RegistryKeyword '*EEE' -RegistryValue '1' -NoRestart", cmd);
         Assert.Contains("-RegistryKeyword 'ULPMode' -RegistryValue '1' -NoRestart", cmd);
-        // 電源管理は保存した Enabled へ戻す
-        Assert.Contains("AllowComputerToTurnOffDevice Enabled", cmd);
+        // 電源管理は保存した Enabled へ戻す（Get→プロパティ書換→パイプ Set）
+        Assert.Contains("$pm.AllowComputerToTurnOffDevice='Enabled'", cmd);
+        Assert.Contains("$pm | Set-NetAdapterPowerManagement", cmd);
     }
 
     [Fact]
@@ -207,6 +210,54 @@ public class NicPowerHelperTests
         var json = """{"Name":"Eth","Guid":"{G}","AllowComputerToTurnOffDevice":"1","Advanced":[]}""";
         var snap = NicPowerHelper.TryParseSnapshot(json);
         Assert.Equal("Enabled", snap!.AllowComputerToTurnOffDevice);
+    }
+
+    [Fact]
+    public void Parse_後ろにCLIXML進捗が連結されても本物JSONだけ抽出して読める()
+    {
+        // 2026-06-20 実機バグ：昇格セッションでは Get-NetAdapter が CLIXML 形式の進捗(中括弧を含む)を stderr に出す。
+        // combined=stdout+stderr で連結されるため、ExtractJsonObject はブレース・バランスで本物JSONだけ取る必要がある。
+        var json =
+            """{"Name":"Eth","Guid":"{G4}","AllowComputerToTurnOffDevice":"Enabled","Advanced":[]}""" +
+            "\n#< CLIXML\n<Objs><Obj><MS><AV>Where-Object { $_.InterfaceGuid -eq '...' }</AV></MS></Obj></Objs>";
+        var snap = NicPowerHelper.TryParseSnapshot(json);
+        Assert.NotNull(snap);
+        Assert.Equal("Eth", snap!.AdapterName);
+        Assert.Equal("{G4}", snap.Guid);
+    }
+
+    [Fact]
+    public void Parse_PS51のICollection特殊形式_valueプロパティを配列として読める()
+    {
+        // 2026-06-20 実機バグ：昇格セッションの ConvertTo-Json で ValidRegistryValues が
+        // {"value":[...],"Count":N} のオブジェクトで出るケースを吸収する。
+        var json = """
+        {"Name":"Eth","Guid":"{G3}","AllowComputerToTurnOffDevice":"Enabled","Advanced":[
+          {"RegistryKeyword":"EEELinkAdvertisement","RegistryValue":["0"],
+           "ValidRegistryValues":{"value":["0","1"],"Count":2},"DisplayName":"EEE"}
+        ]}
+        """;
+        var snap = NicPowerHelper.TryParseSnapshot(json);
+        Assert.NotNull(snap);
+        var p = Assert.Single(snap!.PowerSavingProps);
+        Assert.Equal("EEELinkAdvertisement", p.Keyword);
+        Assert.Equal(new[] { "0", "1" }, p.ValidValues.ToArray());
+    }
+
+    [Fact]
+    public void Parse_stderr警告が前後に混じってもJSON抽出して読める()
+    {
+        // RunPowerShell は stdout+stderr 結合を渡す＝警告等が前後に付いても本体 JSON を拾えること（2026-06-20 実機バグ堅牢化）。
+        var json =
+            "WARNING: cmdlet emitted a warning\r\n" +
+            """{"Name":"イーサネット","Guid":"{C5094D7A}","AllowComputerToTurnOffDevice":"Enabled","Advanced":[{"RegistryKeyword":"ULPMode","RegistryValue":["1"],"ValidRegistryValues":["0","1"],"DisplayName":"ULP"}]}""" +
+            "\r\nVERBOSE: done";
+        var snap = NicPowerHelper.TryParseSnapshot(json);
+        Assert.NotNull(snap);
+        Assert.Equal("イーサネット", snap!.AdapterName);
+        Assert.Equal("{C5094D7A}", snap.Guid);
+        Assert.Equal("Enabled", snap.AllowComputerToTurnOffDevice);
+        Assert.Single(snap.PowerSavingProps);
     }
 
     [Theory]

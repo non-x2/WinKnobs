@@ -4,7 +4,8 @@
 
 | バージョン / Version | サポート状態 / Support |
 |---|---|
-| 0.1.x (最新 dev) | ✅ アクティブ開発中 |
+| 0.2.x (最新 dev) | ✅ アクティブ開発中 |
+| 0.1.x | ⚠️ セキュリティ修正のみ |
 | < 0.1.0 | ❌ サポート対象外 |
 
 リリースされた安定版（v1.0.0 以降）が出るまでは、最新 dev 版のみセキュリティ修正対象です。
@@ -99,6 +100,12 @@ WinKnobs は **レジストリ操作を含むデスクトップアプリ**です
 - **Hyper-V（ハイパーバイザー起動）OFF**：コア分離・Credential Guard など仮想化ベースのセキュリティ（VBS）の土台ごと止める操作（LDPlayer 等エミュレータ用途）。🔴Red 専用ダイアログで①連鎖して止まる機能の列挙 ②コア分離 ON 検知時の依存ガイド ③ **BitLocker 回復キー警告の無条件常時表示** ④チェックボックス同意ゲート ⑤first-touch 退避＋「元に戻す」。
 - 方式は `bcdedit /set hypervisorlaunchtype` 一本（機能削除しない＝完全可逆）。退避値は Auto/Off ホワイトリストで検証（改ざん JSON によるコマンド注入と「戻せない退避」を構造的に排除）。
 - 想定リスク：セキュリティ後退状態の放置。**推奨は用が済んだら再有効化**。
+
+### 8. NIC 設定変更による瞬断と退避ストア整合性 / NIC Power Saving (v0.2.2・🟡)
+- NIC の省電力プリセット適用時、Set-NetAdapterAdvancedProperty / Set-NetAdapterPowerManagement で **数秒の通信瞬断**が発生し得る。リモートデスクトップ経由のセッションを切ってしまうと自分のアクセス権を失う恐れがあるため、適用時の `IsCurrentSessionRemote()` 検知時は破壊的確認（既定キャンセル）に切り替えて締め出しガード。
+- 退避は GUID 単位 first-touch（`backup\maintenance\originals.json`・NetworkService の DNS 退避とは別系統）で、適用前の状態を保持。退避ファイル改ざんは「適用前状態と異なる値で書き戻し可能」になるため、Restore 時は値域外（ValidValues に無い）の値は書き戻さない（破損・他ツール改変からの防衛）。
+- 想定リスク：誤適用による通信断・退避ファイル改ざんによる任意 NIC プロパティ書込。
+- 緩和策：① GUID 識別＋適用直前 GUID 再解決（TOCTOU 検知）② -EncodedCommand（Base64 UTF-16LE）で日本語アダプタ名の CP932 化け排除 ③ 個別 `try/catch` 集計で部分失敗を正直に報告（`PartiallyApplied`）④ 値域ガードでの選別書込 ⑤ 「自動ロールバックしない」設計（NIC は値単位ゆえ誤発火の二次破壊を避ける）。
 
 ---
 

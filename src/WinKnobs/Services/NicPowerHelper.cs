@@ -97,7 +97,7 @@ public static class NicPowerHelper
     {
         var g = EscapePsSingleQuote(interfaceGuid);
         return
-            "$ErrorActionPreference='Stop'; " +
+            "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; " +
             $"$a = Get-NetAdapter -Physical | Where-Object {{ $_.InterfaceGuid -eq '{g}' }}; " +
             $"if (-not $a) {{ Write-Output '{AdapterNotFoundMarker}'; exit {ExitAdapterNotFound} }}; " +
             // 複数 NIC が同 GUID を返すことは無いが、念のため先頭を採る。
@@ -141,7 +141,7 @@ public static class NicPowerHelper
         string interfaceGuid, IReadOnlyList<string> keywords, bool lockPowerManagement)
     {
         var sb = new StringBuilder();
-        sb.Append("$ErrorActionPreference='Stop'; ");
+        sb.Append("$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; ");
         AppendResolveAdapter(sb, interfaceGuid);
         sb.Append("$ok=0; $fail=0; $errs=@(); ");
 
@@ -156,9 +156,12 @@ public static class NicPowerHelper
 
         if (lockPowerManagement)
         {
+            // Set-NetAdapterPowerManagement に -AllowComputerToTurnOffDevice 直接パラメーターは無い（2026-06-20 実機バグ）。
+            // 正：Get の結果オブジェクトのプロパティを書換→パイプで Set。
             sb.Append(
-                "try { Set-NetAdapterPowerManagement -Name $a.Name -AllowComputerToTurnOffDevice Disabled " +
-                "-ErrorAction Stop; $ok++ } catch { $fail++; $errs += $_.Exception.Message }; ");
+                "try { $pm=Get-NetAdapterPowerManagement -Name $a.Name -ErrorAction Stop; " +
+                "$pm.AllowComputerToTurnOffDevice='Disabled'; $pm | Set-NetAdapterPowerManagement -ErrorAction Stop; $ok++ } " +
+                "catch { $fail++; $errs += $_.Exception.Message }; ");
         }
 
         AppendEmitResult(sb);
@@ -173,7 +176,7 @@ public static class NicPowerHelper
     public static string BuildRestoreCommand(NicPowerSnapshot snapshot)
     {
         var sb = new StringBuilder();
-        sb.Append("$ErrorActionPreference='Stop'; ");
+        sb.Append("$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; ");
         AppendResolveAdapter(sb, snapshot.Guid);
         sb.Append("$ok=0; $fail=0; $errs=@(); ");
 
@@ -194,9 +197,11 @@ public static class NicPowerHelper
         if (snapshot.AllowComputerToTurnOffDevice is "Enabled" or "Disabled")
         {
             var allow = snapshot.AllowComputerToTurnOffDevice;
+            // 2026-06-20 実機バグ：Set-NetAdapterPowerManagement に -AllowComputerToTurnOffDevice 直接パラメーターは無い。
             sb.Append(
-                $"try {{ Set-NetAdapterPowerManagement -Name $a.Name -AllowComputerToTurnOffDevice {allow} " +
-                "-ErrorAction Stop; $ok++ } catch { $fail++; $errs += $_.Exception.Message }; ");
+                "try { $pm=Get-NetAdapterPowerManagement -Name $a.Name -ErrorAction Stop; " +
+                $"$pm.AllowComputerToTurnOffDevice='{allow}'; $pm | Set-NetAdapterPowerManagement -ErrorAction Stop; $ok++ }} " +
+                "catch { $fail++; $errs += $_.Exception.Message }; ");
         }
 
         AppendEmitResult(sb);
@@ -252,9 +257,12 @@ public static class NicPowerHelper
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
         if (json.Contains(AdapterNotFoundMarker, StringComparison.Ordinal)) return null;
+        // combined(stdout+stderr)の前後に警告等が混じっても拾えるよう JSON オブジェクトを抽出（2026-06-20 堅牢化）。
+        var payload = ExtractJsonObject(json);
+        if (payload == null) return null;
         try
         {
-            var dto = JsonSerializer.Deserialize<SnapshotDto>(json);
+            var dto = JsonSerializer.Deserialize<SnapshotDto>(payload);
             if (dto == null || string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Guid))
                 return null;
 
@@ -277,6 +285,36 @@ public static class NicPowerHelper
         {
             return null;
         }
+    }
+
+    /// <summary>文字列からブレース・バランスで最初のトップレベル JSON オブジェクトを抽出（2026-06-20 実機バグ堅牢化）。
+    /// 文字列リテラル内のエスケープ済み '{' '}' を考慮し、CLIXML 進捗が後ろに連結されても本物 JSON 境界を正しく特定する。</summary>
+    internal static string? ExtractJsonObject(string s)
+    {
+        var start = s.IndexOf('{');
+        if (start < 0) return null;
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        for (var i = start; i < s.Length; i++)
+        {
+            var ch = s[i];
+            if (inString)
+            {
+                if (escaped) { escaped = false; continue; }
+                if (ch == '\\') { escaped = true; continue; }
+                if (ch == '"') inString = false;
+                continue;
+            }
+            if (ch == '"') { inString = true; continue; }
+            if (ch == '{') depth++;
+            else if (ch == '}')
+            {
+                depth--;
+                if (depth == 0) return s.Substring(start, i - start + 1);
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -424,6 +462,27 @@ public static class NicPowerHelper
                     if (item != null) list.Add(item);
                 }
                 return list;
+            }
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                using var doc = JsonDocument.ParseValue(ref reader);
+                var root = doc.RootElement;
+                // PS 5.1 ICollection特殊シリアライズ吸収（2026-06-20 実機バグ）：
+                // 昇格セッションでは ValidRegistryValues 等が {"value":[...],"Count":N} のオブジェクトで出る。
+                if (root.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Array
+                    && root.TryGetProperty("Count", out var c) && c.ValueKind == JsonValueKind.Number)
+                {
+                    var list = new List<T>();
+                    foreach (var e in v.EnumerateArray())
+                    {
+                        var item = JsonSerializer.Deserialize<T>(e.GetRawText(), options);
+                        if (item != null) list.Add(item);
+                    }
+                    return list;
+                }
+                // 単一要素 T の展開（PS 5.1 単一要素展開＝Advanced が配列でなくオブジェクト1個で来るケース）
+                var singleObj = JsonSerializer.Deserialize<T>(root.GetRawText(), options);
+                return singleObj == null ? new List<T>() : new List<T> { singleObj };
             }
             var single = JsonSerializer.Deserialize<T>(ref reader, options);
             return single == null ? new List<T>() : new List<T> { single };

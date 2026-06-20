@@ -160,19 +160,54 @@ public class NetworkService
     public static bool IsValidIpAddress(string? s)
         => !string.IsNullOrWhiteSpace(s) && IPAddress.TryParse(s.Trim(), out _);
 
-    /// <summary>アクティブな物理アダプタを列挙（読取のみ・安全）。</summary>
+    // NCF_PHYSICAL 特性ビット（netcfgx.h）。Get-NetAdapter -Physical と同じ「物理ハードウェア」判定。
+    private const int NcfPhysical = 0x4;
+    private const string NetClassKey =
+        @"SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}";
+
+    /// <summary>アクティブな物理アダプタを列挙（読取のみ・安全）。
+    /// .NET の Description ヒューリスティック（<see cref="IsPhysicalAdapter"/>）に加え、レジストリ NCF_PHYSICAL の
+    /// 真の物理 GUID 集合と突き合わせて擬似/エミュレータ NIC（LDPlayer 等）を構造的に排除する。
+    /// 2026-06-20 実機検証で発覚：read/apply は Get-NetAdapter -Physical 基準のため、列挙が不一致だと幻アダプタで
+    /// 「現在設定を読み取れない」→ 適用失敗になる。レジストリ取得不能時は集合 null＝従来ヒューリスティックのみ（可用性優先）。</summary>
     public List<AdapterInfo> GetActivePhysicalAdapters()
     {
+        var physicalGuids = TryGetPhysicalGuidSet();
         var list = new List<AdapterInfo>();
         foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
         {
             if (!IsPhysicalAdapter(ni.NetworkInterfaceType, ni.OperationalStatus, ni.Description)) continue;
+            // 真の物理集合が得られたら、そこに無い GUID（擬似 NIC）は除外＝列挙ソースを read/apply と一致させる。
+            if (physicalGuids != null && !physicalGuids.Contains(ni.Id)) continue;
             List<string> dns;
             try { dns = ni.GetIPProperties().DnsAddresses.Select(a => a.ToString()).ToList(); }
             catch { dns = new(); }
             list.Add(new AdapterInfo(ni.Name, ni.Id, ni.Description ?? string.Empty, dns));
         }
         return list;
+    }
+
+    /// <summary>レジストリのネットワーククラスキーから NCF_PHYSICAL を持つ InterfaceGuid 集合を得る
+    /// （PowerShell 不使用・plan-validator 重要3 準拠）。取得不能/0 件は null（呼び出し側はヒューリスティックにフォールバック）。</summary>
+    private static HashSet<string>? TryGetPhysicalGuidSet()
+    {
+        try
+        {
+            using var cls = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(NetClassKey);
+            if (cls == null) return null;
+            var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var sub in cls.GetSubKeyNames())
+            {
+                if (sub.Length != 4 || !sub.All(char.IsDigit)) continue;   // 0000..NNNN の数値キーのみ
+                using var k = cls.OpenSubKey(sub);
+                var guid = k?.GetValue("NetCfgInstanceId") as string;
+                if (string.IsNullOrWhiteSpace(guid)) continue;
+                if (k!.GetValue("Characteristics") is int ch && (ch & NcfPhysical) != 0)
+                    set.Add(guid);
+            }
+            return set.Count > 0 ? set : null;
+        }
+        catch { return null; }
     }
 
     /// <summary>DNS サーバー一覧から既知プロファイル名を判定（純粋関数・xUnit 対象）。</summary>

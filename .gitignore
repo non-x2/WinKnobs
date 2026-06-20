@@ -108,6 +108,9 @@ scripts/*.bat
 # （_schtest.txt / _vm_session_check.txt / _vm_test_done.marker / _vm_test_cmd.ps1 等）。
 # vm_diag.txt は VM 実行の診断出力（個人 PC 固有・公開対象外）。
 scripts/_*
+# 2026-06-20 追加：ui_automation/ 配下の `_` プレフィックスも使い捨て検証ドライバ規約
+# （_v022_nic_host_verify.ps1 等・ホスト実機固有パラメータ・公開対象外）。
+scripts/ui_automation/_*
 scripts/ui_automation/vm_diag*.txt
 # 実機検証の使い捨て退避（夜間モード blob 等・個人 PC 固有・公開対象外・2026-06-11）。
 docs/_*

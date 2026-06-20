@@ -14,11 +14,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - v0.2.1：夜間モード強度・色温度（v0.2.0 から送り・CloudStore バイナリの安全設計は[設計ドラフト](docs/v0.2.0_QuickWin_設計ドラフト.md) §3 済）＋ LDPlayer 解消・WSL・ゲーマー向け 6 項目
-  - v0.2.2：IME / 音声 / Network 完成 6 項目
+  - v0.2.3：IME / 音声 / Network 完成 6 項目
   - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.2.2] - 2026-06-20（NIC 省電力プリセット + 夜間モード色温度）
+
+> 📝 設計：[v0.2.2 設計ドラフト](docs/v0.2.2_設計ドラフト.md)（@plan-validator 致命3＋重要2＋エッジ4 反映・「🔧反映」節が本文より優先）。
+> 実機検証で発覚した NIC 省電力固有バグの詳細：[NIC 省電力 実機バグ診断 2026-06-20](docs/v0.2.2_NIC省電力_実機バグ診断_2026-06-20.md)。
+
+### Added
+- **NIC 省電力プリセット（安定重視）**（Network ペイン「くわしい設定」・🟡・要管理者・即時反映で数秒断あり）：選択した物理 NIC の EEE 系（`*EEE`/`EeePhyEnable`/`EEELinkAdvertisement`/`ULPMode`/`GreenEthernet`/`PowerSavingMode` 等・8 種固定リスト）を 0 に・`AllowComputerToTurnOffDevice` を Disabled に。ラグや突然の切断対策。GUID 単位 first-touch 退避＋「↩ 元に戻す」で原状復帰。新規 `NicPowerHelper`（純粋関数・PS 5.1 単一要素展開吸収＋ICollection 特殊形式 `{value:[...],Count:N}` 吸収＋CLIXML 進捗連結対策のブレース・バランス JSON 抽出）＋ `NicPowerService`（PowerShell `-EncodedCommand` 経由・120 秒・GUID 単位退避）。リモート（RDP）経由時は破壊的確認（既定キャンセル）で締め出し防止。
+- **夜間モード色温度**（Desktop カテゴリ・`desktop.nightLightStrength`・🟡・昇格不要）：実機 blob 解析で確定したフォーマット（マーカー `CF 28` 直後 2 バイト・式 `high=K/64`/`low=(K%64)*2+128`）の **2 バイトだけ差替**＋自己検証で再パース一致を確認＋blob 丸ごと Base64 退避。Apply は失敗で即中止＋ms-settings:nightlight 誘導（書込中止＝壊さない）。反映には夜間モード OFF→ON か再ログオンが必要（CloudStore はライブ監視されない）。新規 `NightLightHelper`（マーカー一意性検査＋範囲外弾き）＋ `RegistryService.ReadBinary`。
+
+### Fixed
+- **`NetworkService.GetActivePhysicalAdapters` の列挙ソース不一致**（実機検証発覚）：.NET `NetworkInterface` の Description ヒューリスティックのみだと LDPlayer 等の擬似 NIC を拾い、Read/Apply（`Get-NetAdapter -Physical` 基準）と GUID 集合が一致せず「現在設定を読み取れない」失敗が発生していた。レジストリ `Class\{4d36e972...}\Characteristics` の `NCF_PHYSICAL(0x4)` 集合で突合して幻アダプタを構造的に排除（PS 不使用・取得不能時は従来ヒューリスティックにフォールバック）。**DNS 機能（同関数を共用）も恩恵**。
+- **`NicPowerHelper.TryParseSnapshot` の堅牢化**（実機検証発覚）：(a) PS 5.1 の ICollection 特殊シリアライズ `{value:[...],Count:N}` を `value` 配列として読む・(b) 昇格セッション特有の CLIXML 進捗（中括弧含む）が stderr に連結されるケースで本物 JSON 境界をブレース・バランスで正しく特定。
+- **`Set-NetAdapterPowerManagement -AllowComputerToTurnOffDevice` PSコマンド構文誤り**（実機検証発覚）：Microsoft 仕様では当該パラメーターは存在しない。`Get-NetAdapterPowerManagement` の戻り値オブジェクトでプロパティ書換→パイプ `Set-NetAdapterPowerManagement` に修正。
+- **`-EncodedCommand` 経由の進捗ノイズ**：`$ProgressPreference='SilentlyContinue'` を BuildReadCommand/BuildApplyCommand/BuildRestoreCommand 冒頭に追加し、昇格セッションでの CLIXML 進捗出力を抑止。
+
+### Tests
+- xUnit 735→738（+3：CLIXML 連結耐性・ICollection 特殊形式・stderr 警告混入耐性／既存 PM コマンド期待値の Get→pipe→Set 仕様への更新）。
+
+### Known limitations
+- マルチモニタ/HDR 環境の夜間モード blob はサンプル不足のためマーカー一意性の保証が未実証（単一構成では検証済み・複数マーカー時は Apply 自動中止＝安全側）。
+- NIC 実トグルは VM の仮想 NIC では検証不可（省電力プロパティ無し）。本リリースは Z370 Intel I219-V ホスト実機で Apply→Restore 1/1 ラウンドトリップ確認済み（NIC 実値 Enabled→Disabled→Enabled 完全一致・ネット瞬断は数秒以内）。
 
 ---
 
