@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - xUnit **825 PASS**（738 → 825・+87：`GpuPreferenceHelperTests` +40 / `VirtualMemoryHelperTests` +47）。build 0 警告 0 エラー。
 
 ### Notes
-- ✅ **グラフィック実機検証完了（2026-06-21・ホスト Z370 / GTX1080+UHD630）**：GUI 起動スモーク（XamlParseException 無し・全 XAML/DI 解決）／グラフィックカテゴリ列挙（UWP 形式値名・空データ・予約 DWORD 混在の実機 20+ 件でクラッシュ無し）／全体トグル書込（未関与トークン保持・順序保持）／退避→復元（REG_SZ 全件ベースライン復帰・既存設定無傷・予約 DWORD 型保持・退避クリア）。詳細：[テスト結果 2026-06-21 v0.3.0 グラフィック実機](docs/テスト結果_2026-06-21_v0.3.0_グラフィック実機検証.md)。
+- ✅ **グラフィック実機検証完了（2026-06-21・ホスト Z370 / GTX1080+UHD630）**：GUI 起動スモーク（XamlParseException 無し・全 XAML/DI 解決）／グラフィックカテゴリ列挙（UWP 形式値名・空データ・予約 DWORD 混在の実機 20+ 件でクラッシュ無し）／全体トグル書込（未関与トークン保持・順序保持）／退避→復元（REG_SZ 全件ベースライン復帰・既存設定無傷・予約 DWORD 型保持・退避クリア）。
 - 仮想メモリ（🔴・要管理者・要再起動）の実機トグルと、両機能の UIA 非破壊テスト（`tc_graphics_*`／`tc_virtualmemory_*`）は在席時に別途。※グラフィックのアプリ別行は AutomationId 未付与・「ぜんぶ戻す」は確認 MessageBox（Win32）で UIA からの自動操作が難しいため、UIA テスト整備時に AutomationId 付与とダイアログ処理が必要。
 
 ---
