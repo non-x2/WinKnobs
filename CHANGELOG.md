@@ -15,9 +15,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
   - v0.2.3：IME / 音声 / Network 完成 6 項目
-  - v0.3.0：Gaming カテゴリ + プリセット機能 14 項目
+  - v0.4.0 候補：Gaming カテゴリ + プリセット機能 14 項目
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.3.0] - 2026-06-21（グラフィック設定 + 仮想メモリ）
+
+> 📝 設計：[v0.3.0 設計ドラフト](docs/v0.3.0_設計ドラフト.md)（@plan-validator 致命3＋重要4＋エッジ5 反映・「🔧反映」節が本文より優先）。
+
+### Added
+- **グラフィック カテゴリ（🎮・専用ペイン `GraphicsListView`・HKCU・管理者不要）**：
+  - **アプリ別GPU設定**：`HKCU\Software\Microsoft\DirectX\UserGpuPreferences` の各アプリ（値名＝exe フルパス）に GPU（自動 / 省電力＝内蔵 / 高パフォーマンス＝外付け）と Auto HDR を設定。`.exe` を選んで追加・🗑リセット（値削除）。SpecificAdapter 等の未知トークンは保持。変更は対象アプリの再起動で反映。
+  - **全体トグル**：ウィンドウゲームの最適化（`SwapEffectUpgradeEnable`）・Auto HDR（`AutoHDREnable`）を `DirectXUserGlobalSettings` で。Auto HDR は HDR 非対応ディスプレイでは無効の注記つき。
+  - 「↩ グラフィック設定をぜんぶ元に戻す」（first-touch 退避から復元）＋「🪟 Windows のグラフィック設定を開く」。
+  - 新規 `GpuPreferenceHelper`（純粋関数：トークン パース/再構築/未知トークン保持・値名判定）＋ `GraphicsService`（first-touch 退避・DeleteOrThrow・大小無視）。
+- **仮想メモリ（ページファイル）設定（🔴Red・要管理者・要再起動・ツールメニュー）**：
+  - 🔴 専用ダイアログ `VirtualMemoryDialog` で「自動管理（推奨）/ システム管理 / 手動サイズ」を選択。理解チェック ON で初めて [適用]。
+  - PowerShell/CIM（`Win32_ComputerSystem.AutomaticManagedPagefile`）＋レジストリ `PagingFiles`（MultiString・**明示1エントリ**で複数 pagefile 生成バグを構造的に封じ込め）を原子的に書込。
+  - 現状を first-touch 退避し「仮想メモリ設定を元に戻す」で復帰。「Windows 純正の仮想メモリ設定を開く」（SystemPropertiesPerformance）安全弁。"無効化（なし）" プリセットは非提供。手動サイズは検証（0/0 拒否・下限 16MB・最大≥初期・上限 1TB）。
+  - 新規 `VirtualMemoryHelper`（純粋関数：CIM JSON パース・検証・コマンド構築・分類・退避）＋ `VirtualMemoryService`（PowerShell `-EncodedCommand`・60 秒）＋ `VirtualMemoryViewModel`。共通 `IsSystemFeatureBusy` で再起動系メンテと直列化。
+
+### Fixed（実機検証 2026-06-21 で発見・同日修正）
+- **アプリ別GPU一覧への Windows 予約値（REG_DWORD）混入**：`GraphicsFeaturesNotificationConfig`（グラフィック通知設定・REG_DWORD）がアプリ別GPU設定の 1 行として列挙され、操作すると REG_DWORD が `GpuPreference=…;`（REG_SZ）で上書きされ破壊される問題。`GpuPreferenceHelper.IsAppValueName` の予約名除外に追加（`ReservedValueNames` 配列化）＋`RegistryService.GetValueKind` を新設し `GraphicsService` が列挙・退避・復元を **REG_SZ 値のみ**に限定（名前＋型の二重防御）。
+- **「↩ ぜんぶ元に戻す」での型変換**：退避が `ReadValue<string>`（内部で `.ToString()`）で REG_DWORD を `"1"` 文字列化 →`WriteValue(String)` で REG_SZ 書き戻しし、予約値の型を DWORD→SZ に変えてしまう問題。退避・復元を REG_SZ 値のみとし、非SZ値は WinKnobs 管理外として温存（読まない・退避しない・復元時も触らない）。「完全復元」の保証範囲を REG_SZ（アプリ別GPU・全体トグル）に明示。
+- **`RestoreAll` の `DeleteValue` サイレント失敗**（@plan-validator 指摘）：削除失敗を集計し、主要復元（書戻し・退避クリア）の完了後に件数を明示報告（throw）。
+
+### Tests
+- xUnit **825 PASS**（738 → 825・+87：`GpuPreferenceHelperTests` +40 / `VirtualMemoryHelperTests` +47）。build 0 警告 0 エラー。
+
+### Notes
+- ✅ **グラフィック実機検証完了（2026-06-21・ホスト Z370 / GTX1080+UHD630）**：GUI 起動スモーク（XamlParseException 無し・全 XAML/DI 解決）／グラフィックカテゴリ列挙（UWP 形式値名・空データ・予約 DWORD 混在の実機 20+ 件でクラッシュ無し）／全体トグル書込（未関与トークン保持・順序保持）／退避→復元（REG_SZ 全件ベースライン復帰・既存設定無傷・予約 DWORD 型保持・退避クリア）。詳細：[テスト結果 2026-06-21 v0.3.0 グラフィック実機](docs/テスト結果_2026-06-21_v0.3.0_グラフィック実機検証.md)。
+- 仮想メモリ（🔴・要管理者・要再起動）の実機トグルと、両機能の UIA 非破壊テスト（`tc_graphics_*`／`tc_virtualmemory_*`）は在席時に別途。※グラフィックのアプリ別行は AutomationId 未付与・「ぜんぶ戻す」は確認 MessageBox（Win32）で UIA からの自動操作が難しいため、UIA テスト整備時に AutomationId 付与とダイアログ処理が必要。
 
 ---
 

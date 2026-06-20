@@ -241,6 +241,24 @@ public class DialogService
     }
 
     /// <summary>
+    /// v0.3.0：仮想メモリ（ページファイル）設定の Red 専用ダイアログを開く（🔴Red・要管理者・要再起動）。
+    /// 現在状態を提示し、モード選択＋手動サイズ＋理解チェックの後に [適用] が活性。
+    /// 戻り値：適用が選ばれたら ViewModel（SelectedMode／サイズを読む）／キャンセルは null。
+    /// OpenStartupAdd 同流儀（VM を返して呼び出し側が選択結果を読む）。
+    /// </summary>
+    public VirtualMemoryViewModel? ShowVirtualMemory(VirtualMemoryState? state)
+    {
+        var vm = _services.GetRequiredService<VirtualMemoryViewModel>();
+        vm.Init(state);
+
+        var dlg = _services.GetRequiredService<VirtualMemoryDialog>();
+        dlg.DataContext = vm;
+        dlg.Owner = Owner;
+
+        return dlg.ShowDialog() == true ? vm : null;
+    }
+
+    /// <summary>
     /// SettingDialog を開く。既に開いていれば前面化のみ（E-3 対策）。
     /// </summary>
     public bool? OpenSettingItem(SettingItem item)

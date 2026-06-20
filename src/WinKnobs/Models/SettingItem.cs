@@ -63,7 +63,14 @@ public enum CategoryType
     /// enum は末尾追加（既存値の数値シフト回避）。Startup/Network 以外なので
     /// IsStandardCategorySelected=true となり標準 DataGrid に表示される（専用ペイン不要）。
     /// </summary>
-    Maintenance
+    Maintenance,
+
+    /// <summary>
+    /// グラフィック（アプリ別GPU設定・全体トグル・v0.3.0）。専用ペイン GraphicsListView を表示する。
+    /// enum は末尾追加（既存値の数値シフト回避）。Startup/Network と同じく専用ペインを持つため
+    /// IsStandardCategorySelected の判定式に isGraphics を追加する（4者択一）。
+    /// </summary>
+    Graphics
 }
 
 /// <summary>

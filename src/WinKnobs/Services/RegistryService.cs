@@ -111,6 +111,40 @@ public class RegistryService
     }
 
     /// <summary>
+    /// 指定キー直下の値名を列挙する（v0.3.0 グラフィック：アプリ別GPU設定の一覧用）。
+    /// キーが存在しない場合は空配列。既定値（名前="")も含まれ得るので呼び出し側で除外すること。
+    /// </summary>
+    public string[] GetValueNames(string keyPath)
+    {
+        var (hive, subKey) = ParsePath(keyPath);
+        using var key = hive.OpenSubKey(subKey, false);
+        return key?.GetValueNames() ?? Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// 指定値の型（REG_SZ / REG_DWORD / REG_BINARY 等）を取得する（v0.3.0 グラフィック用）。
+    /// キーが存在しない・値が存在しない場合は <see cref="RegistryValueKind.Unknown"/>。
+    /// アプリ別GPU値（REG_SZ）と Windows 予約値（REG_DWORD 等）を型で区別し、
+    /// 予約値の混入・退避時の型変換（DWORD→SZ）を防ぐために使う。
+    /// 注意：値ごとに OpenSubKey する。件数が多い場合はキーを一度開いて
+    ///       GetValueNames/GetValueKind をまとめて行うバッチ化が望ましい（現状の利用は数十件で問題なし）。
+    /// </summary>
+    public RegistryValueKind GetValueKind(string keyPath, string valueName)
+    {
+        var (hive, subKey) = ParsePath(keyPath);
+        using var key = hive.OpenSubKey(subKey, false);
+        if (key == null) return RegistryValueKind.Unknown;
+        try
+        {
+            return key.GetValueKind(valueName);   // 値が無いと ArgumentException
+        }
+        catch
+        {
+            return RegistryValueKind.Unknown;
+        }
+    }
+
+    /// <summary>
     /// A3-2-c：キーを作成（W5 クラシック右クリックメニュー Command 用）。
     /// 既に存在しても成功扱い。
     /// </summary>

@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WinKnobs.Models;
 using WinKnobs.Services;
+using WinKnobs.ViewModels.Graphics;
 using WinKnobs.ViewModels.Network;
 using WinKnobs.ViewModels.Startup;
 
@@ -34,6 +35,7 @@ public partial class MainViewModel : ObservableObject
     private readonly WslService _wsl;
     private readonly CoreIsolationService _coreIsolation;
     private readonly HyperVService _hyperV;
+    private readonly VirtualMemoryService _virtualMemory;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -68,6 +70,12 @@ public partial class MainViewModel : ObservableObject
     private bool _isNetworkCategorySelected;
 
     /// <summary>
+    /// グラフィック・カテゴリが選択中か（v0.3.0）。専用ペイン GraphicsListView の表示切替に使用。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isGraphicsCategorySelected;
+
+    /// <summary>
     /// 標準カテゴリ（Startup でも Network でもない）が選択中か。既存 DataGrid(ItemsGrid) の表示切替に使用。
     /// 専用ペイン追加で右ペインが「3 者択一」になったため、単一 bool（IsStartupCategorySelected の否定）では
     /// 表現できず新設（plan-validator 致命2 反映）。既定 true＝起動直後（未選択）は従来通り DataGrid を表示。
@@ -92,6 +100,12 @@ public partial class MainViewModel : ObservableObject
     public NetworkListViewModel NetworkListVM { get; }
 
     /// <summary>
+    /// グラフィック・カテゴリ専用ペイン用 ViewModel（DI 取得・v0.3.0）。
+    /// MainWindow.xaml の GraphicsListView の DataContext にバインドされる。
+    /// </summary>
+    public GraphicsListViewModel GraphicsListVM { get; }
+
+    /// <summary>
     /// ネットワーク・カテゴリの既存詳細項目（HTTP 同時接続数 / TCP Auto-Tuning 等）を
     /// 専用ペインの「▸ くわしい設定」に表示するための独立ビュー。
     /// FilteredItems とは別の CollectionView（フィルタを共有しない）。
@@ -112,9 +126,11 @@ public partial class MainViewModel : ObservableObject
         WslService wsl,
         CoreIsolationService coreIsolation,
         HyperVService hyperV,
+        VirtualMemoryService virtualMemory,
         RegistryService registry,
         StartupListViewModel startupListVM,
-        NetworkListViewModel networkListVM)
+        NetworkListViewModel networkListVM,
+        GraphicsListViewModel graphicsListVM)
     {
         _dialogs = dialogs;
         _theme = theme;
@@ -129,10 +145,12 @@ public partial class MainViewModel : ObservableObject
         _wsl = wsl;
         _coreIsolation = coreIsolation;
         _hyperV = hyperV;
+        _virtualMemory = virtualMemory;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
         NetworkListVM = networkListVM;
+        GraphicsListVM = graphicsListVM;
 
         // v0.1.19：ON 退避の有無を起動時に 1 回読む（「元に戻す」メニューの初期活性判定）。
         _hasRdpBackup = _backup.HasMaintenanceOriginal(RemoteDesktopService.FeatureKey);
@@ -144,6 +162,10 @@ public partial class MainViewModel : ObservableObject
         // v0.2.1 Step5：Hyper-V 退避有無＋状態ラベル（RDP と同パターン）。
         _hasHyperVBackup = _backup.HasMaintenanceOriginal(HyperVService.FeatureKey);
         _ = RefreshHyperVStatusLabelAsync();
+
+        // v0.3.0：仮想メモリ退避有無＋状態ラベル（HyperV と同パターン）。
+        _hasVmBackup = _backup.HasMaintenanceOriginal(VirtualMemoryService.FeatureKey);
+        _ = RefreshVirtualMemoryStatusLabelAsync();
 
         // テーマ初期化＋変更追従（2026-05-16：MenuItem IsChecked 連動）
         _currentThemeMode = _theme.CurrentMode;
@@ -194,10 +216,12 @@ public partial class MainViewModel : ObservableObject
         // スタートアップ系／ネットワーク・カテゴリへの切替検出（設計書 5-1 / v0.1.7 致命2 反映）
         var isStartup = value?.Type == CategoryType.Startup;
         var isNetwork = value?.Type == CategoryType.Network;
+        var isGraphics = value?.Type == CategoryType.Graphics;
         IsStartupCategorySelected = isStartup;
         IsNetworkCategorySelected = isNetwork;
-        // 既存 DataGrid は「Startup でも Network でもない」時だけ表示する（3 者択一）
-        IsStandardCategorySelected = !(isStartup || isNetwork);
+        IsGraphicsCategorySelected = isGraphics;
+        // 既存 DataGrid は「Startup でも Network でも Graphics でもない」時だけ表示する（4 者択一・v0.3.0）。
+        IsStandardCategorySelected = !(isStartup || isNetwork || isGraphics);
 
         if (isStartup)
         {
@@ -215,6 +239,11 @@ public partial class MainViewModel : ObservableObject
         {
             // ネットワークペインの状態表示を更新（Phase 3/4 で実値読込）
             NetworkListVM.Load();
+        }
+        else if (isGraphics)
+        {
+            // グラフィックペインの状態表示を更新（v0.3.0・async void＋Task.Run）
+            GraphicsListVM.Load();
         }
 
         StatusMessage = value == null
@@ -645,6 +674,8 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(EnableHyperVCommand))]
     [NotifyCanExecuteChangedFor(nameof(DisableHyperVCommand))]
     [NotifyCanExecuteChangedFor(nameof(RestoreHyperVCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVirtualMemoryCommand))]      // v0.3.0：仮想メモリも同じ直列化（致命2）
+    [NotifyCanExecuteChangedFor(nameof(RestoreVirtualMemoryCommand))]
     private bool _isSystemFeatureBusy;
 
     private bool CanToggleSystemFeature() => !IsSystemFeatureBusy;
@@ -1039,6 +1070,170 @@ public partial class MainViewModel : ObservableObject
             IsSystemFeatureBusy = false;
             RefreshHyperVBackupState();
             _ = RefreshHyperVStatusLabelAsync();
+        }
+    }
+
+    // -------- 仮想メモリ（ページファイル）：v0.3.0（🔴Red・要管理者・要再起動） --------
+    // HyperV/RDP と同流儀：① UI で状態読取 → ② UI で Red ダイアログ → ③ 同意時のみ Task.Run(適用) → ④ UI で結果。
+    // Busy は共通 IsSystemFeatureBusy（再起動系メンテ直列化）。
+
+    /// <summary>メニュー常設の「現在の状態」ラベル（読み取り専用 MenuItem に表示）。</summary>
+    [ObservableProperty]
+    private string _virtualMemoryStatusLabel = "仮想メモリ：確認中…";
+
+    private int _vmStatusLabelGeneration;
+
+    /// <summary>仮想メモリの現在状態を読み直してメニュー常設ラベルへ反映（PowerShell 起動＝別スレッド）。</summary>
+    private async Task RefreshVirtualMemoryStatusLabelAsync()
+    {
+        var gen = ++_vmStatusLabelGeneration;
+        string label;
+        try
+        {
+            var state = await Task.Run(() => _virtualMemory.ReadState());
+            label = VirtualMemoryHelper.DescribeMenuStatusLabel(state);
+        }
+        catch
+        {
+            label = VirtualMemoryHelper.DescribeMenuStatusLabel(null);
+        }
+        if (gen == _vmStatusLabelGeneration)
+            VirtualMemoryStatusLabel = label;
+    }
+
+    /// <summary>仮想メモリ退避（first-touch）が存在するか＝「元に戻す」の活性。</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RestoreVirtualMemoryCommand))]
+    private bool _hasVmBackup;
+
+    private void RefreshVmBackupState()
+    {
+        try { HasVmBackup = _backup.HasMaintenanceOriginal(VirtualMemoryService.FeatureKey); }
+        catch { /* 読めない時は据え置き */ }
+    }
+
+    /// <summary>Windows 純正の仮想メモリ設定（パフォーマンスオプション）を開く（開くだけ・安全弁）。</summary>
+    [RelayCommand]
+    private void OpenWindowsVirtualMemory()
+    {
+        if (_launcher.OpenPerformanceOptions())
+            StatusMessage = "🪟 Windows のパフォーマンスオプションを開きました（詳細設定 → 仮想メモリ）。";
+        else
+            StatusMessage = "⚠️ パフォーマンスオプションを開けませんでした。";
+    }
+
+    /// <summary>仮想メモリ設定ダイアログ（🔴Red）を開いて適用する。</summary>
+    [RelayCommand(CanExecute = nameof(CanToggleSystemFeature))]
+    private async Task OpenVirtualMemory()
+    {
+        IsSystemFeatureBusy = true;
+        try
+        {
+            // ① 現在状態を読む（PowerShell＝別スレッド）。
+            VirtualMemoryState? state;
+            try { state = await Task.Run(() => _virtualMemory.ReadState()); }
+            catch { state = null; }
+
+            // ② UI スレッドで Red ダイアログ（モード選択＋手動サイズ＋理解チェック）。
+            var choice = _dialogs.ShowVirtualMemory(state);
+            if (choice == null)
+            {
+                StatusMessage = "仮想メモリ設定の変更をキャンセルしました。";
+                return;
+            }
+
+            // ③ 同意時のみ適用（モード別）。
+            var mode = choice.SelectedMode;
+            int init = 0, max = 0;
+            if (mode == VmApplyMode.Manual && !choice.TryGetManualSizes(out init, out max))
+            {
+                _dialogs.Error("手動サイズの読み取りに失敗しました。", "失敗");
+                return;
+            }
+
+            StatusMessage = "⏳ 仮想メモリ設定を変更しています…";
+            var (outcome, msg) = await Task.Run(() =>
+            {
+                string? m;
+                VmOutcome o = mode switch
+                {
+                    VmApplyMode.AutoManaged => _virtualMemory.ApplyAutoManaged(out m),
+                    VmApplyMode.SystemManaged => _virtualMemory.ApplySystemManaged(out m),
+                    _ => _virtualMemory.ApplyManual(init, max, out m),
+                };
+                return (o, m);
+            });
+
+            switch (outcome)
+            {
+                case VmOutcome.Success:
+                    _dialogs.Info(
+                        (msg ?? "変更しました。") + "\n\n他の変更とまとめて 1 回の再起動で反映できます。",
+                        "設定完了（再起動で反映）");
+                    StatusMessage = "✅ 仮想メモリ設定を変更（再起動で反映）";
+                    break;
+                case VmOutcome.AccessDenied:
+                    _dialogs.Warn(
+                        "管理者権限が必要です。\nWinKnobs を「管理者として実行」で起動し直してから、もう一度お試しください。",
+                        "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                default:
+                    _dialogs.Error(msg ?? "仮想メモリ設定の変更に失敗しました。", "失敗");
+                    StatusMessage = "❌ 仮想メモリ変更失敗";
+                    break;
+            }
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+            RefreshVmBackupState();
+            _ = RefreshVirtualMemoryStatusLabelAsync();
+        }
+    }
+
+    private bool CanRestoreVirtualMemory() => !IsSystemFeatureBusy && HasVmBackup;
+
+    /// <summary>仮想メモリ設定を first-touch 退避へ復元する。</summary>
+    [RelayCommand(CanExecute = nameof(CanRestoreVirtualMemory))]
+    private async Task RestoreVirtualMemory()
+    {
+        var ok = _dialogs.Confirm(
+            "仮想メモリ設定を、WinKnobs で初めて変更する前の状態に戻します。\n（管理者権限が必要・反映には再起動が必要）\n\n続行しますか？",
+            "仮想メモリ設定を元に戻す");
+        if (!ok) return;
+
+        IsSystemFeatureBusy = true;
+        StatusMessage = "⏳ 仮想メモリ設定を元に戻しています…";
+        try
+        {
+            var (outcome, msg) = await Task.Run(() =>
+            {
+                var o = _virtualMemory.Restore(out var m);
+                return (o, m);
+            });
+
+            switch (outcome)
+            {
+                case VmOutcome.Success:
+                    _dialogs.Info(msg ?? "元に戻しました。", "成功");
+                    StatusMessage = "✅ 仮想メモリ設定を元に戻しました（再起動で反映）";
+                    break;
+                case VmOutcome.AccessDenied:
+                    _dialogs.Warn("管理者権限が必要です。", "権限不足");
+                    StatusMessage = "❌ 権限不足（管理者が必要）";
+                    break;
+                default:
+                    _dialogs.Error(msg ?? "元に戻す処理に失敗しました。", "失敗");
+                    StatusMessage = "❌ 元に戻す失敗（退避は保持）";
+                    break;
+            }
+        }
+        finally
+        {
+            IsSystemFeatureBusy = false;
+            RefreshVmBackupState();
+            _ = RefreshVirtualMemoryStatusLabelAsync();
         }
     }
 
@@ -1439,7 +1634,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.2.1\n" +
+            "🪟 WinKnobs v0.3.0\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -1479,6 +1674,7 @@ public partial class MainViewModel : ObservableObject
         Categories.Add(new SettingCategory("カーネル", CategoryType.Kernel, "🧠"));
         Categories.Add(new SettingCategory("ログイン", CategoryType.Login, "🔐"));
         Categories.Add(new SettingCategory("デスクトップ・UI", CategoryType.Desktop, "🎨"));
+        Categories.Add(new SettingCategory("グラフィック", CategoryType.Graphics, "🎮"));
         Categories.Add(new SettingCategory("アクセシビリティ", CategoryType.Accessibility, "♿"));
         Categories.Add(new SettingCategory("プライバシー", CategoryType.Privacy, "🔒"));
         Categories.Add(new SettingCategory("キーボード・マウス", CategoryType.KeyboardMouse, "⌨️"));

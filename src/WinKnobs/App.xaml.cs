@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WinKnobs.Services;
 using WinKnobs.ViewModels;
+using WinKnobs.ViewModels.Graphics;
 using WinKnobs.ViewModels.Items;
 using WinKnobs.ViewModels.Network;
 using WinKnobs.ViewModels.Startup;
@@ -48,6 +49,8 @@ public partial class App : Application
                 services.AddSingleton<ExternalLauncherService>();
                 services.AddSingleton<NetworkService>();      // v0.1.7：ネットワーク機能
                 services.AddSingleton<NicPowerService>();     // v0.2.2 Step2：NIC省電力プリセット（PowerShell・要管理者・BackupService 依存）
+                services.AddSingleton<GraphicsService>();     // v0.3.0：グラフィック（アプリ別GPU・全体トグル・HKCU・BackupService 依存）
+                services.AddSingleton<VirtualMemoryService>();// v0.3.0：仮想メモリ（ページファイル・🔴・PowerShell/CIM・要管理者・BackupService 依存）
                 services.AddSingleton<EnvironmentInfoService>();
                 services.AddSingleton<DialogService>();
                 services.AddSingleton<PrivilegeService>();   // v0.1.4 BUG-3 対応
@@ -60,6 +63,9 @@ public partial class App : Application
                 // ネットワーク系（v0.1.7）：専用ペイン VM（状態保持＋シングルトン共有）
                 services.AddSingleton<NetworkListViewModel>();
 
+                // グラフィック系（v0.3.0）：専用ペイン VM（状態保持＋シングルトン共有）
+                services.AddSingleton<GraphicsListViewModel>();
+
                 // ViewModel
                 services.AddTransient<MainViewModel>();
                 services.AddTransient<SettingDialogViewModel>();
@@ -67,6 +73,7 @@ public partial class App : Application
                 services.AddTransient<RestorePreviewViewModel>();   // v0.1.6 機能 C
                 services.AddTransient<RemoteDesktopEnableViewModel>(); // v0.1.19 Step3 Red ダイアログ
                 services.AddTransient<HyperVDisableViewModel>();       // v0.2.1 Step5 Red ダイアログ
+                services.AddTransient<VirtualMemoryViewModel>();        // v0.3.0 仮想メモリ Red ダイアログ
 
                 // View
                 services.AddTransient<MainWindow>();
@@ -75,6 +82,7 @@ public partial class App : Application
                 services.AddTransient<RestorePreviewDialog>();      // v0.1.6 機能 C
                 services.AddTransient<RemoteDesktopEnableDialog>();  // v0.1.19 Step3 Red ダイアログ
                 services.AddTransient<HyperVDisableDialog>();        // v0.2.1 Step5 Red ダイアログ
+                services.AddTransient<VirtualMemoryDialog>();        // v0.3.0 仮想メモリ Red ダイアログ
             })
             .Build();
     }

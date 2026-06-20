@@ -5,6 +5,7 @@
         xmlns:conv="clr-namespace:WinKnobs.Converters"
         xmlns:startup="clr-namespace:WinKnobs.Views.Startup"
         xmlns:network="clr-namespace:WinKnobs.Views.Network"
+        xmlns:graphics="clr-namespace:WinKnobs.Views.Graphics"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -115,6 +116,15 @@
                           ToolTip="Home エディションや組織ポリシー（GPO/MDM）管理下では選べません（自動でグレーアウト）。"/>
                 <MenuItem x:Name="MenuRestoreRemoteDesktop" Header="リモートデスクトップを元に戻す (要管理者)" Command="{Binding RestoreRemoteDesktopCommand}" AutomationProperties.AutomationId="MenuRestoreRemoteDesktop"
                           ToolTip="WinKnobs で初めて変更する前の状態に戻します。退避がある時だけ選べます（『ぜんぶ戻す』では戻りません）。"/>
+                <Separator/>
+                <MenuItem x:Name="MenuVirtualMemoryStatus" Header="{Binding VirtualMemoryStatusLabel}" IsEnabled="False" AutomationProperties.AutomationId="MenuVirtualMemoryStatus"
+                          ToolTip="仮想メモリ（ページファイル）の現在の状態（読み取り専用）。操作後に自動更新されます。"/>
+                <MenuItem x:Name="MenuOpenVirtualMemory" Header="仮想メモリ（ページファイル）設定… (要管理者・再起動・🔴)" Command="{Binding OpenVirtualMemoryCommand}" AutomationProperties.AutomationId="MenuOpenVirtualMemory"
+                          ToolTip="自動管理 / システム管理 / 手動サイズを選べます。推奨＝自動管理。値を誤ると起動が不安定になることがあります（元に戻せます・再起動で反映）。"/>
+                <MenuItem x:Name="MenuRestoreVirtualMemory" Header="仮想メモリ設定を元に戻す (要管理者)" Command="{Binding RestoreVirtualMemoryCommand}" AutomationProperties.AutomationId="MenuRestoreVirtualMemory"
+                          ToolTip="WinKnobs で初めて変更する前の状態に戻します。退避がある時だけ選べます（反映には再起動が必要）。"/>
+                <MenuItem x:Name="MenuOpenWindowsVirtualMemory" Header="Windows 純正の仮想メモリ設定を開く" Command="{Binding OpenWindowsVirtualMemoryCommand}" AutomationProperties.AutomationId="MenuOpenWindowsVirtualMemory"
+                          ToolTip="パフォーマンスオプション（詳細設定 → 仮想メモリ）を開きます（開くだけ・安全）。"/>
                 <Separator/>
                 <MenuItem x:Name="MenuLogoff"           Header="ログオフ"                  Command="{Binding LogoffCommand}"                                    AutomationProperties.AutomationId="MenuLogoff"/>
                 <MenuItem x:Name="MenuRestart"          Header="再起動"                    Command="{Binding RestartCommand}"                                   AutomationProperties.AutomationId="MenuRestart"/>
@@ -262,6 +272,15 @@
                                          RelativeSource={RelativeSource AncestorType=Window},
                                          Converter={StaticResource BoolToVisibleVis}}"
                     AutomationProperties.AutomationId="NetworkListView"/>
+
+                <!-- 新規：グラフィック・カテゴリ専用ペイン（v0.3.0・Graphics カテゴリ選択時のみ表示）
+                     Network と同方式（DataContext を GraphicsListVM に切替・Visibility は Window から RelativeSource）。 -->
+                <graphics:GraphicsListView
+                    DataContext="{Binding GraphicsListVM}"
+                    Visibility="{Binding Path=DataContext.IsGraphicsCategorySelected,
+                                         RelativeSource={RelativeSource AncestorType=Window},
+                                         Converter={StaticResource BoolToVisibleVis}}"
+                    AutomationProperties.AutomationId="GraphicsListView"/>
             </Grid>
         </Grid>
 
@@ -277,7 +296,7 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="WinKnobs v0.2.1" FontSize="11"
+                <TextBlock Text="WinKnobs v0.3.0" FontSize="11"
                            Foreground="{DynamicResource Fg.Subtle}"/>
             </StatusBarItem>
         </StatusBar>

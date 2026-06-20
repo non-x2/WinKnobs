@@ -124,6 +124,18 @@ public class ExternalLauncherService
     public bool OpenNetworkSettings(string fileName, string? args = null) => Launch(fileName, args);
 
     /// <summary>
+    /// v0.3.0：Windows 純正のグラフィック設定画面を開く（開くだけ・管理者不要）。
+    /// 既定 ms-settings:display-advancedgraphics。非対応なら呼び出し側で "ms-settings:display" へフォールバック。
+    /// </summary>
+    public bool OpenGraphicsSettings(string fileName = "ms-settings:display-advancedgraphics") => Launch(fileName, null);
+
+    /// <summary>
+    /// v0.3.0：Windows 純正のパフォーマンスオプション（→ 詳細設定 → 仮想メモリ）を開く（開くだけ）。
+    /// SystemPropertiesPerformance.exe＝スクショの純正ダイアログ。仮想メモリの安全弁（純正へ逃がす）。
+    /// </summary>
+    public bool OpenPerformanceOptions() => Launch("SystemPropertiesPerformance.exe", null);
+
+    /// <summary>
     /// A3-2-c 拡張：fsutil を実行して標準出力を取得（A3-2-c W7 復活・CommandAction 用）。
     /// 例：RunFsutil("behavior", "set", "disable8dot3", "1")
     /// </summary>
