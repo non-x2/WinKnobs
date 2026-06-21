@@ -57,6 +57,9 @@ public class PrivilegeService
             {
                 UseShellExecute = true,
                 Verb = "runas",
+                // v0.3.1：昇格再起動を単一インスタンス化の例外にする（旧プロセスの Mutex 解放を待って取得・自滅防止）。
+                // 環境変数は UAC 昇格で届かないためコマンドライン引数で渡す（SingleInstanceNames 参照）。
+                Arguments = SingleInstanceNames.SanctionedRestartArg,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? string.Empty
             };
             Process.Start(psi);

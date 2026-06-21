@@ -22,8 +22,10 @@ public record GlobalGraphicsState(bool SwapEffectUpgrade, bool AutoHdr, string R
 ///   すべて REG_SZ 値のみを対象とし、非SZ値は WinKnobs 管理外として「読まない・退避しない・復元時も触らない」
 ///   （温存）。よって「ぜんぶ元に戻す」が完全復元を保証する範囲は REG_SZ 値（アプリ別GPU・全体トグル）に限る。
 ///
-/// 並行性：first-touch-wins は単一インスタンス前提。WinKnobs は現状 単一インスタンス強制（Mutex）を持たないため、
-///   2 窓同時操作では退避取得が競合し得る（既存の Network/Maintenance 退避と同じ既知の制約）。
+/// 並行性：first-touch-wins は単一インスタンス前提。v0.3.1 で <see cref="SingleInstanceManager"/>（Local\ 名前付き Mutex）
+///   により <b>同一セッション内は単一インスタンス強制済み</b>＝プロセス間の 2 窓同時操作は起こらない。
+///   残る既知の制約は (a) クロスセッション（同一ユーザーの RDP+コンソール同時起動・非対象）と
+///   (b) 同一プロセス内マルチスレッドの first-touch（本サービス側ロジックの領域）。
 /// </summary>
 public class GraphicsService
 {

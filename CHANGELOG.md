@@ -21,6 +21,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-06-22（単一インスタンス化）
+
+> 📝 設計：[v0.3.1 設計ドラフト](docs/v0.3.1_単一インスタンス化_設計ドラフト.md)（@plan-validator 致命3＋重要4＋エッジ4／@cross-reviewer 致命1＋重要4＋軽微3 反映）。
+> ⚠️ GUI 起動スモーク（実窓表示・2 個目の前面化目視）は在席で実施予定（コード層は build 0/0・xUnit 838 PASS）。
+
+### Added
+- **単一インスタンス化（二重起動防止・Mutex）**：
+  - WinKnobs を 2 個目に起動すると、最初のウィンドウが前面化（最小化なら復元）し、2 個目は何も表示せず即終了する。同一セッション内の 2 プロセス併存（v0.3.0 検証中に観測）を解消し、Graphics/Network/Maintenance の **first-touch 退避（バックアップ）の単一インスタンス前提を保証**。
+  - 名前付き Mutex は **存在ベース判定**（`createdNew`・所有権を取らないため AbandonedMutexException を回避・プライマリ異常終了でもハンドル全閉で OS が破棄→次回起動が自己修復）。スコープは `Local\`（ログオンセッション内）。2 個目→1 個目の通知は名前付き EventWaitHandle、終了は `Environment.Exit(0)`（ShutdownMode 非依存）。
+  - 前面化は自プロセスの自窓を Activate（前景ロック制限の対象外）。子ダイアログが開いている時は Topmost ナッジを抑止（子窓が背後に沈む事例の回避）。
+  - 「管理者として再起動」（runas）は単一化の例外＝コマンドライン引数 `--winknobs-restarted` ＋ 旧プロセスの Mutex 解放待ち（`waitForRelease`）で「再起動したのに窓が出ない」を防止。
+  - 単一化の初期化に失敗してもアプリ起動は妨げない（フェイルオープン）。
+  - 新規 `SingleInstanceNames`（純粋関数・名前生成）＋ `SingleInstanceManager`（IDisposable・WPF 非依存＝コールバック注入で headless テスト可）＋ xUnit 13 件（名前生成 7・プロセス内 OS 往復 6）。
+
+### Tests
+- 825 → **838 PASS**（+13）。build 0 警告 0 エラー。
+
+---
+
 ## [0.3.0] - 2026-06-21（グラフィック設定 + 仮想メモリ）
 
 > 📝 設計：[v0.3.0 設計ドラフト](docs/v0.3.0_設計ドラフト.md)（@plan-validator 致命3＋重要4＋エッジ5 反映・「🔧反映」節が本文より優先）。
