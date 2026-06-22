@@ -21,6 +21,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.2] - 2026-06-22（タスクバー検索ボックス表示）
+
+> 📝 設計：[v0.3.2 設計ドラフト](docs/v0.3.2_タスクバー検索ボックス_設計ドラフト.md)（@cross-reviewer 致命1＋重要3 反映）。
+
+### Added
+- **タスクバーの検索ボックスの表示**（デスクトップ・UI・🟢・HKCU・管理者不要）：
+  - 「表示しない / 検索アイコンのみ / 検索ボックス（広い）/ 検索ボタン」の 4 択を Command 型プリセットで切替（`HKCU\…\CurrentVersion\Search\SearchboxTaskbarMode`）。「表示しない」でタスクバーを広く使える。
+  - 現在値が未設定・範囲外・非数値（WinKnobs 管理外）の場合は「（変更しない・現在のまま）」と表示し、何も書き換えない。エクスプローラ再起動で反映（WinKnobs は自動再起動しない）。
+  - 退避（first-touch 相当の JSON）＋「元に戻す」。**管理対象（0..3）のみ退避し、非管理値は復元時に WinKnobs の書込みを削除して OS 既定へ戻す**（誤って「非表示(0)」を書かない）。復元の削除失敗は無音にせず明示エラー。
+  - 新規 `SearchBoxModeHelper`（純粋関数：4択・値↔ラベル・`TryGetManagedMode` 管理対象判定）＋ xUnit 42 件。
+
+### Tests
+- 838 → **880 PASS**（+42）。build 0 警告 0 エラー。
+
+---
+
 ## [0.3.1] - 2026-06-22（単一インスタンス化）
 
 > 📝 設計：[v0.3.1 設計ドラフト](docs/v0.3.1_単一インスタンス化_設計ドラフト.md)（@plan-validator 致命3＋重要4＋エッジ4／@cross-reviewer 致命1＋重要4＋軽微3 反映）。

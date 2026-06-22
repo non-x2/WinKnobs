@@ -1908,6 +1908,9 @@ public partial class MainViewModel : ObservableObject
         // v0.1.14：システム・メンテナンス「タスクマネージャを使えるようにする」（DisableTaskMgr・HKCU・管理者不要・Phase 1）
         Items.Add(BuildTaskManagerItem());
 
+        // v0.3.2：デスクトップ・UI「タスクバーの検索ボックスの表示」（SearchboxTaskbarMode・HKCU・管理者不要・4択）
+        Items.Add(BuildTaskbarSearchItem());
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());
@@ -3585,6 +3588,82 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// v0.3.2（デスクトップ・UI）：「タスクバーの検索ボックスの表示」を Command 型4択で構築。
+    /// HKCU\…\CurrentVersion\Search\SearchboxTaskbarMode（REG_DWORD・0=非表示/1=アイコン/2=ボックス/3=ボタン）。**管理者不要**（HKCU）。
+    /// 値＝選択肢インデックスの直対応。MessageDuration/TaskManager 同型（Command＋JSON 退避）。
+    /// 未設定・範囲外は「変更しない」センチネル表示（既定モードを誤表示しない）。Restore は未設定なら DeleteValue。
+    /// </summary>
+    private SettingItem BuildTaskbarSearchItem()
+    {
+        var path = SearchBoxModeHelper.RegistryPath;
+        var name = SearchBoxModeHelper.ValueName;
+        // 非適用センチネル（現状維持）＋実選択肢4件。Read がこれを返しても ComboBox に存在するので安全。
+        const string keepLabel = "（変更しない・現在のまま）";
+        var choices = new List<string> { keepLabel };
+        choices.AddRange(SearchBoxModeHelper.Choices);
+
+        return new SettingItem
+        {
+            Id = "desktop.taskbarSearch",
+            Title = "タスクバーの検索ボックスの表示",
+            Description = "タスクバーの検索の見せ方を切り替えます（設定 > 個人用設定 > タスクバー >「検索」と同じ）。"
+                + "「表示しない」でタスクバーの幅を広く使えます。表示しない / 検索アイコンのみ / 検索ボックス（広い）/ 検索ボタン から選べます。"
+                + "現在の値を読み取れない・未設定の場合は「（変更しない・現在のまま）」と表示し、その時は何も書き換えません。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映にはエクスプローラの再起動（またはサインアウト→再ログイン）が必要な場合があります（WinKnobs は自動では再起動しません）。"
+                + "⚠️ お使いの Windows のバージョンによっては「検索ボタン」が無く「検索ボックス」と同じ見た目になることがあります。"
+                + "⚠️ Windows の「設定」を開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            // 中立表示：特定モードを推奨しない（センチネル＝変更しない）。
+            RecommendedValue = keepLabel,
+            DefaultValue = keepLabel,
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    // 管理対象（0..3）のみラベル化／未設定・範囲外・非数値はセンチネル（既定モードを誤表示しない）。
+                    var v = _registry.ReadValue<object>(path, name);
+                    return SearchBoxModeHelper.TryGetManagedMode(v, out var m)
+                        ? SearchBoxModeHelper.Choices[m]
+                        : keepLabel;
+                },
+                Apply = label =>
+                {
+                    var val = SearchBoxModeHelper.ValueForLabel(label);
+                    if (val < 0) return;   // センチネル/不正＝書き込まない（no-op）
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    // 管理対象（0..3）だけ ValueExisted=true で退避。非管理値（未設定/範囲外/非数値）は false 扱い＝
+                    // Restore で誤って 0 を書かず DeleteValue で WinKnobs の書込みを取り消す（cross-reviewer 致命⑥/重要⑦ 反映）。
+                    var v = _registry.ReadValue<object>(path, name);
+                    bool managed = SearchBoxModeHelper.TryGetManagedMode(v, out var m);
+                    return JsonSerializer.Serialize(new SearchBoxModeBackup { ValueExisted = managed, Value = m });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<SearchBoxModeBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                    {
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                    else if (!_registry.DeleteValue(path, name))
+                    {
+                        // DeleteValue は失敗時 false（例外を投げない）。サイレント失敗を握り潰さず明示報告（cross-reviewer 致命⑥）。
+                        throw new InvalidOperationException("タスクバー検索の設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                }
+            }
+        };
+    }
+
     /// <summary>W4 用バックアップトークン。</summary>
     private class TaskbarSiBackup
     {
@@ -3631,6 +3710,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.1.14 タスクマネージャ（DisableTaskMgr）用バックアップトークン（existed は値の有無）。</summary>
     private class TaskManagerBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.2 タスクバー検索ボックス表示（SearchboxTaskbarMode）用バックアップトークン（existed は値の有無・生値保存）。</summary>
+    private class SearchBoxModeBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
