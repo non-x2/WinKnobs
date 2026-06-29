@@ -17,9 +17,18 @@ public static class RegistryValueCoercion
     /// レジストリ生値→int。int はそのまま／文字列は int.TryParse／それ以外・null は fallback。
     /// </summary>
     public static int CoerceInt(object? v, int fallback)
+        => TryCoerceInt(v, out var value) ? value : fallback;
+
+    /// <summary>
+    /// レジストリ生値→int を試行（v0.3.8）。int / 文字列数値なら true＋値、未対応型（REG_BINARY 等）・
+    /// 解釈不能・null は false。「値はあるが数値でない（＝管理外）」を fallback と区別したい時に使う
+    /// （CoerceInt は fallback 返却で両者を区別できないため）。
+    /// </summary>
+    public static bool TryCoerceInt(object? v, out int value)
     {
-        if (v is int i) return i;
-        if (v != null && int.TryParse(v.ToString(), out var p)) return p;
-        return fallback;
+        if (v is int i) { value = i; return true; }
+        if (v != null && int.TryParse(v.ToString(), out var p)) { value = p; return true; }
+        value = 0;
+        return false;
     }
 }

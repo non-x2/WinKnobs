@@ -2005,6 +2005,9 @@ public partial class MainViewModel : ObservableObject
             DefaultValue = true          // Windows デフォルト：オン
         });
 
+        // v0.3.8：ゲーミング「Game DVR（ゲームの録画機能）」（2値同時 Command・HKCU・管理者不要）
+        Items.Add(BuildGameDvrItem());
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());
@@ -3803,6 +3806,126 @@ public partial class MainViewModel : ObservableObject
                 Restore = _ => _systemSound.RestoreAll()
             }
         };
+    }
+
+    /// <summary>
+    /// v0.3.8（ゲーミング）：「Game DVR（ゲームの録画機能）」を Command 型2択で構築。
+    /// Game DVR は2つの HKCU 値で制御するため一括 ON/OFF（どちらも管理者不要）：
+    ///   ① HKCU\System\GameConfigStore\GameDVR_Enabled（広域スイッチ）
+    ///   ② HKCU\Software\Microsoft\Windows\CurrentVersion\GameDVR\AppCaptureEnabled（キャプチャ）
+    /// 値 1=オン/0=オフ。Read は①基準（明示 0 のみ OFF）。Backup/Restore は両値を existed+値で退避し delete-or-throw。
+    /// </summary>
+    private SettingItem BuildGameDvrItem()
+    {
+        const string path1 = @"HKCU\System\GameConfigStore";
+        const string name1 = "GameDVR_Enabled";
+        const string path2 = @"HKCU\Software\Microsoft\Windows\CurrentVersion\GameDVR";
+        const string name2 = "AppCaptureEnabled";
+        const string onLabel = "オン（録画機能を有効）";
+        const string offLabel = "オフ（録画機能を無効）";
+
+        return new SettingItem
+        {
+            Id = "gaming.gameDvr",
+            Title = "Game DVR（ゲームの録画機能）",
+            Description = "Xbox Game Bar のゲーム録画機能（Game DVR）のオン/オフをまとめて切り替えます"
+                + "（設定 > ゲーム > キャプチャ に相当）。"
+                + "オフにすると録画関連のバックグラウンド動作が止まり、低スペック機ではゲームが軽くなることがあります。"
+                + "GameConfigStore の GameDVR_Enabled と GameDVR の AppCaptureEnabled の2つを同時に切り替えます。"
+                + "片方だけ無効になっている場合も「オン」を選んで適用すれば両方そろいます。"
+                + "管理者権限は不要です（自分のユーザー設定）。⚠️ 反映は次回のゲーム起動からです。",
+            Category = CategoryType.Gaming,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = onLabel,   // 中立（Windows 既定＝オン）
+            DefaultValue = onLabel,
+            Command = new CommandAction
+            {
+                Choices = new List<string> { onLabel, offLabel },
+                Read = () =>
+                {
+                    // ①基準：明示的に 0 のときだけ OFF、それ以外（1/未設定）は ON。
+                    var raw = _registry.ReadValue<object>(path1, name1);
+                    int v = RegistryValueCoercion.CoerceInt(raw, 1);
+                    return v == 0 ? offLabel : onLabel;
+                },
+                Apply = label =>
+                {
+                    int val = label == offLabel ? 0 : 1;
+                    _registry.WriteValue<int>(path1, name1, val, Microsoft.Win32.RegistryValueKind.DWord);
+                    _registry.WriteValue<int>(path2, name2, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    // M-2：非数値（REG_BINARY 等で coerce 不可）は existed=false 扱い＝Restore で誤った型変換を防ぐ。
+                    var (e1, v1) = ReadDwordManaged(path1, name1);
+                    var (e2, v2) = ReadDwordManaged(path2, name2);
+                    return JsonSerializer.Serialize(new GameDvrBackup
+                    {
+                        V1Existed = e1, V1 = v1,
+                        V2Existed = e2, V2 = v2
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<GameDvrBackup>(token);
+                    if (bk == null) return;
+                    // F-1：片方が失敗しても両方必ず試す（2値の不整合を防ぐ）＝集計して最後に throw。
+                    var failures = new List<string>();
+                    TryRestoreOne(path1, name1, bk.V1Existed, bk.V1, failures);
+                    TryRestoreOne(path2, name2, bk.V2Existed, bk.V2, failures);
+                    if (failures.Count > 0)
+                        throw new InvalidOperationException(
+                            $"Game DVR の設定を元に戻せませんでした（{string.Join("、", failures)}）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// 退避 DWORD を1つ書き戻す／未設定なら削除。失敗は failures に積む（F-1：片方の例外で他方を止めない）。
+    /// 削除は「消えたか」を再読込で確認（F-2：キー/値が元から無い環境で DeleteValue=false を偽の失敗にしない）。
+    /// </summary>
+    private void TryRestoreOne(string path, string name, bool existed, int value, List<string> failures)
+    {
+        try
+        {
+            if (existed)
+            {
+                _registry.WriteValue<int>(path, name, value, Microsoft.Win32.RegistryValueKind.DWord);
+            }
+            else
+            {
+                _registry.DeleteValue(path, name);
+                // DeleteValue はキー/値が無いときも false を返す。実際に値が残っているときだけ失敗扱い。
+                if (_registry.ReadValue<object>(path, name) != null)
+                    failures.Add($"{name} の削除に失敗");
+            }
+        }
+        catch
+        {
+            failures.Add($"{name} の書き込みに失敗");
+        }
+    }
+
+    /// <summary>
+    /// HKCU の DWORD を「値の有無・int 値」で頑健に読む。非数値（REG_BINARY 等で coerce 不可）は
+    /// existed=false 扱い＝退避時に「管理外」とし、Restore で誤った型変換（DWord 0 上書き）を防ぐ（M-2）。
+    /// </summary>
+    private (bool existed, int value) ReadDwordManaged(string path, string name)
+    {
+        var raw = _registry.ReadValue<object>(path, name);
+        return RegistryValueCoercion.TryCoerceInt(raw, out var v) ? (true, v) : (false, 0);
+    }
+
+    /// <summary>v0.3.8 Game DVR 用バックアップトークン（2値・existed は値の有無）。</summary>
+    private class GameDvrBackup
+    {
+        public bool V1Existed { get; set; }
+        public int V1 { get; set; }
+        public bool V2Existed { get; set; }
+        public int V2 { get; set; }
     }
 
     /// <summary>W4 用バックアップトークン。</summary>

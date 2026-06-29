@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.8] - 2026-06-29（Game DVR ON/OFF・🕹️ゲーミング第2項目）
+
+### Added
+- **Game DVR（ゲームの録画機能）**（🕹️ゲーミング・🟢・HKCU・管理者不要）：
+  - Xbox Game Bar の録画機能を一括オン/オフする Command 型2択。2つの HKCU 値を同時切替（`System\GameConfigStore\GameDVR_Enabled` ＋ `…\GameDVR\AppCaptureEnabled`・各 DWORD 1/0）。
+  - Read は GameDVR_Enabled 基準（明示 0 のみ OFF）。Backup/Restore は両値を existed+値で退避。
+  - @cross-reviewer 反映（致命2＋重要2）：F-1 Restore は片方失敗でも両値を必ず試行し集計 throw（2値の不整合防止）／F-2 削除は再読込で実値残存を確認（キー無し環境の偽 throw 防止）／M-2 非数値（REG_BINARY 等）は退避を「管理外」扱いに（`RegistryValueCoercion.TryCoerceInt` 新設＋xUnit）／M-1 説明文に片側乖離の回復手順を追記。
+
+---
+
 ## [0.3.7] - 2026-06-29（ゲームモード ON/OFF・新🕹️ゲーミングカテゴリ）
 
 ### Added

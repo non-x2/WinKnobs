@@ -61,4 +61,59 @@ public class RegistryValueCoercionTests
         Assert.Equal(shared, ScrollbarHelper.CoerceInt(boxed, 0));
         Assert.Equal(shared, CaretWidthHelper.CoerceInt(boxed, 0));
     }
+
+    // ─── TryCoerceInt（v0.3.8・Game DVR 退避の「値はあるが数値でない＝管理外」判定） ───
+
+    [Fact]
+    public void TryCoerceInt_int_succeeds()
+    {
+        Assert.True(RegistryValueCoercion.TryCoerceInt(1, out var v));
+        Assert.Equal(1, v);
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("1", 1)]
+    [InlineData("135", 135)]
+    public void TryCoerceInt_numeric_string_succeeds(string s, int expected)
+    {
+        Assert.True(RegistryValueCoercion.TryCoerceInt(s, out var v));
+        Assert.Equal(expected, v);
+    }
+
+    [Fact]
+    public void TryCoerceInt_null_fails_with_zero()
+    {
+        Assert.False(RegistryValueCoercion.TryCoerceInt(null, out var v));
+        Assert.Equal(0, v);
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("3.5")]
+    [InlineData("")]
+    public void TryCoerceInt_non_numeric_string_fails(string s)
+        => Assert.False(RegistryValueCoercion.TryCoerceInt(s, out _));
+
+    [Fact]
+    public void TryCoerceInt_binary_blob_fails()
+        => Assert.False(RegistryValueCoercion.TryCoerceInt(new byte[] { 0, 1, 2, 3 }, out _));
+
+    [Fact]
+    public void TryCoerceInt_extreme_ints_succeed()
+    {
+        // int.MinValue/MaxValue も「数値」として true（旧 two-fallback 実装の取りこぼし回帰防止）。
+        Assert.True(RegistryValueCoercion.TryCoerceInt(int.MinValue, out var lo));
+        Assert.Equal(int.MinValue, lo);
+        Assert.True(RegistryValueCoercion.TryCoerceInt(int.MaxValue, out var hi));
+        Assert.Equal(int.MaxValue, hi);
+    }
+
+    [Fact]
+    public void CoerceInt_delegates_to_TryCoerceInt()
+    {
+        // CoerceInt は TryCoerceInt 委譲（成功時は値・失敗時は fallback）。
+        Assert.Equal(5, RegistryValueCoercion.CoerceInt("5", -1));
+        Assert.Equal(-1, RegistryValueCoercion.CoerceInt("x", -1));
+    }
 }
