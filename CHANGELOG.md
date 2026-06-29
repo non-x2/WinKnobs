@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.10] - 2026-06-29（タスクバーのボタン表示2種・デスクトップ）
+
+### Added
+- **タスクバーのボタン表示**（デスクトップ・UI・🟢・HKCU・管理者不要・いずれも `Explorer\Advanced` DWORD 1=表示/0=非表示）：
+  - **タスクビュー**ボタン（`ShowTaskViewButton`）／**チャット**ボタン（`TaskbarMn`）の表示/非表示を個別に切替。タスクバーをすっきりさせる定番。
+  - 値 1=ON がユーザー視点と一致＝`InvertDisplay` 不要。専用 service 不要＝汎用 HKCU Boolean 書込（バックアップ）フローを再利用。
+
+### Notes
+- 「ウィジェット」ボタン（`TaskbarDa`）は当初含めたが、Win11 24H2/25H2（build 26200）で値単位の ACL 保護により HKCU 書込が拒否される（自動レジストリ検証で実証）ため**非提供**。偽トグルを避ける方針。将来は HKLM ポリシー（要管理者）で別途検討。
+
+---
+
 ## [0.3.9] - 2026-06-29（タスクバー時計に秒を表示・デスクトップ）
 
 ### Added

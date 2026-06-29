@@ -2029,6 +2029,46 @@ public partial class MainViewModel : ObservableObject
             DefaultValue = false         // Windows デフォルト：非表示
         });
 
+        // v0.3.10：デスクトップ・UI「タスクバーのボタン表示」3種（いずれも HKCU\…\Explorer\Advanced・DWORD 1=表示/0=非表示・管理者不要）。
+        // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。タスクバーをすっきりさせる定番（いじくるツール代替）。
+        Items.Add(new SettingItem
+        {
+            Id = "desktop.taskbarTaskView",
+            Title = "タスクバーに「タスクビュー」ボタンを表示",
+            Description = "タスクバーの「タスクビュー」ボタン（仮想デスクトップ切替）の表示/非表示を切り替えます"
+                + "（設定 > 個人用設定 > タスクバー >「タスク ビュー」と同じ）。"
+                + "非表示にするとタスクバーがすっきりします（Win + Tab のショートカットは引き続き使えます）。"
+                + "管理者権限は不要です。⚠️ エクスプローラの再起動で反映する場合があります。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+            RegistryValueName = "ShowTaskViewButton",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = true,     // 中立：Windows 既定（表示）
+            DefaultValue = true
+        });
+        // 注：「ウィジェット」ボタン（TaskbarDa）は Win11 24H2/25H2（build 26200）で値単位の ACL 保護により
+        //     HKCU 書込が「unauthorized」になる（自動検証 2026-06-29 で実証・同キーの他値は書込可）。
+        //     偽トグルを出さない方針で本バージョンでは非提供（将来は HKLM ポリシー AllowNewsAndInterests＝要管理者で別途検討）。
+        Items.Add(new SettingItem
+        {
+            Id = "desktop.taskbarChat",
+            Title = "タスクバーに「チャット」ボタンを表示",
+            Description = "タスクバーの「チャット」ボタン（Microsoft Teams 個人用）の表示/非表示を切り替えます"
+                + "（設定 > 個人用設定 > タスクバー >「チャット」と同じ）。"
+                + "非表示にするとタスクバーがすっきりします。"
+                + "管理者権限は不要です。⚠️ エクスプローラの再起動で反映する場合があります。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+            RegistryValueName = "TaskbarMn",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = true,     // 中立：Windows 既定（表示）
+            DefaultValue = true
+        });
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());
