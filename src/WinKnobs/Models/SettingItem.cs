@@ -70,7 +70,14 @@ public enum CategoryType
     /// enum は末尾追加（既存値の数値シフト回避）。Startup/Network と同じく専用ペインを持つため
     /// IsStandardCategorySelected の判定式に isGraphics を追加する（4者択一）。
     /// </summary>
-    Graphics
+    Graphics,
+
+    /// <summary>
+    /// サウンド（システム効果音 ON/OFF 等・v0.3.3）。専用ペインは持たず標準 DataGrid に表示する
+    /// （Maintenance と同じ＝Startup/Network/Graphics 以外なので IsStandardCategorySelected=true）。
+    /// enum は末尾追加（既存値の数値シフト回避）。表示順は InitializeCategories の Add 位置で制御。
+    /// </summary>
+    Sound
 }
 
 /// <summary>

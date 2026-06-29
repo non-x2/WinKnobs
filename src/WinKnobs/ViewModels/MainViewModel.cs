@@ -36,6 +36,7 @@ public partial class MainViewModel : ObservableObject
     private readonly CoreIsolationService _coreIsolation;
     private readonly HyperVService _hyperV;
     private readonly VirtualMemoryService _virtualMemory;
+    private readonly SystemSoundService _systemSound;
     private readonly RegistryService _registry;
     private readonly ExternalLauncherService _launcherForCommands;
 
@@ -127,6 +128,7 @@ public partial class MainViewModel : ObservableObject
         CoreIsolationService coreIsolation,
         HyperVService hyperV,
         VirtualMemoryService virtualMemory,
+        SystemSoundService systemSound,
         RegistryService registry,
         StartupListViewModel startupListVM,
         NetworkListViewModel networkListVM,
@@ -146,6 +148,7 @@ public partial class MainViewModel : ObservableObject
         _coreIsolation = coreIsolation;
         _hyperV = hyperV;
         _virtualMemory = virtualMemory;
+        _systemSound = systemSound;
         _registry = registry;
         _launcherForCommands = launcher;
         StartupListVM = startupListVM;
@@ -1675,6 +1678,7 @@ public partial class MainViewModel : ObservableObject
         Categories.Add(new SettingCategory("ログイン", CategoryType.Login, "🔐"));
         Categories.Add(new SettingCategory("デスクトップ・UI", CategoryType.Desktop, "🎨"));
         Categories.Add(new SettingCategory("グラフィック", CategoryType.Graphics, "🎮"));
+        Categories.Add(new SettingCategory("サウンド", CategoryType.Sound, "🔊"));   // v0.3.3：システム効果音 ON/OFF
         Categories.Add(new SettingCategory("アクセシビリティ", CategoryType.Accessibility, "♿"));
         Categories.Add(new SettingCategory("プライバシー", CategoryType.Privacy, "🔒"));
         Categories.Add(new SettingCategory("キーボード・マウス", CategoryType.KeyboardMouse, "⌨️"));
@@ -1910,6 +1914,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.3.2：デスクトップ・UI「タスクバーの検索ボックスの表示」（SearchboxTaskbarMode・HKCU・管理者不要・4択）
         Items.Add(BuildTaskbarSearchItem());
+
+        // v0.3.3：サウンド「システム効果音 ON/OFF」（AppEvents\Schemes・HKCU・管理者不要・2択・Scope B 実消音）
+        Items.Add(BuildSystemSoundItem());
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
@@ -3660,6 +3667,53 @@ public partial class MainViewModel : ObservableObject
                         throw new InvalidOperationException("タスクバー検索の設定を元に戻せませんでした（値の削除に失敗）。");
                     }
                 }
+            }
+        };
+    }
+
+    /// <summary>
+    /// v0.3.3（サウンド）：「システム効果音 ON/OFF」を Command 型2択で構築。
+    /// HKCU\AppEvents\Schemes（管理者不要）。Scope B＝各イベントの .Current を直接書き換えて実際に消音する。
+    /// 退避は SystemSoundService の first-touch-wins（maintenance ストア）に委譲＝Backup() はマーカーを返すだけ、
+    /// Restore() は RestoreAll() に委譲（GraphicsService と同型・SearchBoxMode の Command 配線と同じ枠）。
+    /// </summary>
+    private SettingItem BuildSystemSoundItem()
+    {
+        return new SettingItem
+        {
+            Id = "sound.systemSoundsScheme",
+            Title = "システム効果音 オン/オフ",
+            Description = "Windows の効果音（通知音・警告音などのイベントサウンド）をまとめてオン/オフします"
+                + "（設定 > システム > サウンド、または「サウンド」コントロールパネルの『サウンドなし』スキームと同じ効果）。"
+                + "「効果音オフ（消音）」は各イベントのサウンドを空にして無音化します。"
+                + "「効果音オン（標準）」は Windows 標準のサウンドに戻します。"
+                + "（一部のアプリは標準のサウンドが登録されておらず、そのイベントの音は変更されません。）"
+                + "⚠️『オン（標準）』を適用するとカスタム音は Windows 標準音に置き換わります。カスタム音へ戻すには『↩ 戻す』を使ってください。"
+                + "個別の「↩ 戻す」で、WinKnobs が変更する前のサウンド設定（あなたのカスタム設定を含む）に正確に復元できます。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ この表示は選択中のサウンドスキーム基準のため、外部ツールで個別に変更した場合は実際の鳴り方と一致しないことがあります。"
+                + "⚠️ 一部の常駐アプリは再起動するまで古い音が鳴ることがあります。"
+                + "⚠️ Windows の「サウンド」設定／コントロールパネルを開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Sound,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,   // 各 .Current を直接書くため以後の再生に即時反映（再ログイン不要）
+            ValueType = SettingValueType.Command,
+            // 中立表示：オン/オフどちらも推奨しない。
+            RecommendedValue = SystemSoundHelper.Choices[0],
+            DefaultValue = SystemSoundHelper.Choices[0],
+            Command = new CommandAction
+            {
+                Choices = SystemSoundHelper.Choices.ToList(),
+                Read = () => _systemSound.CurrentLabel(),
+                Apply = label => _systemSound.SetMuted(SystemSoundHelper.IsMuteLabel(label)),
+                // framework は初回 Apply 前に Backup を1回呼ぶ（SettingDialogViewModel S-1）。
+                // ここで first-touch 退避を確定し、非null マーカーを返して CanRestore を有効化する。
+                Backup = () =>
+                {
+                    _systemSound.BackupFirstTouch();
+                    return SystemSoundService.FeatureKey;
+                },
+                Restore = _ => _systemSound.RestoreAll()
             }
         };
     }

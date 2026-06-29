@@ -56,6 +56,7 @@ public partial class App : Application
                 services.AddSingleton<NicPowerService>();     // v0.2.2 Step2：NIC省電力プリセット（PowerShell・要管理者・BackupService 依存）
                 services.AddSingleton<GraphicsService>();     // v0.3.0：グラフィック（アプリ別GPU・全体トグル・HKCU・BackupService 依存）
                 services.AddSingleton<VirtualMemoryService>();// v0.3.0：仮想メモリ（ページファイル・🔴・PowerShell/CIM・要管理者・BackupService 依存）
+                services.AddSingleton<SystemSoundService>();  // v0.3.3：システム効果音 ON/OFF（HKCU・管理者不要・first-touch-wins 退避・RegistryService+BackupService 依存／Singleton 必須）
                 services.AddSingleton<EnvironmentInfoService>();
                 services.AddSingleton<DialogService>();
                 services.AddSingleton<PrivilegeService>();   // v0.1.4 BUG-3 対応

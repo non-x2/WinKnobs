@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.3] - 2026-06-29（システム効果音 ON/OFF・新🔊サウンドカテゴリ）
+
+> 📝 設計：[v0.3.3 設計ドラフト](docs/v0.3.3_システム効果音ONOFF_設計ドラフト.md)（@plan-validator 条件付きNO-GO→反映でGO・@cross-reviewer 反映）。
+
+### Added
+- **システム効果音 オン/オフ**（新🔊サウンド カテゴリの第1項目・🟢・HKCU・管理者不要）：
+  - Windows のイベントサウンド（通知音・警告音など）をまとめてオン/オフする Command 型2択（`HKCU\AppEvents\Schemes`）。
+  - **実際に消音される正しい実装（Scope B）**：トップの `(Default)` を `.None` にするだけでは鳴り続けるため、各イベントの `.Current\(Default)` を直接書き換える（OFF＝空文字／ON＝兄弟 `.Default` から標準音を復元）。
+  - **REG_EXPAND_SZ（`%SystemRoot%` 入り）の型を退避・復元**して無音バグを防止。退避は値+型+有無（`existed`）を保持し「空文字の無音」と「値なし未設定」を厳密区別。
+  - 退避は `BackupService` の maintenance ストア（FeatureKey=`systemsounds`）に first-touch-wins で1度だけ（GraphicsService 同型）。個別「↩ 戻す」でカスタム音を含む原状へ厳密復元。
+  - `DeleteValue`/`WriteValue` のサイレント失敗は集計して throw（先頭3件をメッセージに表示）。退避後に消えたキー（WU 競合等）はスキップ。
+
+### Changed
+- `RegistryService` に `GetSubKeyNames`（サブキー名列挙）を追加（`GetValueNames` と対称の薄いラッパー）。
+- `CategoryType.Sound` を enum 末尾追加（専用ペイン無し＝標準 DataGrid 表示）。
+
+---
+
 ## [0.3.2] - 2026-06-22（タスクバー検索ボックス表示）
 
 > 📝 設計：[v0.3.2 設計ドラフト](docs/v0.3.2_タスクバー検索ボックス_設計ドラフト.md)（@cross-reviewer 致命1＋重要3 反映）。

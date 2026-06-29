@@ -122,6 +122,17 @@ public class RegistryService
     }
 
     /// <summary>
+    /// 指定キー直下のサブキー名を列挙する（v0.3.3 効果音：Apps\&lt;App&gt;\&lt;Event&gt; の3段列挙用）。
+    /// キーが存在しない場合は空配列。GetValueNames（値名列挙）と対称の薄いラッパー。
+    /// </summary>
+    public string[] GetSubKeyNames(string keyPath)
+    {
+        var (hive, subKey) = ParsePath(keyPath);
+        using var key = hive.OpenSubKey(subKey, false);
+        return key?.GetSubKeyNames() ?? Array.Empty<string>();
+    }
+
+    /// <summary>
     /// 指定値の型（REG_SZ / REG_DWORD / REG_BINARY 等）を取得する（v0.3.0 グラフィック用）。
     /// キーが存在しない・値が存在しない場合は <see cref="RegistryValueKind.Unknown"/>。
     /// アプリ別GPU値（REG_SZ）と Windows 予約値（REG_DWORD 等）を型で区別し、
