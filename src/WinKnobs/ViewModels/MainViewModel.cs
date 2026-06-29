@@ -2072,6 +2072,27 @@ public partial class MainViewModel : ObservableObject
             DefaultValue = true
         });
 
+        // v0.3.13：シェル「項目のチェックボックスを表示」（AutoCheckSelect・HKCU\…\Explorer\Advanced・DWORD 1=表示/0=非表示・管理者不要）。
+        // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（秒表示/タスクバーボタン同型）。File Explorer 挙動なので Shell カテゴリ。
+        Items.Add(new SettingItem
+        {
+            Id = "shell.autoCheckSelect",
+            Title = "項目のチェックボックスを表示",
+            Description = "エクスプローラでファイル/フォルダーにマウスを重ねるとチェックボックスが出て、クリックで複数選択できるようにします"
+                + "（エクスプローラの「表示 > 表示 > 項目チェック ボックス」と同じ）。"
+                + "タッチ操作や、Ctrl を押さずに複数選択したいときに便利です。オフにすると従来どおりチェックボックスは出ません。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映にはエクスプローラの再起動（または F5 で更新）が必要な場合があります（WinKnobs は自動では再起動しません）。",
+            Category = CategoryType.Shell,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+            RegistryValueName = "AutoCheckSelect",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = false,    // 中立：Windows 既定（非表示）
+            DefaultValue = false         // Windows デフォルト：非表示
+        });
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());
