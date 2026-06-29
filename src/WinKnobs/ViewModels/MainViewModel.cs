@@ -1961,6 +1961,28 @@ public partial class MainViewModel : ObservableObject
             DefaultValue = true          // Windows デフォルト：オン
         });
 
+        // v0.3.6：システム「ストレージセンサー（自動ディスク クリーンアップ）」
+        // HKCU\…\StorageSense\Parameters\StoragePolicy 値名 "01"（DWORD・1=ON/0=OFF・管理者不要・即時）。
+        // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（汎用書込＋退避を再利用）。
+        Items.Add(new SettingItem
+        {
+            Id = "system.storageSenseAuto",
+            Title = "ストレージセンサー（自動ディスク クリーンアップ）",
+            Description = "ディスクの空き容量が少ない時などに、一時ファイルやごみ箱の中身を自動で削除してディスクを整理する機能のオン/オフです"
+                + "（設定 > システム > ストレージ > ストレージセンサー と同じ）。"
+                + "オフにすると自動クリーンアップが行われなくなります（手動のディスク クリーンアップは引き続き使えます）。"
+                + "管理者権限は不要です（自分のユーザー設定）。設定はすぐ反映されます。"
+                + "⚠️ 設定値の名前はレジストリ上「01」です（Windows の仕様）。",
+            Category = CategoryType.System,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy",
+            RegistryValueName = "01",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = true,     // 中立：自動整理オンを既定表示（押し付けない）
+            DefaultValue = true          // Windows 11 既定はおおむねオン
+        });
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());

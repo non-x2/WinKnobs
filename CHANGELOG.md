@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.6] - 2026-06-29（ストレージセンサー ON/OFF・システム）
+
+### Added
+- **ストレージセンサー（自動ディスク クリーンアップ）**（システム・🟢・HKCU・管理者不要）：
+  - 一時ファイル/ごみ箱の自動クリーンアップをオン/オフする Boolean トグル（`HKCU\…\StorageSense\Parameters\StoragePolicy` 値名 `01`・1=ON/0=OFF）。
+  - 値 1=ON がユーザー視点と一致＝`InvertDisplay` 不要。専用 service 不要＝汎用 HKCU Boolean 書込（バックアップ）フローを再利用。
+
+---
+
 ## [0.3.5] - 2026-06-29（スナップアシスト ON/OFF・デスクトップ）
 
 ### Added
