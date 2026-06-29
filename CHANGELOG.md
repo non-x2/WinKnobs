@@ -21,6 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.14] - 2026-06-30（エクスプローラの起動先・シェル）
+
+> 📝 いじくるツール代替の定番。「ダウンロード」は Windows の設定 GUI に無くレジストリ限定＝差別化。HKCU・管理者不要。
+
+### Added
+- **エクスプローラを開いたときの場所**（シェル・🟢・管理者不要・次回起動から反映）：
+  - エクスプローラの初期表示を「ホーム（クイックアクセス）/ この PC / ダウンロード」から選ぶ Command 型3択（`HKCU\…\Explorer\Advanced\LaunchTo`・REG_DWORD・1=このPC/2=ホーム/3=ダウンロード）。
+  - 値≠index（新規 `LaunchToHelper` が吸収）。**0 と 2 はともにホーム**として読取り、書込はホーム=2 に正規化（GUI と同じ）。OneDrive 等（値 4）は3択外＝「変更しない」センチネル表示で no-op。Restore は管理外なら DeleteValue。
+
+### Tests
+- `LaunchToHelperTests`（+41・値↔index／0=ホーム／3択外センチネル／管理対象判定）。合計 **1029 PASS**。
+
+---
+
 ## [0.3.13] - 2026-06-30（項目のチェックボックスを表示・シェル）
 
 > 📝 いじくるツール代替の定番。タッチ操作や Ctrl なし複数選択に便利。HKCU・管理者不要・宣言的 Boolean。

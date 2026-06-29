@@ -1919,6 +1919,9 @@ public partial class MainViewModel : ObservableObject
         // v0.3.12：シェル「隠しファイル・フォルダーを表示」（Hidden・HKCU・管理者不要・2択・1=表示/2=非表示）
         Items.Add(BuildHiddenFilesItem());
 
+        // v0.3.14：シェル「エクスプローラの起動先」（LaunchTo・HKCU・管理者不要・3択・ホーム2/このPC1/ダウンロード3）
+        Items.Add(BuildLaunchToItem());
+
         // v0.3.3：サウンド「システム効果音 ON/OFF」（AppEvents\Schemes・HKCU・管理者不要・2択・Scope B 実消音）
         Items.Add(BuildSystemSoundItem());
 
@@ -4016,6 +4019,82 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// v0.3.14（シェル）：「エクスプローラの起動先」を Command 型3択で構築。
+    /// HKCU\…\Explorer\Advanced\LaunchTo（REG_DWORD・1=このPC/2=ホーム/3=ダウンロード）。**管理者不要**（HKCU）。
+    /// HiddenFiles 同型（Command＋JSON 退避・値≠index を LaunchToHelper が吸収）。Backup は生のレジストリ値（0/1/2/3）を保存し
+    /// 0 と 2（どちらもホーム）の区別を保つ。未設定・3択外は「変更しない」センチネル。Restore は管理外なら DeleteValue。
+    /// </summary>
+    private SettingItem BuildLaunchToItem()
+    {
+        var path = LaunchToHelper.RegistryPath;
+        var name = LaunchToHelper.ValueName;
+        const string keepLabel = "（変更しない・現在のまま）";
+        var choices = new List<string> { keepLabel };
+        choices.AddRange(LaunchToHelper.Choices);
+
+        return new SettingItem
+        {
+            Id = "shell.launchTo",
+            Title = "エクスプローラを開いたときの場所",
+            Description = "エクスプローラ（フォルダーの窓）を開いたときに最初に表示する場所を選びます"
+                + "（エクスプローラの「…（もっと見る）> オプション > 全般 > エクスプローラーで開く」と同じ。"
+                + "「ダウンロード」だけは Windows の設定画面には無く、ここでしか選べません）。"
+                + "ホーム（クイックアクセス）/ この PC / ダウンロード から選べます。"
+                + "現在の値を読み取れない・未対応の場所（OneDrive 等）の場合は「（変更しない・現在のまま）」と表示し、その時は何も書き換えません。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映には次にエクスプローラを開いたとき（またはエクスプローラ再起動）からです（WinKnobs は自動では再起動しません）。",
+            Category = CategoryType.Shell,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = keepLabel,
+            DefaultValue = keepLabel,
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return LaunchToHelper.TryGetManagedIndex(v, out var idx)
+                        ? LaunchToHelper.Choices[idx]
+                        : keepLabel;
+                },
+                Apply = label =>
+                {
+                    var val = LaunchToHelper.ValueForLabel(label);
+                    if (val < 0) return;   // センチネル/不正＝書き込まない（no-op）
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    // 管理対象（0/1/2/3）だけ ValueExisted=true で生のレジストリ値を退避（0 と 2 の区別を保つため
+                    // ValueForIndex でなく実値を保存）。非管理値（未設定/範囲外/非数値）は false＝Restore で DeleteValue。
+                    var v = _registry.ReadValue<object>(path, name);
+                    bool managed = LaunchToHelper.TryGetManagedIndex(v, out _);
+                    return JsonSerializer.Serialize(new LaunchToBackup
+                    {
+                        ValueExisted = managed,
+                        Value = managed ? LaunchToHelper.CoerceInt(v, LaunchToHelper.ValueHome) : 0
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<LaunchToBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                    {
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                    else if (!_registry.DeleteValue(path, name))
+                    {
+                        throw new InvalidOperationException("エクスプローラの起動先の設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                }
+            }
+        };
+    }
+
+    /// <summary>
     /// v0.3.3（サウンド）：「システム効果音 ON/OFF」を Command 型2択で構築。
     /// HKCU\AppEvents\Schemes（管理者不要）。Scope B＝各イベントの .Current を直接書き換えて実際に消音する。
     /// 退避は SystemSoundService の first-touch-wins（maintenance ストア）に委譲＝Backup() はマーカーを返すだけ、
@@ -4242,6 +4321,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.3.12 隠しファイル表示（Hidden）用バックアップトークン（existed は管理値の有無・生のレジストリ値 1/2 を保存）。</summary>
     private class HiddenFilesBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.14 エクスプローラ起動先（LaunchTo）用バックアップトークン（existed は管理値の有無・生のレジストリ値 0/1/2/3 を保存）。</summary>
+    private class LaunchToBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
