@@ -24,6 +24,9 @@ public static class PowerCfgHelper
     /// <summary>PERFBOOSTMODE（プロセッサ パフォーマンス向上モード）の設定 GUID。</summary>
     public const string PerfBoostModeGuid = "be337238-0d82-4146-a960-4f3749d470c7";
 
+    /// <summary>PROCTHROTTLEMAX（最大のプロセッサの状態・パーセント値）の設定 GUID（v0.3.11）。</summary>
+    public const string ProcThrottleMaxGuid = "bc5038f7-23e0-4960-96da-33abaf5935ec";
+
     private static readonly Regex GuidRegex = new(
         @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
         RegexOptions.Compiled);

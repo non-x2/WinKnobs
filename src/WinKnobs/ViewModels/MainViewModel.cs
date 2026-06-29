@@ -2260,6 +2260,9 @@ public partial class MainViewModel : ObservableObject
         // プロセッサー Boost モード（system.processorBoost）
         Items.Add(BuildProcessorBoostItem());
 
+        // 最大のプロセッサの状態（system.processorPowerState・v0.3.11・PROCTHROTTLEMAX %）
+        Items.Add(BuildProcessorMaxStateItem());
+
         // ====================== v0.2.2 追加項目（2026-06-11 Step3） ======================
 
         // 夜間モード 色温度（desktop.nightLightStrength・CloudStore バイナリ blob・最難関）
@@ -2578,6 +2581,91 @@ public partial class MainViewModel : ObservableObject
                     // 退避時の GUID に書き戻す（プランが切り替わっていても「退避した場所」へ正しく戻る）
                     _launcherForCommands.RunPowerCfg("/setacvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, bk.Ac.ToString());
                     _launcherForCommands.RunPowerCfg("/setdcvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.PerfBoostModeGuid, bk.Dc.ToString());
+                    _launcherForCommands.RunPowerCfg("/setactive", bk.SchemeGuid);
+                }
+            }
+        };
+    }
+
+    // ====================== v0.3.11 最大のプロセッサの状態（Command プリセット・powercfg PROCTHROTTLEMAX %） ======================
+    //
+    // processorBoost と同型（powercfg・/getactivescheme で実 GUID 解決し Read/Backup/Apply を同一 GUID に固定＝TOCTOU 対策）。
+    // 違い：PROCTHROTTLEMAX は列挙インデックスでなく **パーセント値**（TryParseAcDcIndexes は末尾2つの 0x を AC/DC として拾う＝
+    //   範囲設定でも「現在の AC/DC」が末尾に来るので流用可）。プリセット外/読取不可はセンチネル表示（誤丸め防止）。
+
+    private class ProcMaxStateBackup
+    {
+        public string SchemeGuid { get; set; } = "";
+        public int Ac { get; set; } = 100;
+        public int Dc { get; set; } = 100;
+    }
+
+    /// <summary>processorBoost の _boostSchemeGuidFromBackup と同じ用途（Backup→Apply 間の GUID 固定）。</summary>
+    private string? _procMaxSchemeGuidFromBackup;
+
+    private SettingItem BuildProcessorMaxStateItem()
+    {
+        const string keepLabel = "（変更しない・現在のまま）";
+        var choices = new List<string> { keepLabel };
+        choices.AddRange(ProcMaxStateHelper.Choices);
+
+        return new SettingItem
+        {
+            Id = "system.processorPowerState",
+            Title = "最大のプロセッサの状態（CPU 上限クロック %）",
+            Description = "CPU が使う最大クロックの割合（％）を制限します。100% で制限なし。下げると発熱・ファン騒音・消費電力が下がる代わりに、"
+                + "重い処理は遅くなります（夏場の熱対策・AI ローカル実行の温度/電力抑制・8700K 等の発熱機向け）。"
+                + "現在アクティブな電源プランの AC/DC 両方に書き込みます。プランを切り替えると設定は引き継がれません。"
+                + "現在値を読み取れない・プリセット外の場合は「（変更しない・現在のまま）」と表示し、その時は何も書き換えません。"
+                + "⚠️ Windows 11 の「電源モード」スライダーが『推奨（バランス）』以外だと反映されない場合があります。管理者権限必須。即時反映。",
+            Category = CategoryType.Kernel,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = keepLabel,   // 中立：一律に制限を勧めない（現在値の表示が主目的）
+            DefaultValue = keepLabel,
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    try
+                    {
+                        var scheme = ResolveActiveSchemeGuidOrThrow();
+                        var output = _launcherForCommands.RunPowerCfg(
+                            "/qh", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.ProcThrottleMaxGuid);
+                        if (PowerCfgHelper.TryParseAcDcIndexes(output, out var ac, out _))
+                            return ProcMaxStateHelper.LabelForPercent(ac) ?? keepLabel;   // プリセット外はセンチネル
+                    }
+                    catch { /* 読取失敗はセンチネル表示 */ }
+                    return keepLabel;
+                },
+                Apply = label =>
+                {
+                    var percent = ProcMaxStateHelper.PercentForLabel(label);
+                    if (percent < 0) return;   // センチネル/不正＝書き込まない（no-op）
+                    var scheme = _procMaxSchemeGuidFromBackup ?? ResolveActiveSchemeGuidOrThrow();   // 解決失敗は throw＝Apply 中止
+                    _procMaxSchemeGuidFromBackup = null;   // 使い捨て
+                    _launcherForCommands.RunPowerCfg("/setacvalueindex", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.ProcThrottleMaxGuid, percent.ToString());
+                    _launcherForCommands.RunPowerCfg("/setdcvalueindex", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.ProcThrottleMaxGuid, percent.ToString());
+                    _launcherForCommands.RunPowerCfg("/setactive", scheme);   // 再適用で即時反映
+                },
+                Backup = () =>
+                {
+                    var scheme = ResolveActiveSchemeGuidOrThrow();
+                    var output = _launcherForCommands.RunPowerCfg(
+                        "/qh", scheme, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.ProcThrottleMaxGuid);
+                    if (!PowerCfgHelper.TryParseAcDcIndexes(output, out var ac, out var dc))
+                        throw new InvalidOperationException("最大プロセッサ状態の現在値を読み取れなかったため、適用を中止しました（復元不能な変更を避けるため）。");
+                    _procMaxSchemeGuidFromBackup = scheme;   // 直後の Apply が同一 GUID を使う
+                    return JsonSerializer.Serialize(new ProcMaxStateBackup { SchemeGuid = scheme, Ac = ac, Dc = dc });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<ProcMaxStateBackup>(token);
+                    if (bk == null || string.IsNullOrEmpty(bk.SchemeGuid)) return;
+                    _launcherForCommands.RunPowerCfg("/setacvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.ProcThrottleMaxGuid, bk.Ac.ToString());
+                    _launcherForCommands.RunPowerCfg("/setdcvalueindex", bk.SchemeGuid, PowerCfgHelper.SubProcessorGuid, PowerCfgHelper.ProcThrottleMaxGuid, bk.Dc.ToString());
                     _launcherForCommands.RunPowerCfg("/setactive", bk.SchemeGuid);
                 }
             }

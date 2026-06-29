@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.11] - 2026-06-29（最大のプロセッサの状態・カーネル）
+
+> 📝 候補項目集 v2 §1-B（`system.processorPowerState`・P6.7・AI バッチ時の温度/電源制御）。のんさんの 8700K 熱対策に直結。
+
+### Added
+- **最大のプロセッサの状態（CPU 上限クロック %）**（カーネル・🟡・要管理者・即時反映）：
+  - CPU の最大クロック割合（100/90/80/70/60/50%）をプリセットで制限する Command 型（powercfg `PROCTHROTTLEMAX`）。下げると発熱・騒音・消費電力が下がる。
+  - `processorBoost` と同型：`/getactivescheme` で実 GUID を解決し Read/Backup/Apply を同一 GUID に固定（TOCTOU 対策）。AC/DC 両方に書込・`/setactive` で即時反映。プリセット外/読取不可はセンチネル表示（誤丸め防止）。退避→復元対応。
+  - 純粋ロジックは `ProcMaxStateHelper`（percent↔ラベル・xUnit）／GUID は `PowerCfgHelper.ProcThrottleMaxGuid`。
+
+---
+
 ## [0.3.10] - 2026-06-29（タスクバーのボタン表示2種・デスクトップ）
 
 ### Added
