@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.4] - 2026-06-29（Windows 起動音 ON/OFF・🔊サウンド第2項目）
+
+### Added
+- **Windows の起動音（起動時のサウンド）**（🔊サウンド・🟡・HLKM・要管理者・次回起動で反映）：
+  - サインイン/起動時の「起動音」をオン/オフする Boolean トグル（`HKLM\…\Authentication\LogonUI\BootAnimation\DisableStartupSound`）。設定の『Windows スタートアップのサウンドを再生する』と同じ。
+  - 値 0=オン/1=オフ を `InvertDisplay` でユーザー視点「鳴らす ON / 鳴らさない OFF」に。専用 service 不要＝汎用 HKLM Boolean 書込（バックアップ＋UAC 誘導）フローを再利用（`desktop.darkModeApps` 同型）。
+  - 候補リストは HKCU と記載していたが実際は HKLM（要管理者）と裏取りで判明し修正。
+
+---
+
 ## [0.3.3] - 2026-06-29（システム効果音 ON/OFF・新🔊サウンドカテゴリ）
 
 > 📝 設計：[v0.3.3 設計ドラフト](docs/v0.3.3_システム効果音ONOFF_設計ドラフト.md)（@plan-validator 条件付きNO-GO→反映でGO・@cross-reviewer 反映）。

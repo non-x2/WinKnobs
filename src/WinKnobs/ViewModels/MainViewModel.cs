@@ -1918,6 +1918,28 @@ public partial class MainViewModel : ObservableObject
         // v0.3.3：サウンド「システム効果音 ON/OFF」（AppEvents\Schemes・HKCU・管理者不要・2択・Scope B 実消音）
         Items.Add(BuildSystemSoundItem());
 
+        // v0.3.4：サウンド「Windows の起動音」（HKLM\…\LogonUI\BootAnimation\DisableStartupSound・要管理者・次回起動で反映）
+        // 値=0：起動音オン（鳴る）/ 値=1：オフ（鳴らない）→ InvertDisplay でユーザー視点「鳴らす ON / 鳴らさない OFF」に。
+        // darkModeApps と同型の宣言的 HKLM Boolean（専用 service/helper 不要・汎用書込＋退避＋UAC 誘導フローを再利用）。
+        Items.Add(new SettingItem
+        {
+            Id = "sound.startupSound",
+            Title = "Windows の起動音（起動時のサウンド）",
+            Description = "Windows のサインイン/起動時に鳴る「起動音」のオン/オフを切り替えます"
+                + "（設定 > 個人用設定 > テーマ > サウンド、または「サウンド」コントロールパネルの『Windows スタートアップのサウンドを再生する』と同じ）。"
+                + "オンで起動音が鳴り、オフで無音になります。"
+                + "⚠️ システム全体の設定のため管理者権限が必要です（HKLM）。⚠️ 反映は次回の起動（再起動）からです。",
+            Category = CategoryType.Sound,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            RegistryPath = @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI\BootAnimation",
+            RegistryValueName = "DisableStartupSound",
+            ValueType = SettingValueType.Boolean,
+            InvertDisplay = true,        // ON（鳴らす）= レジストリ 0（DisableStartupSound=0）
+            RecommendedValue = true,     // 中立：Windows 既定（起動音オン）を推奨表示＝変更を押し付けない
+            DefaultValue = true          // Windows デフォルト：起動音オン
+        });
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());
