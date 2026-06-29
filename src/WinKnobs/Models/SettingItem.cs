@@ -77,7 +77,14 @@ public enum CategoryType
     /// （Maintenance と同じ＝Startup/Network/Graphics 以外なので IsStandardCategorySelected=true）。
     /// enum は末尾追加（既存値の数値シフト回避）。表示順は InitializeCategories の Add 位置で制御。
     /// </summary>
-    Sound
+    Sound,
+
+    /// <summary>
+    /// ゲーミング（Game Mode 等・v0.3.7〜・v0.4.0 で拡充予定）。専用ペインは持たず標準 DataGrid に表示する
+    /// （Startup/Network/Graphics 以外なので IsStandardCategorySelected=true）。
+    /// enum は末尾追加（既存値の数値シフト回避）。Graphics（グラフィック）とは別カテゴリ（アイコンも区別）。
+    /// </summary>
+    Gaming
 }
 
 /// <summary>

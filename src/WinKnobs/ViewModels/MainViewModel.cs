@@ -1679,6 +1679,7 @@ public partial class MainViewModel : ObservableObject
         Categories.Add(new SettingCategory("デスクトップ・UI", CategoryType.Desktop, "🎨"));
         Categories.Add(new SettingCategory("グラフィック", CategoryType.Graphics, "🎮"));
         Categories.Add(new SettingCategory("サウンド", CategoryType.Sound, "🔊"));   // v0.3.3：システム効果音 ON/OFF
+        Categories.Add(new SettingCategory("ゲーミング", CategoryType.Gaming, "🕹️"));   // v0.3.7：ゲームモード等
         Categories.Add(new SettingCategory("アクセシビリティ", CategoryType.Accessibility, "♿"));
         Categories.Add(new SettingCategory("プライバシー", CategoryType.Privacy, "🔒"));
         Categories.Add(new SettingCategory("キーボード・マウス", CategoryType.KeyboardMouse, "⌨️"));
@@ -1981,6 +1982,27 @@ public partial class MainViewModel : ObservableObject
             ValueType = SettingValueType.Boolean,
             RecommendedValue = true,     // 中立：自動整理オンを既定表示（押し付けない）
             DefaultValue = true          // Windows 11 既定はおおむねオン
+        });
+
+        // v0.3.7：ゲーミング「ゲームモード（Game Mode）」
+        // HKCU\Software\Microsoft\GameBar\AutoGameModeEnabled（DWORD・1=ON/0=OFF・管理者不要・即時）。
+        // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（汎用書込＋退避を再利用）。
+        Items.Add(new SettingItem
+        {
+            Id = "gaming.gameMode",
+            Title = "ゲームモード（Game Mode）",
+            Description = "ゲームのプレイ中に Windows の更新や通知などのバックグラウンド動作を抑えて、ゲームを優先する機能のオン/オフです"
+                + "（設定 > ゲーム > ゲームモード と同じ）。"
+                + "オンにするとゲーム中のカクつき軽減が期待できます（効果は環境により異なります）。"
+                + "管理者権限は不要です（自分のユーザー設定）。設定はすぐ反映されます。",
+            Category = CategoryType.Gaming,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            RegistryPath = @"HKCU\Software\Microsoft\GameBar",
+            RegistryValueName = "AutoGameModeEnabled",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = true,     // 中立：Windows 既定（オン）
+            DefaultValue = true          // Windows デフォルト：オン
         });
 
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）

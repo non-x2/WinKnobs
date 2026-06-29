@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.7] - 2026-06-29（ゲームモード ON/OFF・新🕹️ゲーミングカテゴリ）
+
+### Added
+- **ゲームモード（Game Mode）**（新🕹️ゲーミング カテゴリの第1項目・🟢・HKCU・管理者不要）：
+  - ゲーム中にバックグラウンド動作を抑えてゲームを優先する機能のオン/オフ Boolean トグル（`HKCU\Software\Microsoft\GameBar\AutoGameModeEnabled`・1=ON/0=OFF）。
+  - 値 1=ON がユーザー視点と一致＝`InvertDisplay` 不要。専用 service 不要＝汎用 HKCU Boolean 書込（バックアップ）フローを再利用。
+
+### Changed
+- `CategoryType.Gaming` を enum 末尾追加（専用ペイン無し＝標準 DataGrid 表示・グラフィックとは別カテゴリ）。
+
+---
+
 ## [0.3.6] - 2026-06-29（ストレージセンサー ON/OFF・システム）
 
 ### Added
