@@ -2008,6 +2008,27 @@ public partial class MainViewModel : ObservableObject
         // v0.3.8：ゲーミング「Game DVR（ゲームの録画機能）」（2値同時 Command・HKCU・管理者不要）
         Items.Add(BuildGameDvrItem());
 
+        // v0.3.9：デスクトップ・UI「タスクバー時計に秒を表示」
+        // HKCU\…\Explorer\Advanced\ShowSecondsInSystemClock（DWORD・1=表示/0=非表示・管理者不要・エクスプローラ再起動で反映）。
+        // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（汎用書込＋退避を再利用）。
+        Items.Add(new SettingItem
+        {
+            Id = "desktop.taskbarClockSeconds",
+            Title = "タスクバー時計に秒を表示",
+            Description = "タスクバー右下の時計に「秒」まで表示します（設定 > 個人用設定 > タスクバー > タスクバーの動作 >「システム トレイの時計で秒を表示する」と同じ）。"
+                + "オンにすると時刻が hh:mm:ss 形式になります（その分わずかに CPU を使います）。"
+                + "管理者権限は不要です（自分のユーザー設定）。⚠️ 反映にはエクスプローラの再起動が必要な場合があります。"
+                + "⚠️ Windows 11 build 22621.1776 以降が必要です（古いバージョンでは効果がありません）。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+            RegistryValueName = "ShowSecondsInSystemClock",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = false,    // 中立：Windows 既定（非表示）
+            DefaultValue = false         // Windows デフォルト：非表示
+        });
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());

@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.9] - 2026-06-29（タスクバー時計に秒を表示・デスクトップ）
+
+### Added
+- **タスクバー時計に秒を表示**（デスクトップ・UI・🟢・HKCU・管理者不要）：
+  - タスクバーの時計を hh:mm:ss 表示にする Boolean トグル（`HKCU\…\Explorer\Advanced\ShowSecondsInSystemClock`・1=表示/0=非表示）。Windows 11 build 22621.1776 以降が必要。
+  - 値 1=ON がユーザー視点と一致＝`InvertDisplay` 不要。専用 service 不要＝汎用 HKCU Boolean 書込（バックアップ）フローを再利用。
+
+---
+
 ## [0.3.8] - 2026-06-29（Game DVR ON/OFF・🕹️ゲーミング第2項目）
 
 ### Added
