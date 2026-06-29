@@ -21,6 +21,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.12] - 2026-06-30（隠しファイル・フォルダーを表示・シェル）
+
+> 📝 いじくるツール代替の超定番。既存「ファイルの拡張子を表示」と対になるシェル項目。HKCU・管理者不要・現行 Windows 11（24H2/25H2）で有効。
+
+### Added
+- **隠しファイル・フォルダーを表示**（シェル・🟢・管理者不要・エクスプローラ再起動で反映）：
+  - 隠し属性のファイル/フォルダーの表示を「表示する / 表示しない（既定）」で切り替える Command 型2択（`HKCU\…\Explorer\Advanced\Hidden`・REG_DWORD）。
+  - **値が 0/1 でなく 1=表示 / 2=非表示** のため Boolean 型でなく Command 型で実装（新規 `HiddenFilesHelper` が value↔index 1/2↔0/1 を吸収）。
+  - 未設定・1/2 以外（非数値/範囲外）は「変更しない・現在のまま」センチネル表示＝既定を誤表示せず何も書き換えない。「↩戻す」は管理外なら値削除で OS 既定へ。
+  - システム保護ファイル（hiberfil.sys 等）は対象外＝別項目「システム保護ファイルを表示（上級者向け）」（`ShowSuperHidden`）。
+
+### Tests
+- `HiddenFilesHelperTests`（+36・value↔index 1/2↔0/1 マッピング／センチネル／管理対象判定の網羅）。合計 **988 PASS**。
+
+---
+
 ## [0.3.11] - 2026-06-29（最大のプロセッサの状態・カーネル）
 
 > 📝 候補項目集 v2 §1-B（`system.processorPowerState`・P6.7・AI バッチ時の温度/電源制御）。のんさんの 8700K 熱対策に直結。

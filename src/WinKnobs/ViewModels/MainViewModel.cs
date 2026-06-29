@@ -1916,6 +1916,9 @@ public partial class MainViewModel : ObservableObject
         // v0.3.2：デスクトップ・UI「タスクバーの検索ボックスの表示」（SearchboxTaskbarMode・HKCU・管理者不要・4択）
         Items.Add(BuildTaskbarSearchItem());
 
+        // v0.3.12：シェル「隠しファイル・フォルダーを表示」（Hidden・HKCU・管理者不要・2択・1=表示/2=非表示）
+        Items.Add(BuildHiddenFilesItem());
+
         // v0.3.3：サウンド「システム効果音 ON/OFF」（AppEvents\Schemes・HKCU・管理者不要・2択・Scope B 実消音）
         Items.Add(BuildSystemSoundItem());
 
@@ -3911,6 +3914,87 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// v0.3.12（シェル）：「隠しファイル・フォルダーを表示」を Command 型2択で構築。
+    /// HKCU\…\Explorer\Advanced\Hidden（REG_DWORD・1=表示/2=非表示）。**管理者不要**（HKCU）。
+    /// SearchboxTaskbarMode 同型（Command＋JSON 退避）だが「レジストリ値 ≠ index」（1/2）を HiddenFilesHelper が吸収。
+    /// 未設定・1/2 以外は「変更しない」センチネル表示（既定を誤表示しない）。Restore は管理外なら DeleteValue。
+    /// </summary>
+    private SettingItem BuildHiddenFilesItem()
+    {
+        var path = HiddenFilesHelper.RegistryPath;
+        var name = HiddenFilesHelper.ValueName;
+        // 非適用センチネル（現状維持）＋実選択肢2件。Read がこれを返しても ComboBox に存在するので安全。
+        const string keepLabel = "（変更しない・現在のまま）";
+        var choices = new List<string> { keepLabel };
+        choices.AddRange(HiddenFilesHelper.Choices);
+
+        return new SettingItem
+        {
+            Id = "shell.hiddenFiles",
+            Title = "隠しファイル・フォルダーを表示",
+            Description = "隠し属性が付いたファイル・フォルダーをエクスプローラに表示します"
+                + "（エクスプローラの「表示 > 表示 > 隠しファイル」と同じ）。"
+                + "「表示する」で隠しファイルが見え、「表示しない（既定）」で Windows 標準の隠れた状態に戻ります。"
+                + "現在の値を読み取れない・未設定の場合は「（変更しない・現在のまま）」と表示し、その時は何も書き換えません。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ これは通常の隠しファイルのみです。hiberfil.sys 等のシステム保護ファイルは別項目「システム保護ファイルを表示（上級者向け）」で切り替えます。"
+                + "⚠️ 反映にはエクスプローラの再起動（またはサインアウト→再ログイン）が必要な場合があります（WinKnobs は自動では再起動しません）。"
+                + "⚠️ エクスプローラの「表示」メニューを開いている場合は閉じてから適用してください（値が競合します）。",
+            Category = CategoryType.Shell,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            // 中立表示：特定状態を推奨しない（センチネル＝変更しない）。
+            RecommendedValue = keepLabel,
+            DefaultValue = keepLabel,
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    // 管理対象（1/2）のみラベル化／未設定・範囲外・非数値はセンチネル（既定を誤表示しない）。
+                    var v = _registry.ReadValue<object>(path, name);
+                    return HiddenFilesHelper.TryGetManagedIndex(v, out var idx)
+                        ? HiddenFilesHelper.Choices[idx]
+                        : keepLabel;
+                },
+                Apply = label =>
+                {
+                    var val = HiddenFilesHelper.ValueForLabel(label);
+                    if (val < 0) return;   // センチネル/不正＝書き込まない（no-op）
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    // 管理対象（1/2）だけ ValueExisted=true で生のレジストリ値を退避。非管理値（未設定/範囲外/非数値）は
+                    // false 扱い＝Restore で誤って 1/2 を書かず DeleteValue で WinKnobs の書込みを取り消す（OS 既定へ）。
+                    var v = _registry.ReadValue<object>(path, name);
+                    bool managed = HiddenFilesHelper.TryGetManagedIndex(v, out var idx);
+                    return JsonSerializer.Serialize(new HiddenFilesBackup
+                    {
+                        ValueExisted = managed,
+                        Value = managed ? HiddenFilesHelper.ValueForIndex(idx) : 0
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<HiddenFilesBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                    {
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                    else if (!_registry.DeleteValue(path, name))
+                    {
+                        // DeleteValue は失敗時 false（例外を投げない）。サイレント失敗を握り潰さず明示報告（SearchBoxMode 致命⑥ 踏襲）。
+                        throw new InvalidOperationException("隠しファイル表示の設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                }
+            }
+        };
+    }
+
+    /// <summary>
     /// v0.3.3（サウンド）：「システム効果音 ON/OFF」を Command 型2択で構築。
     /// HKCU\AppEvents\Schemes（管理者不要）。Scope B＝各イベントの .Current を直接書き換えて実際に消音する。
     /// 退避は SystemSoundService の first-touch-wins（maintenance ストア）に委譲＝Backup() はマーカーを返すだけ、
@@ -4130,6 +4214,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.3.2 タスクバー検索ボックス表示（SearchboxTaskbarMode）用バックアップトークン（existed は値の有無・生値保存）。</summary>
     private class SearchBoxModeBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.12 隠しファイル表示（Hidden）用バックアップトークン（existed は管理値の有無・生のレジストリ値 1/2 を保存）。</summary>
+    private class HiddenFilesBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
