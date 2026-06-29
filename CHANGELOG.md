@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.5] - 2026-06-29（スナップアシスト ON/OFF・デスクトップ）
+
+### Added
+- **スナップ時の候補表示（スナップアシスト）**（デスクトップ・UI・🟢・HKCU・管理者不要）：
+  - ウィンドウをスナップした時の候補ポップアップ表示をオン/オフする Boolean トグル（`HKCU\…\Explorer\Advanced\SnapAssist`・1=ON/0=OFF）。スナップ操作自体は無効化しない。
+  - 値 1=ON がユーザー視点と一致＝`InvertDisplay` 不要。専用 service 不要＝汎用 HKCU Boolean 書込（バックアップ）フローを再利用（`desktop.darkModeApps` 同型）。
+
+---
+
 ## [0.3.4] - 2026-06-29（Windows 起動音 ON/OFF・🔊サウンド第2項目）
 
 ### Added

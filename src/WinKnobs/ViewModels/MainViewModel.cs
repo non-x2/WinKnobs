@@ -1940,6 +1940,27 @@ public partial class MainViewModel : ObservableObject
             DefaultValue = true          // Windows デフォルト：起動音オン
         });
 
+        // v0.3.5：デスクトップ・UI「スナップ時の候補表示（スナップアシスト）」
+        // HKCU\…\Explorer\Advanced\SnapAssist（DWORD・1=ON/0=OFF・管理者不要・エクスプローラ再起動で反映）。
+        // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。darkMode と同型の宣言的 HKCU Boolean。
+        Items.Add(new SettingItem
+        {
+            Id = "desktop.snapAssist",
+            Title = "スナップ時の候補表示（スナップアシスト）",
+            Description = "ウィンドウを画面端にスナップした時に「残りの場所に何を並べるか」の候補（他ウィンドウのサムネイル）を表示する機能のオン/オフです"
+                + "（設定 > システム > マルチタスク >「ウィンドウをスナップする」内の候補表示に相当）。"
+                + "オフにすると、スナップ後に候補ポップアップが出なくなります（スナップ操作自体は無効になりません）。"
+                + "管理者権限は不要です（自分のユーザー設定）。⚠️ 反映にはエクスプローラの再起動（またはサインアウト→再ログイン）が必要な場合があります。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+            RegistryValueName = "SnapAssist",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = true,     // 中立：Windows 既定（候補表示オン）
+            DefaultValue = true          // Windows デフォルト：オン
+        });
+
         // W5：クラシック右クリックメニュー（CommandAction で CLSID キー存在判定）
         // plan-validator V-1/V-4 反映：Backup/Restore で JSON トークン保持
         Items.Add(BuildClassicContextMenuItem());
