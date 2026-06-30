@@ -21,6 +21,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.17] - 2026-06-30（「よく使うアプリ」を表示／アプリ起動の記録・プライバシー）
+
+> 📝 プライバシー寄りの定番。Start_TrackProgs＝アプリ起動回数の記録（「よく使うアプリ」表示）。HKCU・管理者不要・**既定 ON**。
+
+### Added
+- **「よく使うアプリ」を表示（アプリ起動の記録）**（プライバシー・🟢・管理者不要・スタート開き直しで反映）：
+  - スタート/検索の「よく使うアプリ」表示＝アプリ起動の記録を ON/OFF（`HKCU\…\Explorer\Advanced\Start_TrackProgs`・REG_DWORD・1=記録する/0=記録しない）。
+  - **既定 ON（未設定＝記録する）** のため宣言的 Boolean（reg import マージで未設定へ戻せない）ではなく **Command 型2択＋`ValueExisted` 退避**で実装。「記録しない」適用後の「↩戻す」は、元が未設定なら値を**削除**して OS 既定（記録する）へ正しく復元（DeleteOrThrow）。
+
+## [0.3.16] - 2026-06-30（マウスホイールのスクロール行数・キーボード/マウス）
+
+> 📝 定番の数値調整。WheelScrollLines（HKCU・管理者不要）。MenuShowDelay と同じ String 数値型。
+
+### Added
+- **マウスホイールのスクロール行数**（キーボード・マウス・🟢・管理者不要・再ログオンで反映）：
+  - ホイール1ノッチのスクロール行数を **1〜100**（既定 3）で設定（`HKCU\Control Panel\Desktop\WheelScrollLines`・REG_SZ・`NumericStringRange=(1,100)`）。
+  - 「0（スクロールしない）」「-1（1画面ずつ）」は非対象（数値モデル維持）。範囲外の既存値は現在値を表示しつつ保存時に 1〜100 で検証。
+  - 反映タイミングは再ログオン（各アプリが起動時にキャッシュするシステムメトリックのため・WinKnobs は自動サインアウトしない）。
+
+## [0.3.15] - 2026-06-30（タスクバー ボタンの結合・デスクトップ）
+
+> 📝 いじくる定番。Win11 設定にもあるが、24H2 で主/他モニタが分割（TaskbarGlomLevel/MMTaskbarGlomLevel）。HKCU・管理者不要。
+
+### Added
+- **タスクバー ボタンの結合**（デスクトップ・🟢・管理者不要・エクスプローラ再起動で反映）：
+  - 同一アプリの窓をタスクバーで結合するかを Command 型3択（`HKCU\…\Explorer\Advanced\TaskbarGlomLevel`・REG_DWORD・**0=常に結合/1=入りきらないとき/2=結合しない**・値=index の identity）。
+  - 24H2 のマルチモニタ分割に対応し **主（TaskbarGlomLevel）と他モニタ（MMTaskbarGlomLevel）の両キーに同値を書く**。Backup は両キーの existed＋値（4 フィールド）、Restore は各キー existed=false で DeleteOrThrow。
+  - 未設定/範囲外は「常に結合（OS 既定）」として表示（新規 `TaskbarGlomHelper`＋テスト）。
+
+### Tests
+- `TaskbarGlomHelperTests`（identity 変換・管理外/未設定判定・REG_SZ 解釈・Read fallback 等）。
+
 ## [0.3.14] - 2026-06-30（エクスプローラの起動先・シェル）
 
 > 📝 いじくるツール代替の定番。「ダウンロード」は Windows の設定 GUI に無くレジストリ限定＝差別化。HKCU・管理者不要。

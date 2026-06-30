@@ -1922,6 +1922,37 @@ public partial class MainViewModel : ObservableObject
         // v0.3.14：シェル「エクスプローラの起動先」（LaunchTo・HKCU・管理者不要・3択・ホーム2/このPC1/ダウンロード3）
         Items.Add(BuildLaunchToItem());
 
+        // v0.3.15：デスクトップ「タスクバー ボタンの結合」（TaskbarGlomLevel+MM・HKCU・管理者不要・3択・値=index）
+        Items.Add(BuildTaskbarGlomItem());
+
+        // v0.3.16：キーボード・マウス「マウスホイールのスクロール行数」（WheelScrollLines・HKCU\Control Panel\Desktop・REG_SZ・1-100）
+        Items.Add(new SettingItem
+        {
+            Id = "keyboardMouse.wheelScrollLines",
+            Title = "マウスホイールのスクロール行数",
+            Description = "マウスのホイールを1ノッチ回したときにスクロールする行数（1〜100・既定 3）。"
+                + "大きくすると一気に多く、小さくすると細かくスクロールできます"
+                + "（設定 > Bluetooth とデバイス > マウス、または「マウスのプロパティ > ホイール」と同じ）。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "※「0（スクロールしない）」や「1画面ずつ（-1）」はこの項目では選べません（数値 1〜100 のみ）。"
+                + "現在の値がその範囲外（0 や -1 など）の場合は現在値をそのまま表示しますが、保存は 1〜100 のみ受け付けます"
+                + "（範囲外の値が入っているときは一度 1〜100 に書き換えてから保存してください）。"
+                + "⚠️ 反映には一度サインアウトして再ログオンが必要な場合があります"
+                + "（このキーは各アプリが起動時に読み込むため。WinKnobs は自動でサインアウトしません）。",
+            Category = CategoryType.KeyboardMouse,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Logoff,
+            RegistryPath = @"HKCU\Control Panel\Desktop",
+            RegistryValueName = "WheelScrollLines",
+            ValueType = SettingValueType.String,
+            NumericStringRange = (1, 100),
+            RecommendedValue = "3",
+            DefaultValue = "3"
+        });
+
+        // v0.3.17：プライバシー「『よく使うアプリ』を表示（アプリ起動の記録）」（Start_TrackProgs・HKCU・管理者不要・2択・既定ON）
+        Items.Add(BuildStartTrackProgsItem());
+
         // v0.3.3：サウンド「システム効果音 ON/OFF」（AppEvents\Schemes・HKCU・管理者不要・2択・Scope B 実消音）
         Items.Add(BuildSystemSoundItem());
 
@@ -4326,8 +4357,171 @@ public partial class MainViewModel : ObservableObject
         public int Value { get; set; }
     }
 
+    /// <summary>
+    /// v0.3.15「タスクバー ボタンの結合」（TaskbarGlomLevel + MMTaskbarGlomLevel）を Command 型3択で構築。
+    /// HKCU\…\Explorer\Advanced（管理者不要）。値＝index（0/1/2）。Apply は主・他モニタの両キーに同値を書く。
+    /// Read は主キー（TaskbarGlomLevel）のみ参照し、未設定/範囲外は choices[0]（常に結合＝OS 既定）に丸める。
+    /// Backup は両キーの existed＋値（4 フィールド JSON）。Restore は各キー existed=true→書戻し / false→DeleteOrThrow
+    /// （見落とし事例ログ 2026-06-10 DeleteValue サイレント失敗対策）。
+    /// </summary>
+    private SettingItem BuildTaskbarGlomItem()
+    {
+        var path = TaskbarGlomHelper.RegistryPath;
+        var name = TaskbarGlomHelper.ValueName;
+        var mmName = TaskbarGlomHelper.MmValueName;
+        var choices = TaskbarGlomHelper.Choices.ToList();
+
+        return new SettingItem
+        {
+            Id = "desktop.taskbarGlomLevel",
+            Title = "タスクバー ボタンの結合",
+            Description = "同じアプリのウィンドウをタスクバーで1つにまとめる（結合する）かを選びます"
+                + "（設定 > 個人用設定 > タスクバー > タスクバーの動作 >「タスク バー ボタンを結合し、ラベルを非表示にする」と同じ）。"
+                + "「常に結合（ラベル非表示）」/「タスクバーに入りきらないとき」/「結合しない（ラベル表示）」から選べます。"
+                + "「結合しない」にすると、ウィンドウごとに名前（ラベル）付きで横並びになり、目的の窓を選びやすくなります。"
+                + "モニタが複数ある場合は、主・他モニタの両方のタスクバーを同じ設定に揃えます。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映にはエクスプローラの再起動が必要な場合があります（WinKnobs は自動では再起動しません）。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return TaskbarGlomHelper.TryGetManagedIndex(v, out var idx)
+                        ? TaskbarGlomHelper.Choices[idx]
+                        : TaskbarGlomHelper.Choices[0];   // 未設定/範囲外＝常に結合（OS 既定）
+                },
+                Apply = label =>
+                {
+                    var val = TaskbarGlomHelper.ValueForLabel(label);
+                    if (val < 0) return;   // センチネル/不正＝no-op
+                    // 主・他モニタの両キーに同値を書く（GUI は別々に持てるが「全タスクバー同じ」が大多数の期待）。
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                    _registry.WriteValue<int>(path, mmName, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    var mm = _registry.ReadValue<object>(path, mmName);
+                    return JsonSerializer.Serialize(new TaskbarGlomBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = TaskbarGlomHelper.CoerceInt(v, TaskbarGlomHelper.ValueAlways),
+                        MmExisted = mm != null,
+                        MmValue = TaskbarGlomHelper.CoerceInt(mm, TaskbarGlomHelper.ValueAlways)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<TaskbarGlomBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else if (!_registry.DeleteValue(path, name))
+                        throw new InvalidOperationException("タスクバー結合の設定（主）を元に戻せませんでした（値の削除に失敗）。");
+
+                    if (bk.MmExisted)
+                        _registry.WriteValue<int>(path, mmName, bk.MmValue, Microsoft.Win32.RegistryValueKind.DWord);
+                    else if (!_registry.DeleteValue(path, mmName))
+                        throw new InvalidOperationException("タスクバー結合の設定（他モニタ）を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// v0.3.17「『よく使うアプリ』を表示（アプリ起動の記録）」（Start_TrackProgs）を Command 型2択で構築。
+    /// HKCU\…\Explorer\Advanced（管理者不要）。値 1=記録する（OS 既定・未設定も同義）/ 0=記録しない。
+    /// 既定 ON のため宣言的 Boolean（reg import マージで未設定へ戻せない）ではなく Command＋ValueExisted で
+    /// 「OFF にして戻す→未設定（＝ON）へ」を正しく復元する。Restore の DeleteValue は DeleteOrThrow。
+    /// </summary>
+    private SettingItem BuildStartTrackProgsItem()
+    {
+        const string path = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
+        const string name = "Start_TrackProgs";
+        var choices = new List<string> { "記録する（既定）", "記録しない" };
+
+        return new SettingItem
+        {
+            Id = "privacy.startTrackProgs",
+            Title = "「よく使うアプリ」を表示（アプリ起動の記録）",
+            Description = "Windows がアプリの起動回数を記録して、スタートメニューや検索に「よく使うアプリ」を表示する機能の ON/OFF です"
+                + "（設定 > 個人用設定 > スタート >「よく使うアプリを表示する」と同じ。アプリ起動の記録＝Start_TrackProgs）。"
+                + "「記録しない」にすると起動回数の記録を止め、「よく使うアプリ」の表示も無くなります（プライバシー寄り）。"
+                + "Windows の既定は「記録する（オン）」です。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 表示への反映はスタートメニューを開き直したとき（環境によっては再ログオン後）です。",
+            Category = CategoryType.Privacy,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    if (v == null) return choices[0];   // 未設定＝記録する（OS 既定 ON）
+                    return RegistryValueCoercion.CoerceInt(v, 1) != 0 ? choices[0] : choices[1];
+                },
+                Apply = label =>
+                {
+                    // TaskbarGlom と同じく未知ラベル（センチネル等）は no-op（誤って既定 ON を書かない）。
+                    int val;
+                    if (label == choices[0]) val = 1;        // 記録する
+                    else if (label == choices[1]) val = 0;   // 記録しない
+                    else return;                             // 想定外ラベル＝何もしない
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new StartTrackProgsBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 1)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<StartTrackProgsBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else if (!_registry.DeleteValue(path, name))
+                        throw new InvalidOperationException("「よく使うアプリの記録」の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
     /// <summary>v0.3.14 エクスプローラ起動先（LaunchTo）用バックアップトークン（existed は管理値の有無・生のレジストリ値 0/1/2/3 を保存）。</summary>
     private class LaunchToBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.15 タスクバー結合（TaskbarGlomLevel + MMTaskbarGlomLevel）用バックアップトークン（両キーの existed＋値）。</summary>
+    private class TaskbarGlomBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+        public bool MmExisted { get; set; }
+        public int MmValue { get; set; }
+    }
+
+    /// <summary>v0.3.17 よく使うアプリの記録（Start_TrackProgs）用バックアップトークン（existed＋値・未設定→DeleteValue 復元）。</summary>
+    private class StartTrackProgsBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
