@@ -21,6 +21,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.20] - 2026-06-30（クイックアクセスに「最近使ったファイル」を表示・シェル）
+
+> 📝 エクスプローラ定番。ShowRecent（HKCU・管理者不要・**既定 ON**）。ShowFrequent（よく使うフォルダー）は別項目。
+
+### Added
+- **クイックアクセスに「最近使ったファイル」を表示**（シェル・🟢・管理者不要・エクスプローラ再起動で反映）：
+  - クイックアクセス（ホーム）の「最近使ったファイル」表示を ON/OFF（`HKCU\…\Explorer\ShowRecent`・REG_DWORD・1=表示/0=非表示）。
+  - **既定 ON（未設定＝表示）** のため **Command 型2択＋`ValueExisted`** で実装（OFF→戻すで未設定＝表示へ正しく復元・DeleteOrThrow）。
+
+### Fixed
+- **Command 型「戻す」の DeleteValue 誤判定を修正**（共通 `DeleteValueOrThrow` 化）：`DeleteValue=false` には「削除失敗」と「元から値が無い（他ツールが先に削除済み＝望む状態）」の2通りがあり、後者で誤って例外を投げていた。削除後に値が残存する時だけ throw するよう精緻化し、LaunchTo(v0.3.14)/TaskbarGlom(v0.3.15)/Start_TrackProgs(v0.3.17)/ConfirmFileDelete/ShowRecent の全 Command Restore に適用（cross-reviewer 2026-06-30・見落とし事例ログ 2026-06-10 の逆パターン）。
+
+## [0.3.19] - 2026-06-30（ファイル削除時の確認ダイアログ・シェル）
+
+> 📝 うっかり削除防止の定番。ConfirmFileDelete（HKCU\…\Policies\Explorer・管理者不要・既定 OFF）。
+
+### Added
+- **ファイル削除時に確認ダイアログを表示**（シェル・🟢・管理者不要・エクスプローラ再起動で反映）：
+  - ごみ箱へ移動するときの確認ダイアログを ON/OFF（`HKCU\…\Policies\Explorer\ConfirmFileDelete`・REG_DWORD・1=確認する/0=確認しない）。推奨＝確認する（誤削除防止）。
+  - `Policies\Explorer` は新規作成され得るため、宣言的 Boolean（reg import でキーごと削除＝他ポリシー値を巻き添え）でなく **Command 型2択＋ValueExisted の値単位 DeleteOrThrow** で実装（巻き添え回避）。
+
+## [0.3.18] - 2026-06-30（ナビゲーションウィンドウにすべてのフォルダーを表示・シェル）
+
+> 📝 エクスプローラ定番（Win10 風の詳しい左一覧）。NavPaneShowAllFolders（HKCU・管理者不要・既定 OFF）。
+
+### Added
+- **ナビゲーションウィンドウにすべてのフォルダーを表示**（シェル・🟢・管理者不要・エクスプローラ再起動で反映）：
+  - 左のナビゲーションウィンドウに「すべてのフォルダー」（ごみ箱/コントロールパネル/ライブラリ等）を表示（`HKCU\…\Explorer\Advanced\NavPaneShowAllFolders`・REG_DWORD・1=表示/0=非表示）。値 1=ON がユーザー視点と一致＝宣言的 Boolean（既定 OFF＝復元無害）。
+
 ## [0.3.17] - 2026-06-30（「よく使うアプリ」を表示／アプリ起動の記録・プライバシー）
 
 > 📝 プライバシー寄りの定番。Start_TrackProgs＝アプリ起動回数の記録（「よく使うアプリ」表示）。HKCU・管理者不要・**既定 ON**。

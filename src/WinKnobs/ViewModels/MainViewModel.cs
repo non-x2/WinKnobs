@@ -1953,6 +1953,34 @@ public partial class MainViewModel : ObservableObject
         // v0.3.17：プライバシー「『よく使うアプリ』を表示（アプリ起動の記録）」（Start_TrackProgs・HKCU・管理者不要・2択・既定ON）
         Items.Add(BuildStartTrackProgsItem());
 
+        // v0.3.18：シェル「ナビゲーションウィンドウにすべてのフォルダーを表示」（NavPaneShowAllFolders・HKCU・宣言的Boolean・既定OFF）
+        // 宣言的 Boolean 採用根拠：親キー …\Explorer\Advanced は他値同居で常在（AutoCheckSelect 等と同じ）＝汎用 Backup(ExportKey)
+        // が削除マーカーを生成せず、キー巻き添えが起きない。既定 OFF のため値 0 書込≒未設定で復元も機能的に無害。
+        Items.Add(new SettingItem
+        {
+            Id = "shell.navPaneShowAllFolders",
+            Title = "ナビゲーションウィンドウにすべてのフォルダーを表示",
+            Description = "エクスプローラ左側のナビゲーションウィンドウ（フォルダーの一覧）に、ごみ箱・コントロールパネル・ライブラリ・ユーザーフォルダーなど"
+                + "「すべてのフォルダー」を表示します（エクスプローラの「…（もっと見る）> オプション > 表示 >『すべてのフォルダーを表示』」と同じ）。"
+                + "オンにすると左の一覧が Windows 10 風に詳しくなります。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映にはエクスプローラの再起動（または サインアウト）が必要な場合があります（WinKnobs は自動では再起動しません）。",
+            Category = CategoryType.Shell,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            RegistryPath = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+            RegistryValueName = "NavPaneShowAllFolders",
+            ValueType = SettingValueType.Boolean,
+            RecommendedValue = false,    // 中立：Windows 既定（非表示）
+            DefaultValue = false         // Windows デフォルト：非表示
+        });
+
+        // v0.3.19：シェル「ファイル削除時に確認ダイアログを表示」（ConfirmFileDelete・Policies\Explorer・Command2択・既定OFF・巻き添え回避）
+        Items.Add(BuildConfirmFileDeleteItem());
+
+        // v0.3.20：シェル「クイックアクセスに『最近使ったファイル』を表示」（ShowRecent・HKCU・Command2択・既定ON）
+        Items.Add(BuildShowRecentItem());
+
         // v0.3.3：サウンド「システム効果音 ON/OFF」（AppEvents\Schemes・HKCU・管理者不要・2択・Scope B 実消音）
         Items.Add(BuildSystemSoundItem());
 
@@ -4116,9 +4144,9 @@ public partial class MainViewModel : ObservableObject
                     {
                         _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
                     }
-                    else if (!_registry.DeleteValue(path, name))
+                    else
                     {
-                        throw new InvalidOperationException("エクスプローラの起動先の設定を元に戻せませんでした（値の削除に失敗）。");
+                        DeleteValueOrThrow(path, name, "エクスプローラの起動先の設定を元に戻せませんでした（値の削除に失敗）。");
                     }
                 }
             }
@@ -4424,13 +4452,13 @@ public partial class MainViewModel : ObservableObject
                     if (bk == null) return;
                     if (bk.ValueExisted)
                         _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
-                    else if (!_registry.DeleteValue(path, name))
-                        throw new InvalidOperationException("タスクバー結合の設定（主）を元に戻せませんでした（値の削除に失敗）。");
+                    else
+                        DeleteValueOrThrow(path, name, "タスクバー結合の設定（主）を元に戻せませんでした（値の削除に失敗）。");
 
                     if (bk.MmExisted)
                         _registry.WriteValue<int>(path, mmName, bk.MmValue, Microsoft.Win32.RegistryValueKind.DWord);
-                    else if (!_registry.DeleteValue(path, mmName))
-                        throw new InvalidOperationException("タスクバー結合の設定（他モニタ）を元に戻せませんでした（値の削除に失敗）。");
+                    else
+                        DeleteValueOrThrow(path, mmName, "タスクバー結合の設定（他モニタ）を元に戻せませんでした（値の削除に失敗）。");
                 }
             }
         };
@@ -4497,15 +4525,178 @@ public partial class MainViewModel : ObservableObject
                     if (bk == null) return;
                     if (bk.ValueExisted)
                         _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
-                    else if (!_registry.DeleteValue(path, name))
-                        throw new InvalidOperationException("「よく使うアプリの記録」の設定を元に戻せませんでした（値の削除に失敗）。");
+                    else
+                        DeleteValueOrThrow(path, name, "「よく使うアプリの記録」の設定を元に戻せませんでした（値の削除に失敗）。");
                 }
             }
         };
     }
 
+    /// <summary>
+    /// v0.3.19「ファイル削除時に確認ダイアログを表示」（ConfirmFileDelete）を Command 型2択で構築。
+    /// HKCU\…\Policies\Explorer（管理者不要）。値 1=確認する / 0=確認しない（OS 既定＝未設定＝確認しない）。
+    /// **宣言的 Boolean を使わない理由**：Policies\Explorer は未存在から新規作成され得る。汎用 Backup（reg export）は
+    /// キー不在時に `[-…\Policies\Explorer]` 削除マーカーを生成し、復元でキーごと削除＝他のポリシー値を巻き添える
+    /// （見落とし事例ログ 2026-06-10 のキー巻き添え）。Command＋ValueExisted の **値単位** DeleteOrThrow で回避。
+    /// </summary>
+    private SettingItem BuildConfirmFileDeleteItem()
+    {
+        const string path = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer";
+        const string name = "ConfirmFileDelete";
+        var choices = new List<string> { "確認する", "確認しない（既定）" };
+
+        return new SettingItem
+        {
+            Id = "shell.confirmFileDelete",
+            Title = "ファイル削除時に確認ダイアログを表示",
+            Description = "⚠️『確認しない』にすると、ファイルをごみ箱へ移動するときの「このファイルをごみ箱に移動しますか？」確認が出なくなります（誤削除に注意）。"
+                + "「確認する」にすると、削除のたびに確認ダイアログを表示します"
+                + "（ごみ箱のプロパティ「削除の確認メッセージを表示する」と同じ）。"
+                + "Windows 11 の既定は「確認しない」です。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "※ 企業の管理（グループポリシー）下では適用できない場合があります。"
+                + "⚠️ 反映にはエクスプローラの再起動（または サインアウト）が必要な場合があります。",
+            Category = CategoryType.Shell,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 推奨：確認する（誤削除防止）
+            DefaultValue = choices[1],       // OS 既定：確認しない
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    if (v == null) return choices[1];   // 未設定＝確認しない（OS 既定）
+                    return RegistryValueCoercion.CoerceInt(v, 0) != 0 ? choices[0] : choices[1];
+                },
+                Apply = label =>
+                {
+                    int val;
+                    if (label == choices[0]) val = 1;        // 確認する
+                    else if (label == choices[1]) val = 0;   // 確認しない
+                    else return;                             // 想定外＝no-op
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new ConfirmFileDeleteBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 0)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<ConfirmFileDeleteBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else   // 値単位の削除（キーは消さない＝Policies 巻き添え回避）
+                        DeleteValueOrThrow(path, name, "削除確認ダイアログの設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// v0.3.20「クイックアクセスに『最近使ったファイル』を表示」（ShowRecent）を Command 型2択で構築。
+    /// HKCU\…\Explorer（管理者不要）。値 1=表示 / 0=非表示（OS 既定＝未設定＝表示）。
+    /// 既定 ON のため宣言的 Boolean（reg import で未設定へ戻せない）でなく Command＋ValueExisted（Start_TrackProgs 同型）。
+    /// ShowRecent=最近使ったファイル／ShowFrequent=よく使うフォルダー（別項目）。同定は在席で実機確認（DoD）。
+    /// </summary>
+    private SettingItem BuildShowRecentItem()
+    {
+        const string path = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer";
+        const string name = "ShowRecent";
+        var choices = new List<string> { "表示する（既定）", "表示しない" };
+
+        return new SettingItem
+        {
+            Id = "shell.showRecent",
+            Title = "クイックアクセスに「最近使ったファイル」を表示",
+            Description = "エクスプローラのクイックアクセス（ホーム）に「最近使ったファイル」を表示するかを選びます"
+                + "（エクスプローラの「…（もっと見る）> オプション > 全般 > プライバシー >『最近使ったファイルを表示する』」と同じ）。"
+                + "「表示しない」にすると最近開いたファイルの一覧が出なくなります（プライバシー寄り）。"
+                + "Windows の既定は「表示する」です。"
+                + "（似た設定の「よく使うフォルダーを表示する」は別項目＝ShowFrequent です。）"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映にはエクスプローラの再起動が必要な場合があります。",
+            Category = CategoryType.Shell,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    if (v == null) return choices[0];   // 未設定＝表示する（OS 既定 ON）
+                    return RegistryValueCoercion.CoerceInt(v, 1) != 0 ? choices[0] : choices[1];
+                },
+                Apply = label =>
+                {
+                    int val;
+                    if (label == choices[0]) val = 1;        // 表示する
+                    else if (label == choices[1]) val = 0;   // 表示しない
+                    else return;                             // 想定外＝no-op
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new ShowRecentBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 1)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<ShowRecentBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "「最近使ったファイルを表示」の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Command 型 Restore の「未設定へ戻す」削除（値単位）。`DeleteValue` が false でも、
+    /// 削除後に値が実際に残っている時だけ throw する（cross-reviewer 2026-06-30 指摘＝見落とし事例ログ
+    /// 2026-06-10 の逆パターン）。`DeleteValue=false` には「削除失敗」と「元から値が無い（他ツールが先に削除済み＝
+    /// 望む状態）」の2通りがあり、後者で誤って throw しないため残存確認を挟む。キーは消さず値のみ削除＝巻き添え回避。
+    /// </summary>
+    private void DeleteValueOrThrow(string path, string name, string errorMessage)
+    {
+        if (!_registry.DeleteValue(path, name) && _registry.ReadValue<object>(path, name) != null)
+            throw new InvalidOperationException(errorMessage);
+    }
+
     /// <summary>v0.3.14 エクスプローラ起動先（LaunchTo）用バックアップトークン（existed は管理値の有無・生のレジストリ値 0/1/2/3 を保存）。</summary>
     private class LaunchToBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.19 ファイル削除確認（ConfirmFileDelete）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class ConfirmFileDeleteBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.20 最近使ったファイル表示（ShowRecent）用バックアップトークン（existed＋値・未設定→DeleteValue 復元）。</summary>
+    private class ShowRecentBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
