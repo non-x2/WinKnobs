@@ -310,10 +310,10 @@ memory + note公開戦略_スキル.md より：
 
 ## 10. 関連メモリ・資料
 
-- memory：[user_x_accounts](../../../../Users/Silverfox/.claude/projects/C--AI-Claudo/memory/user_x_accounts.md) — X アカウント運用ルール
-- memory：[project_nonlabo_note_quality_loop](../../../../Users/Silverfox/.claude/projects/C--AI-Claudo/memory/project_nonlabo_note_quality_loop.md) — note 90 点品質ループ
-- memory：[project_nonlabo_note_routine](../../../../Users/Silverfox/.claude/projects/C--AI-Claudo/memory/project_nonlabo_note_routine.md) — note ルーティン A+D 方式
-- memory：[feedback_nonsan_quality_standard](../../../../Users/Silverfox/.claude/projects/C--AI-Claudo/memory/feedback_nonsan_quality_standard.md) — Z 独自基準（90 点追求）
+- memory：`user_x_accounts` — X アカウント運用ルール
+- memory：`project_nonlabo_note_quality_loop` — note 90 点品質ループ
+- memory：`project_nonlabo_note_routine` — note ルーティン A+D 方式
+- memory：`feedback_nonsan_quality_standard` — Z 独自基準（90 点追求）
 - スキル：[note公開戦略_スキル.md](../../エージェント/AI代行会社/agents/クリエイターさん/skills/note公開戦略_スキル.md) — X リンクペナルティ対策
 - AI代行会社：[final_output/GitHub_Sponsors_任意整理整合性_判定_v1.md] — タスク023 の Plan B 判定
 
