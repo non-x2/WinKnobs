@@ -2353,6 +2353,14 @@ public partial class MainViewModel : ObservableObject
 
         // 夜間モード 色温度（desktop.nightLightStrength・CloudStore バイナリ blob・最難関）
         Items.Add(BuildNightLightItem());
+
+        // ====================== v0.3.21 追加項目（2026-07-04 自走） ======================
+
+        // TCP 即時 ACK（network.tcpAckFrequency・物理アダプタ全台へ一括適用）
+        Items.Add(BuildTcpAckFrequencyItem());
+
+        // 手書き入力パッドの自動起動（keyboardMouse.penAutoInvoke・TabletTip）
+        Items.Add(BuildPenAutoInvokeItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -2571,6 +2579,170 @@ public partial class MainViewModel : ObservableObject
                 }
             }
         };
+    }
+
+    // ====================== v0.3.21 TCP 即時 ACK（Command 2択・物理アダプタ全台へ一括適用） ======================
+    //
+    // HKLM\...\Tcpip\Parameters\Interfaces\{GUID}\TcpAckFrequency（DWORD・アダプタ個別・既定は未設定＝遅延ACK有効）。
+    // Network Throttling Index と違い単一パスでなく物理アダプタ全台が対象のため、
+    // アダプタ列挙は既存 NetworkService.GetActivePhysicalAdapters を再利用（DNS/DoH と同じ判定基準に揃える）。
+    // 賛否ある tweak（Microsoft Learn 裏取り済・RDP/対話セッションではレイテンシ改善、大量データ転送では逆効果の報告もある）
+    // のため中立表記。「既定に戻す」は値単位 DeleteOrThrow（アダプタ1枚ずつ・元々値があれば書き戻し）。
+
+    private SettingItem BuildTcpAckFrequencyItem()
+    {
+        var choices = new List<string> { "既定（遅延 ACK・Windows 標準）", "即時 ACK（TcpAckFrequency=1）" };
+
+        List<AdapterInfo> GetAdapters() => new NetworkService(_registry, _backup, _launcherForCommands).GetActivePhysicalAdapters();
+
+        return new SettingItem
+        {
+            Id = "network.tcpAckFrequency",
+            Title = "TCP 即時 ACK（TcpAckFrequency）",
+            Description = "TCP の遅延確認応答（Delayed ACK）を無効化し、パケット受信のたびに即座に ACK を返すようにします。"
+                + "リモートデスクトップや SSH 等の対話的な通信で体感レイテンシが下がる場合がある一方、"
+                + "大量データ転送ではわずかに効率が落ちる場合もあり、効果には賛否があります（中立でおすすめしません）。"
+                + "有効な物理ネットワークアダプタ全台に一括適用します。管理者権限必須。再起動で確実に反映。",
+            Category = CategoryType.Network,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var adapters = GetAdapters();
+                    if (adapters.Count == 0) return choices[0];
+                    var allImmediate = adapters.All(a =>
+                        RegistryValueCoercion.CoerceInt(_registry.ReadValue<object>(TcpAckFrequencyHelper.BuildInterfacePath(a.Id), TcpAckFrequencyHelper.ValueName), 0)
+                        == TcpAckFrequencyHelper.ImmediateAckValue);
+                    return allImmediate ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    if (label != choices[0] && label != choices[1]) return;  // 想定外＝no-op
+                    foreach (var a in GetAdapters())
+                    {
+                        var path = TcpAckFrequencyHelper.BuildInterfacePath(a.Id);
+                        if (label == choices[1])
+                            _registry.WriteValue<int>(path, TcpAckFrequencyHelper.ValueName, TcpAckFrequencyHelper.ImmediateAckValue, Microsoft.Win32.RegistryValueKind.DWord);
+                        else
+                            DeleteValueOrThrow(path, TcpAckFrequencyHelper.ValueName, "TCP 即時 ACK の設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                },
+                Backup = () =>
+                {
+                    var list = GetAdapters().Select(a =>
+                    {
+                        var v = _registry.ReadValue<object>(TcpAckFrequencyHelper.BuildInterfacePath(a.Id), TcpAckFrequencyHelper.ValueName);
+                        return new TcpAckAdapterBackup { Id = a.Id, ValueExisted = v != null, Value = RegistryValueCoercion.CoerceInt(v, 0) };
+                    }).ToList();
+                    return JsonSerializer.Serialize(new TcpAckBackup { Adapters = list });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<TcpAckBackup>(token);
+                    if (bk == null) return;
+                    foreach (var a in bk.Adapters)
+                    {
+                        var path = TcpAckFrequencyHelper.BuildInterfacePath(a.Id);
+                        if (a.ValueExisted)
+                            _registry.WriteValue<int>(path, TcpAckFrequencyHelper.ValueName, a.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                        else
+                            DeleteValueOrThrow(path, TcpAckFrequencyHelper.ValueName, "TCP 即時 ACK の設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                }
+            }
+        };
+    }
+
+    /// <summary>v0.3.21 TCP 即時 ACK 用バックアップ（アダプタ 1 枚分・existed＋値）。</summary>
+    private class TcpAckAdapterBackup
+    {
+        public string Id { get; set; } = "";
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.3.21 TCP 即時 ACK 用バックアップ（全対象アダプタ）。</summary>
+    private class TcpAckBackup
+    {
+        public List<TcpAckAdapterBackup> Adapters { get; set; } = new();
+    }
+
+    // ====================== v0.3.21 手書き入力パッドの自動起動（宣言的 Command 2択・HKCU） ======================
+    //
+    // HKCU\Software\Microsoft\TabletTip\1.7\EnableDesktopModePenAutoInvoke（DWORD・既定は未設定＝自動起動する）。
+    // 実機確認済み（本キーは 1.7 サブキー内に未設定＝OS 既定 ON）。ペンでテキスト欄をタップした時に
+    // 手書き入力パッドが自動で開く挙動を止める設定。既定 ON のため ShowRecent と同型（Command＋ValueExisted）。
+    // 候補項目集の元記載キー（InputPersonalization\TrainedDataStore）は誤り（実際は連絡先収集用途）と裏取りで判明。
+
+    private SettingItem BuildPenAutoInvokeItem()
+    {
+        const string path = @"HKCU\Software\Microsoft\TabletTip\1.7";
+        const string name = "EnableDesktopModePenAutoInvoke";
+        var choices = new List<string> { "自動的に開く（既定）", "自動的に開かない" };
+
+        return new SettingItem
+        {
+            Id = "keyboardMouse.penAutoInvoke",
+            Title = "手書き入力パッドの自動起動（ペンタップ時）",
+            Description = "ペンでテキスト欄をタップしたときに、手書き入力パッドを自動的に開くかを選びます。"
+                + "「自動的に開かない」にすると、タップでは開かなくなります（タスクバーのペンアイコンから手動で開くことは可能）。"
+                + "Windows の既定は「自動的に開く」です。管理者権限は不要です（自分のユーザー設定）。",
+            Category = CategoryType.KeyboardMouse,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    if (v == null) return choices[0];   // 未設定＝自動的に開く（OS 既定 ON）
+                    return RegistryValueCoercion.CoerceInt(v, 1) != 0 ? choices[0] : choices[1];
+                },
+                Apply = label =>
+                {
+                    int val;
+                    if (label == choices[0]) val = 1;
+                    else if (label == choices[1]) val = 0;
+                    else return;   // 想定外＝no-op
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new PenAutoInvokeBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 1)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<PenAutoInvokeBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "手書き入力パッド自動起動の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>v0.3.21 手書き入力パッド自動起動（EnableDesktopModePenAutoInvoke）用バックアップ。</summary>
+    private class PenAutoInvokeBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
     }
 
     // ====================== v0.2.1 プロセッサー Boost モード（Command 3択・powercfg 実GUID固定） ======================

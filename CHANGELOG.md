@@ -14,10 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - v0.2.3：IME / 音声 / Network 完成 6 項目
+  - 残り候補は Phone Link 自動開始（要追加裏取り）／フォーカスアシスト自動条件（実装複雑度高で保留）
   - v0.4.0 候補：Gaming カテゴリ + プリセット機能 14 項目
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.3.22] - 2026-07-04（手書き入力パッドの自動起動・キーボード/マウス）
+
+> 📝 ペンタップ時の定番。EnableDesktopModePenAutoInvoke（HKCU・管理者不要・既定 ON）。
+
+### Added
+- **手書き入力パッドの自動起動（ペンタップ時）**（キーボード/マウス・🟢・管理者不要・即時反映）：
+  - ペンでテキスト欄をタップしたときに手書き入力パッドを自動的に開くかを ON/OFF（`HKCU\Software\Microsoft\TabletTip\1.7\EnableDesktopModePenAutoInvoke`・REG_DWORD・1=自動的に開く/0=開かない）。
+  - **既定 ON（未設定＝自動的に開く）** のため ShowRecent 同型（Command 型2択＋`ValueExisted`）。候補項目集の元記載キー（`InputPersonalization\TrainedDataStore`）は誤り（実際は連絡先収集用途）と実機裏取りで判明・修正。
+
+## [0.3.21] - 2026-07-04（TCP 即時 ACK・ネットワーク）
+
+> 📝 物理アダプタ個別のレイテンシ tweak。TcpAckFrequency（HKLM・要管理者・既定 OFF）。効果に賛否あり中立表記。
+
+### Added
+- **TCP 即時 ACK（TcpAckFrequency）**（ネットワーク・🟡・要管理者・再起動反映）：
+  - TCP の遅延確認応答を無効化し、パケット受信のたびに即座に ACK を返す（`HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{GUID}\TcpAckFrequency`・REG_DWORD・アダプタ個別・1=即時 ACK）。RDP/SSH 等の対話的通信でレイテンシ改善の報告がある一方、大量データ転送では逆効果の報告もあり中立表記（Microsoft Learn で裏取り）。
+  - Network Throttling Index と異なり単一パスでなく**物理アダプタ全台が対象**。アダプタ列挙は既存 `NetworkService.GetActivePhysicalAdapters`（DNS/DoH と同じ物理判定基準）を再利用。新規 `TcpAckFrequencyHelper`（パス生成のみ・xUnit3件）。
 
 ---
 
