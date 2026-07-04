@@ -2079,6 +2079,9 @@ public partial class MainViewModel : ObservableObject
         // v0.4.1：ゲーム用タスクのスケジューリング優先度（gaming.taskSchedulingCategory・HKLM・要管理者）
         Items.Add(BuildGameSchedulingCategoryItem());
 
+        // v0.4.2：ハードウェアアクセラレータ GPU スケジューリング（gaming.hags・HKLM・要管理者・要システム再起動）
+        Items.Add(BuildHagsItem());
+
         // v0.3.9：デスクトップ・UI「タスクバー時計に秒を表示」
         // HKCU\…\Explorer\Advanced\ShowSecondsInSystemClock（DWORD・1=表示/0=非表示・管理者不要・エクスプローラ再起動で反映）。
         // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（汎用書込＋退避を再利用）。
@@ -4596,6 +4599,81 @@ public partial class MainViewModel : ObservableObject
                 }
             }
         };
+    }
+
+    // ====================== v0.4.2 ハードウェアアクセラレータ GPU スケジューリング（Command 2択・HKLM） ======================
+    //
+    // HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\HwSchMode（DWORD）。
+    // 1=明示的に無効／2=有効／未設定＝ドライバ・システム判断（複数ソースで裏取り済）。
+    // GPU の VRAM キュー管理を GPU 自身が主導し低遅延化する場合がある一方、追加で最大 1GB 程度の
+    // VRAM を使うため、VRAM の少ない環境や非対応 GPU ではかえって不安定になる報告もあり中立表記。
+    // 「無効(1)」の明示選択肢は出さず「既定(未設定)/有効化」の2択に絞る（実用上ほぼ「有効化するか」だけが選択の要）。
+    // GraphicsカテゴリはGraphicsListView専用ペインを持つため、標準DataGridで確実に表示できるGamingへ配置。
+
+    private SettingItem BuildHagsItem()
+    {
+        const string path = @"HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers";
+        const string name = "HwSchMode";
+        const string defaultLabel = "既定（未設定・ドライバ/システム判断）";
+        const string onLabel = "有効化（GPU 主導スケジューリング）";
+
+        return new SettingItem
+        {
+            Id = "gaming.hags",
+            Title = "ハードウェアアクセラレータ GPU スケジューリング（HAGS）",
+            Description = "GPU のメモリキュー管理をドライバでなく GPU 自身が主導するようにし、低遅延化する場合がある"
+                + "機能です（設定 > システム > ディスプレイ > グラフィック の同名トグルと同じ）。"
+                + "有効化すると GPU が追加で最大 1GB 程度の VRAM を使うため、VRAM の少ない環境や非対応 GPU では"
+                + "かえってコマ落ちが増える報告もあります（効果は GPU・ドライバに強く依存・中立でおすすめしません）。"
+                + "管理者権限必須。⚠️ Windows の再起動で反映されます。",
+            Category = CategoryType.Gaming,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = defaultLabel,   // 中立：既定のまま
+            DefaultValue = defaultLabel,
+            Command = new CommandAction
+            {
+                Choices = new List<string> { defaultLabel, onLabel },
+                Read = () =>
+                {
+                    var v = RegistryValueCoercion.CoerceInt(_registry.ReadValue<object>(path, name), 0);
+                    return v == 2 ? onLabel : defaultLabel;
+                },
+                Apply = label =>
+                {
+                    if (label == onLabel)
+                        _registry.WriteValue<int>(path, name, 2, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "HAGS の設定を既定へ戻せませんでした（値の削除に失敗）。");
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new HagsBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 0)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<HagsBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "HAGS の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>v0.4.2 HAGS 用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class HagsBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
     }
 
     /// <summary>

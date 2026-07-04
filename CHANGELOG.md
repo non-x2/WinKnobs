@@ -14,10 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - 残り候補は Phone Link 自動開始（要追加裏取り）／フォーカスアシスト自動条件（実装複雑度高で保留）
+  - 残り候補は Phone Link 自動開始（自動起動のみか機能全体かキーの意味が不確実で保留）／フォーカスアシスト自動条件（実装複雑度高で保留）
 - **v0.4.x Gaming 拡充**：プリセット機能（複数設定の一括切替）は未設計・継続検討
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.4.2] - 2026-07-04（ハードウェアアクセラレータ GPU スケジューリング・ゲーミング）
+
+> 📝 設定アプリの同名トグルと同じ機能。HwSchMode（HKLM・要管理者・要システム再起動）。効果はGPU/ドライバ依存のため中立表記。
+
+### Added
+- **ハードウェアアクセラレータ GPU スケジューリング（HAGS）**（ゲーミング・🟡・要管理者・Windows再起動で反映）：
+  - GPU の VRAM キュー管理を GPU 自身が主導するモードを ON にする（`HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\HwSchMode`・REG_DWORD・2=有効／未設定=ドライバ・システム判断）。低遅延化の報告がある一方、VRAM を追加で最大1GB程度使うため VRAM の少ない環境や非対応GPUではかえって不安定になる報告もあり中立表記。
+  - 「無効(1)を明示選択」は選択肢に出さず「既定/有効化」の2択に絞った（実用上は有効化するかどうかだけが焦点のため）。GraphicsカテゴリはGraphicsListView専用ペインを持つため、標準DataGridで確実に表示できるGamingカテゴリへ配置。
 
 ---
 
