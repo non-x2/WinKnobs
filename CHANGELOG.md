@@ -15,9 +15,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
   - 残り候補は Phone Link 自動開始（要追加裏取り）／フォーカスアシスト自動条件（実装複雑度高で保留）
-  - v0.4.0 候補：Gaming カテゴリ + プリセット機能 14 項目
+- **v0.4.x Gaming 拡充**：プリセット機能（複数設定の一括切替）は未設計・継続検討
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.4.1] - 2026-07-04（ゲーム用タスクのスケジューリング優先度・ゲーミング）
+
+> 📝 定番tweak。Scheduling Category（HKLM・要管理者・既定 Medium）。GPU Priority は既定で高め設定済み。
+
+### Added
+- **ゲーム用タスクのスケジューリング優先度**（ゲーミング・🟡・要管理者・次回ゲーム起動で反映）：
+  - MMCSS がゲームプロセスに割り当てる CPU スケジューリング優先度を「Medium」→「High」に引き上げ（`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games\Scheduling Category`・REG_SZ）。
+  - 値が DWORD でなく REG_SZ 文字列である点が他の Command 型と異なる。キーは Windows 標準で常設のため通常は ValueExisted=true（万一の消失環境も DeleteValueOrThrow で保険）。
+
+## [0.4.0] - 2026-07-04（全画面最適化 無効化・ゲーミング）
+
+> 📝 有名な定番tweak。GameDVR_FSEBehaviorMode + HonorUserFSEBehaviorMode（HKCU・管理者不要・既定 OFF＝最適化する）。効果は環境依存のため中立表記。
+
+### Added
+- **全画面最適化（フルスクリーン最適化）無効化**（ゲーミング・🟢・管理者不要・次回ゲーム起動で反映）：
+  - ゲームの全画面表示を常に排他モードで動かすかを ON/OFF（`HKCU\System\GameConfigStore` の `GameDVR_FSEBehaviorMode`=2 と `GameDVR_HonorUserFSEBehaviorMode`=1 を同時書込）。Game DVR（v0.3.8）と同じ2値同時パターン（`ReadDwordManaged`/`TryRestoreOne` 共通ヘルパー再利用）。
+  - 入力遅延改善の報告がある一方、アルトタブ復帰が遅くなる等の副作用報告もあり中立表記（WebSearch 複数ソースで裏取り）。
 
 ---
 

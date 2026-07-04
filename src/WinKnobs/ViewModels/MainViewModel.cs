@@ -2073,6 +2073,12 @@ public partial class MainViewModel : ObservableObject
         // v0.3.8：ゲーミング「Game DVR（ゲームの録画機能）」（2値同時 Command・HKCU・管理者不要）
         Items.Add(BuildGameDvrItem());
 
+        // v0.4.0：全画面最適化 無効化（gaming.fullscreenOptimizations・HKCU・管理者不要）
+        Items.Add(BuildFullscreenOptimizationsItem());
+
+        // v0.4.1：ゲーム用タスクのスケジューリング優先度（gaming.taskSchedulingCategory・HKLM・要管理者）
+        Items.Add(BuildGameSchedulingCategoryItem());
+
         // v0.3.9：デスクトップ・UI「タスクバー時計に秒を表示」
         // HKCU\…\Explorer\Advanced\ShowSecondsInSystemClock（DWORD・1=表示/0=非表示・管理者不要・エクスプローラ再起動で反映）。
         // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（汎用書込＋退避を再利用）。
@@ -4442,6 +4448,151 @@ public partial class MainViewModel : ObservableObject
                     if (failures.Count > 0)
                         throw new InvalidOperationException(
                             $"Game DVR の設定を元に戻せませんでした（{string.Join("、", failures)}）。");
+                }
+            }
+        };
+    }
+
+    // ====================== v0.4.0 全画面最適化 無効化（Command 2択・2値同時・GameDvr同型） ======================
+    //
+    // HKCU\System\GameConfigStore の GameDVR_FSEBehaviorMode（2=常に全画面排他）＋
+    // GameDVR_HonorUserFSEBehaviorMode（1=このユーザー設定を尊重）を同時に切替。
+    // 両方揃わないと Windows が自動判定を優先するため、Read も両値が条件を満たす時だけ「無効化」と判定する。
+    // 実機確認済み：両値とも通常のマシンに既定で存在（0/0）＝ShowRecent型でなく GameDvr型（2値同時・既存値上書き）。
+
+    private SettingItem BuildFullscreenOptimizationsItem()
+    {
+        const string path = @"HKCU\System\GameConfigStore";
+        const string name1 = "GameDVR_FSEBehaviorMode";
+        const string name2 = "GameDVR_HonorUserFSEBehaviorMode";
+        const string onLabel = "最適化する（既定・Windows標準）";
+        const string offLabel = "無効化する（常に全画面排他モード）";
+
+        return new SettingItem
+        {
+            Id = "gaming.fullscreenOptimizations",
+            Title = "全画面最適化（フルスクリーン最適化）",
+            Description = "ゲームを全画面表示にしたとき、Windows がボーダーレスウィンドウのように扱う「全画面最適化」を"
+                + "無効化し、常に昔ながらの全画面排他モードで動かすようにします。ゲームによっては入力遅延やフレーム"
+                + "ペーシングが改善する場合がありますが、逆にアルトタブでの復帰が遅くなる等の副作用が出ることもあり、"
+                + "効果はゲームや GPU ドライバに依存します（中立でおすすめしません）。"
+                + "GameConfigStore の GameDVR_FSEBehaviorMode と GameDVR_HonorUserFSEBehaviorMode を同時に切り替えます。"
+                + "管理者権限は不要です。⚠️ 反映は次回のゲーム起動からです。",
+            Category = CategoryType.Gaming,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = onLabel,   // 中立：既定のまま
+            DefaultValue = onLabel,
+            Command = new CommandAction
+            {
+                Choices = new List<string> { onLabel, offLabel },
+                Read = () =>
+                {
+                    var mode = RegistryValueCoercion.CoerceInt(_registry.ReadValue<object>(path, name1), 0);
+                    var honor = RegistryValueCoercion.CoerceInt(_registry.ReadValue<object>(path, name2), 0);
+                    return (mode == 2 && honor == 1) ? offLabel : onLabel;
+                },
+                Apply = label =>
+                {
+                    if (label == offLabel)
+                    {
+                        _registry.WriteValue<int>(path, name1, 2, Microsoft.Win32.RegistryValueKind.DWord);
+                        _registry.WriteValue<int>(path, name2, 1, Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                    else if (label == onLabel)
+                    {
+                        // 既定＝Windows の自動判定に委ねる（値単位で削除・キーは消さない）。
+                        var failures = new List<string>();
+                        TryRestoreOne(path, name1, false, 0, failures);
+                        TryRestoreOne(path, name2, false, 0, failures);
+                        if (failures.Count > 0)
+                            throw new InvalidOperationException($"全画面最適化の設定を既定へ戻せませんでした（{string.Join("、", failures)}）。");
+                    }
+                },
+                Backup = () =>
+                {
+                    var (e1, v1) = ReadDwordManaged(path, name1);
+                    var (e2, v2) = ReadDwordManaged(path, name2);
+                    return JsonSerializer.Serialize(new FullscreenOptBackup { V1Existed = e1, V1 = v1, V2Existed = e2, V2 = v2 });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<FullscreenOptBackup>(token);
+                    if (bk == null) return;
+                    var failures = new List<string>();
+                    TryRestoreOne(path, name1, bk.V1Existed, bk.V1, failures);
+                    TryRestoreOne(path, name2, bk.V2Existed, bk.V2, failures);
+                    if (failures.Count > 0)
+                        throw new InvalidOperationException($"全画面最適化の設定を元に戻せませんでした（{string.Join("、", failures)}）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>v0.4.0 全画面最適化用バックアップトークン（2値・existed は値の有無）。</summary>
+    private class FullscreenOptBackup
+    {
+        public bool V1Existed { get; set; }
+        public int V1 { get; set; }
+        public bool V2Existed { get; set; }
+        public int V2 { get; set; }
+    }
+
+    // ====================== v0.4.1 ゲーム用タスクのスケジューリング優先度（Command 2択・REG_SZ） ======================
+    //
+    // HKLM\...\Multimedia\SystemProfile\Tasks\Games の Scheduling Category（REG_SZ・既定 "Medium"）。
+    // GPU Priority は既定で高め（8）だが CPU 側の優先度が Medium のままなので、それを High に引き上げる定番 tweak。
+    // 値は REG_SZ（DWORD でない）点が他の Command 型と異なる。キー自体は Windows 標準で常設のため
+    // ValueExisted=false の分岐は「万一値が消えている環境」の保険（DeleteValueOrThrow で対応）。
+
+    private SettingItem BuildGameSchedulingCategoryItem()
+    {
+        const string path = @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
+        const string name = "Scheduling Category";
+        const string mediumLabel = "Medium（既定）";
+        const string highLabel = "High（ゲームの CPU 優先度を上げる）";
+
+        return new SettingItem
+        {
+            Id = "gaming.taskSchedulingCategory",
+            Title = "ゲーム用タスクのスケジューリング優先度",
+            Description = "MMCSS（マルチメディア クラス スケジューラ）がゲームプロセスに割り当てる CPU スケジューリング"
+                + "優先度を「Medium」から「High」に引き上げます。バックグラウンド処理に埋もれにくくなり、フレームの"
+                + "安定性が改善する場合があります（同キーの GPU Priority は既定で高め設定済み・効果は環境依存で中立）。"
+                + "管理者権限必須。⚠️ 反映は次回のゲーム起動からです。",
+            Category = CategoryType.Gaming,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = mediumLabel,   // 中立：既定のまま
+            DefaultValue = mediumLabel,
+            Command = new CommandAction
+            {
+                Choices = new List<string> { mediumLabel, highLabel },
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<string>(path, name);
+                    return string.Equals(v, "High", System.StringComparison.OrdinalIgnoreCase) ? highLabel : mediumLabel;
+                },
+                Apply = label =>
+                {
+                    var val = label == highLabel ? "High" : "Medium";
+                    _registry.WriteValue<string>(path, name, val, Microsoft.Win32.RegistryValueKind.String);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<string>(path, name);
+                    return JsonSerializer.Serialize(new StringBackup { ValueExisted = v != null, Value = v ?? "Medium" });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<StringBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<string>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.String);
+                    else
+                        DeleteValueOrThrow(path, name, "ゲーム用タスクの優先度を元に戻せませんでした（値の削除に失敗）。");
                 }
             }
         };
