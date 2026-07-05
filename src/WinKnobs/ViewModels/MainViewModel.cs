@@ -2082,6 +2082,9 @@ public partial class MainViewModel : ObservableObject
         // v0.4.2：ハードウェアアクセラレータ GPU スケジューリング（gaming.hags・HKLM・要管理者・要システム再起動）
         Items.Add(BuildHagsItem());
 
+        // v0.4.3：スタートメニューの「おすすめ」セクションを非表示（desktop.hideRecommendedSection・Policies\Explorer・Command2択・巻き添え回避）
+        Items.Add(BuildHideRecommendedSectionItem());
+
         // v0.3.9：デスクトップ・UI「タスクバー時計に秒を表示」
         // HKCU\…\Explorer\Advanced\ShowSecondsInSystemClock（DWORD・1=表示/0=非表示・管理者不要・エクスプローラ再起動で反映）。
         // 値 1=ON がユーザー視点 ON と一致＝InvertDisplay 不要。宣言的 HKCU Boolean（汎用書込＋退避を再利用）。
@@ -4671,6 +4674,83 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.4.2 HAGS 用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
     private class HagsBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    // ====================== v0.4.3 スタートメニューの「おすすめ」セクションを非表示（Command 2択・HKCU Policies） ======================
+    //
+    // HKCU\Software\Policies\Microsoft\Windows\Explorer\HideRecommendedSection（DWORD）。
+    // 1=非表示／未設定=表示（既定）。実機確認：Pro edition で本キーは現状未作成（複数ソースで裏取り済）。
+    // ConfirmFileDelete（v0.3.19）と同じ「Policies」配下＝キー自体が未存在から新規作成され得るため、
+    // 汎用 Backup（reg export）だと未設定時に削除マーカーを生成しキーごと削除＝巻き添えのリスク。
+    // Command＋ValueExisted の値単位 DeleteOrThrow で回避（ConfirmFileDelete と同型）。
+    // ⚠️ Windows 11 Home エディションでは効果が不安定という報告があり中立表記。
+
+    private SettingItem BuildHideRecommendedSectionItem()
+    {
+        const string path = @"HKCU\Software\Policies\Microsoft\Windows\Explorer";
+        const string name = "HideRecommendedSection";
+        var choices = new List<string> { "表示する（既定）", "非表示にする" };
+
+        return new SettingItem
+        {
+            Id = "desktop.hideRecommendedSection",
+            Title = "スタートメニューの「おすすめ」セクションを非表示",
+            Description = "スタートメニュー下部の「おすすめ」（最近使ったファイル・新しいアプリの提案等）を非表示にします。"
+                + "Windows の一部バージョンでは 設定 > 個人用設定 > スタート に同等のトグルが提供され始めていますが、"
+                + "未提供の環境でも本設定で直接制御できます。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ Windows 11 Home エディションでは効果が不安定という報告があります（Pro/Enterprise で確認済み）。"
+                + "⚠️ 反映にはエクスプローラの再起動（または サインアウト）が必要な場合があります。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：好みの問題のため既定のまま
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    if (v == null) return choices[0];   // 未設定＝表示する（既定）
+                    return RegistryValueCoercion.CoerceInt(v, 0) != 0 ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    int val;
+                    if (label == choices[1]) val = 1;        // 非表示にする
+                    else if (label == choices[0]) val = 0;   // 表示する
+                    else return;                             // 想定外＝no-op
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new HideRecommendedSectionBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 0)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<HideRecommendedSectionBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "「おすすめ」セクションの設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>v0.4.3 HideRecommendedSection 用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class HideRecommendedSectionBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }

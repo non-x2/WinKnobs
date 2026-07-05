@@ -14,10 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planning
 - **v0.2.x 候補**（32 項目・[v0.2 候補項目集 v2](docs/v0.2_候補項目集_v2.md)）：
-  - 残り候補は Phone Link 自動開始（自動起動のみか機能全体かキーの意味が不確実で保留）／フォーカスアシスト自動条件（実装複雑度高で保留）
-- **v0.4.x Gaming 拡充**：プリセット機能（複数設定の一括切替）は未設計・継続検討
+  - Phone Link 自動開始：追加裏取りで解決済み（2026-07-05）→「自動起動のみ」は既存 Run キー管理（起動・スタートアップ）で対応可能・追加実装不要。「機能全体の無効化」（`Mobility\PhoneLinkEnabled`）は実装可能だが、のんさん自身が Phone Link を実運用中のため優先度低・見送り
+  - フォーカスアシスト自動条件（実装複雑度高で保留）
+- **v0.4.x Gaming 拡充**：プリセット機能（複数設定の一括切替）は設計ドラフト作成済み（[v0.4.x_Gamingプリセット機能_設計ドラフト.md](docs/v0.4.x_Gamingプリセット機能_設計ドラフト.md)・実装は承認後）
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.4.3] - 2026-07-05（スタートメニュー「おすすめ」非表示・デスクトップ・UI）
+
+> 📝 HideRecommendedSection（HKCU・管理者不要）。Windows 11 Home では効果が不安定という報告があり中立表記。
+
+### Added
+- **スタートメニューの「おすすめ」セクションを非表示**（デスクトップ・UI・🟢・管理者不要）：
+  - `HKCU\Software\Policies\Microsoft\Windows\Explorer\HideRecommendedSection`（REG_DWORD・1=非表示／未設定=表示）。ConfirmFileDelete（v0.3.19）と同型：Policies 配下でキー自体が未存在から新規作成され得るため、値単位の Command 型2択＋DeleteOrThrow で巻き添え回避。
+  - 実機確認：Pro edition（本機）でキー未作成＝既定表示状態を確認済み。
 
 ---
 
