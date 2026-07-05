@@ -216,9 +216,13 @@ if ($Mode -eq "VM") {
         try {
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
             $taskAction    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runnerPath`""
-            $taskPrincipal = New-ScheduledTaskPrincipal -UserId $vmLocalUser -LogonType Interactive -RunLevel Limited
+            # 2026-07-05 修正：apply_registry/apply_fsutil/apply_v2/apply_v3 等の HKLM/Policies 書込テストが
+            # RunLevel=Limited では「アクセスが拒否されました」で全滅していた（VM 内 WinKnobs-VM は
+            # Administrators 所属済み・権限はあるのに使っていなかっただけ）。Highest に変更して昇格トークンを使う
+            # （タスクスケジューラは管理者グループのアカウント + RunLevel=Highest なら対話的 UAC 無しで昇格実行できる）。
+            $taskPrincipal = New-ScheduledTaskPrincipal -UserId $vmLocalUser -LogonType Interactive -RunLevel Highest
             Register-ScheduledTask -TaskName $taskName -Action $taskAction -Principal $taskPrincipal -Force -ErrorAction Stop | Out-Null
-            $createOut = "Register-ScheduledTask OK (UserId=$vmLocalUser LogonType=Interactive RunLevel=Limited)"
+            $createOut = "Register-ScheduledTask OK (UserId=$vmLocalUser LogonType=Interactive RunLevel=Highest)"
             Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
             $runOut = "Start-ScheduledTask OK"
         } catch {
@@ -409,7 +413,11 @@ if ($AutoLaunch) {
         Write-Log "AutoLaunch: 既存 WinKnobs プロセスを停止します（残存 $($existing.Count) 個）"
         foreach ($p in $existing) {
             try { $p.Kill($true) } catch {}
-            taskkill /F /T /PID $p.Id 2>&1 | Out-Null
+            # 2026-07-05 修正：$ErrorActionPreference=Stop 下で `2>&1 | Out-Null` は taskkill の stderr が
+            # パイプラインのエラーレコードとして扱われ、Out-Null 到達時にスクリプト全体を止めていた
+            # （$p.Kill($true) が既に成功済みでプロセスが消えている時に taskkill が「終了できません」と
+            # 失敗するのは想定内・冗長な安全策のため、ここで失敗してもテスト続行を優先する）。
+            try { taskkill /F /T /PID $p.Id 2>&1 | Out-Null } catch {}
         }
         Start-Sleep -Seconds 2
     }
