@@ -127,6 +127,7 @@ if ($Mode -eq "VM") {
         @{ Source = "$scriptRoot\testcases\tc_apply_registry.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_registry.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_apply_fsutil.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_fsutil.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_apply_v2.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_v2.ps1" },
+        @{ Source = "$scriptRoot\testcases\tc_apply_v3.ps1"; Dest = "$VMScriptsDir\testcases\tc_apply_v3.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_startup_smoke.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_smoke.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_startup_edit.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_edit.ps1" },
         @{ Source = "$scriptRoot\testcases\tc_startup_add.ps1"; Dest = "$VMScriptsDir\testcases\tc_startup_add.ps1" },
@@ -351,6 +352,7 @@ $tcFiles = @{
     "apply_registry"   = "tc_apply_registry.ps1"
     "apply_fsutil"     = "tc_apply_fsutil.ps1"
     "apply_v2"         = "tc_apply_v2.ps1"
+    "apply_v3"         = "tc_apply_v3.ps1"  # v0.4.3-6 HideRecommendedSection/TCPNoDelay/DODownloadMode/InterruptModeration
     "startup_smoke"    = "tc_startup_smoke.ps1"  # R-2 閲覧UI 動作確認（書込なし）
     "startup_edit"     = "tc_startup_edit.ps1"   # R-2 編集・保存・トグル（HKCU 書込発生・cleanup あり）
     "startup_add"      = "tc_startup_add.ps1"    # R-3 新規追加（HKCU 書込・cleanup あり・GUID 8 文字でユニーク化）
@@ -470,6 +472,7 @@ foreach ($tc in $TestCase) {
         "apply_registry"   { "Invoke-ApplyRegistry" }
         "apply_fsutil"     { "Invoke-ApplyFsutil" }
         "apply_v2"         { "Invoke-ApplyV2" }
+        "apply_v3"         { "Invoke-ApplyV3" }
         "startup_smoke"    { "Invoke-StartupSmoke" }
         "startup_edit"     { "Invoke-StartupEdit" }
         "startup_add"      { "Invoke-StartupAdd" }

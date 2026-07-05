@@ -103,6 +103,7 @@ cd C:\AI\Claudo\アプリ\WinKnobs\scripts\ui_automation
 | `apply_registry` | T-REG-1/3/4：W1/W6/W5 の HKCU 書込→検証→戻し | **HKCU 書込発生** | ⚠️非推奨 | ✅ |
 | `apply_fsutil` | T-FSU-2/3：K1/K2 の fsutil 設定変更→検証→戻し | **fsutil 設定変更・管理者必須** | ❌ | ✅ |
 | `apply_v2` | T-V2-APPLY-PR1/PR2/PR3/N1：HKLM 書込＋netsh 変更 | **HKLM 書込＋netsh 変更・管理者必須** | ❌ | ✅ |
+| `apply_v3` | T-V3-APPLY-1〜4：v0.4.3-6（HideRecommendedSection/TCPNoDelay/DODownloadMode/InterruptModeration）の apply→restore ラウンドトリップ（2026-07-05 追加・NIC非対応環境は SKIP） | **HKCU/HKLM 書込＋NIC アダプタプロパティ変更・管理者必須** | ❌ | ✅ |
 | `maintenance_protection` | システムの保護 ON/OFF（v0.1.15/16）：ツールメニュー2項目→確認ダイアログ出現→ConfirmDestructive既定いいえ→いいえで非実行 | なし（「はい」を押さない・RPSessionInterval不変を確認） | ✅ | ✅ |
 | `maintenance_remotedesktop` | リモートデスクトップ無効化（v0.1.18・🔴Red）：ツールメニュー1項目→確認ダイアログ出現→ConfirmDestructive既定いいえ（🔴締め出し防止）→いいえで非実行 | なし（「はい」を押さない・fDenyTSConnections不変を確認） | ✅ | ✅ |
 | `maintenance_remotedesktop_enable` | リモートデスクトップ有効化ON（v0.1.19・🔴Red）：MenuEnableRemoteDesktop→🔴Red専用WPFダイアログ(RemoteDesktopEnableDialog)出現→**チェック未投入で[有効化]非活性**→既定キャンセル→キャンセルで非実行 | なし（チェックも[有効化]も押さない・fDenyTSConnections不変を確認・非対応/GPO時はメニュー非活性INFO降格） | ✅ | ✅ |
