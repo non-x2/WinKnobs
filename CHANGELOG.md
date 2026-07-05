@@ -17,8 +17,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phone Link 自動開始：追加裏取りで解決済み（2026-07-05）→「自動起動のみ」は既存 Run キー管理（起動・スタートアップ）で対応可能・追加実装不要。「機能全体の無効化」（`Mobility\PhoneLinkEnabled`）は実装可能だが、のんさん自身が Phone Link を実運用中のため優先度低・見送り
   - フォーカスアシスト自動条件（実装複雑度高で保留）
 - **v0.4.x Gaming 拡充**：プリセット機能（複数設定の一括切替）は設計ドラフト作成済み（[v0.4.x_Gamingプリセット機能_設計ドラフト.md](docs/v0.4.x_Gamingプリセット機能_設計ドラフト.md)・実装は承認後）
+- **v0.4.x ネットワーク細分化**（2026-07-05・格闘ゲーム遠距離対戦＋4K ストリーミング向け）で調査し**見送った**候補：
+  - **割り込み加減（Interrupt Moderation）OFF**：`*InterruptModeration`（`ValidRegistryValues={0,1}`・実機確認済で安全に一般化可能）。NIC 省電力プリセット（v0.2.2 `NicPowerService`）と同型の PowerShell 経由実装が必要（新規 Service 相当の工数）のため次回候補
+  - **受信/送信バッファ最大化**：実機の Intel I219-V で `*ReceiveBuffers`/`*TransmitBuffers` の `ValidRegistryValues` が空（ドライバがレンジを公開しない個体）で「実機から動的に最大値を検出」ができず、ハードコードは他 NIC で無効値になるリスクがあるため見送り（本機は現在値 2048 で既に上限相当の可能性）
+  - **QoS パケットスケジューラの予約帯域解除**（`NonBestEffortLimit`）：WebSearch 裏取りで「未使用の 20% を常時確保している」という前提自体が誤りと判明（QoS 要求時のみ有効になる予約上限であり、通常のゲーム/配信シナリオでは体感効果なしとの分析が定説）→ 実装見送り
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.4.5] - 2026-07-05（配信の最適化：ピアツーピア共有を無効化・ネットワーク）
+
+> 📝 DODownloadMode（HKLM Policies・要管理者）。Microsoft Learn 公式リファレンスで裏取り済み。
+
+### Added
+- **配信の最適化（Delivery Optimization）のピアツーピア共有を無効化**（ネットワーク・🟡・要管理者）：
+  - `HKLM\Software\Policies\Microsoft\Windows\DeliveryOptimization\DODownloadMode`（REG_DWORD・0=HTTP Only／未設定=LAN(1)既定）。既定では同一ネットワーク内の他 PC とアップデート等を共有（アップロード）し得るため、上り回線が細い環境では 4K ストリーミング視聴中の帯域圧迫要因になり得る（Windows Update 等が裏で動いている時のみ効果・常時ではない点は中立表記）。
+  - ConfirmFileDelete（v0.3.19）と同型：Policies 配下でキー未存在から新規作成され得るため、値単位の Command 型2択＋DeleteOrThrow で巻き添え回避。実機確認：Pro edition でキー未作成＝既定状態。
+
+---
+
+## [0.4.4] - 2026-07-05（TCP Nagle アルゴリズム無効化・ネットワーク）
+
+> 📝 TCPNoDelay（HKLM・物理アダプタ全台・要管理者）。TCP即時ACK（v0.3.21）の相棒設定。
+
+### Added
+- **TCP Nagle アルゴリズムを無効化**（ネットワーク・🟡・要管理者・物理アダプタ全台一括）：
+  - `HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{GUID}\TCPNoDelay`（REG_DWORD・1=無効化／未設定=既定）。TcpAckFrequency（v0.3.21・即時ACK）と両方設定して初めて Nagle アルゴリズムを完全に無効化できる（片方だけでは不完全）。パス生成は既存 `TcpAckFrequencyHelper.BuildInterfacePath` を再利用（新規 Helper 不要）。
+  - ⚠️ 格闘ゲーム等の対戦データ自体は多くが UDP のため恩恵は限定的（ロビー・チャット等 TCP 部分向け）と中立に明記。
 
 ---
 

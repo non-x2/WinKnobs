@@ -2373,6 +2373,14 @@ public partial class MainViewModel : ObservableObject
 
         // 手書き入力パッドの自動起動（keyboardMouse.penAutoInvoke・TabletTip）
         Items.Add(BuildPenAutoInvokeItem());
+
+        // ====================== v0.4.4-5 ネットワーク細分化（2026-07-05 改良7-5続き・格闘ゲーム遠距離＋4Kストリーミング向け） ======================
+
+        // v0.4.4：TCP Nagle アルゴリズム無効化（network.tcpNoDelay・TCP即時ACKの相棒・物理アダプタ全台）
+        Items.Add(BuildTcpNoDelayItem());
+
+        // v0.4.5：配信の最適化のピアツーピア共有を無効化（network.doDownloadMode・HKLM Policies・要管理者）
+        Items.Add(BuildDeliveryOptimizationP2POffItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -2683,6 +2691,164 @@ public partial class MainViewModel : ObservableObject
     private class TcpAckBackup
     {
         public List<TcpAckAdapterBackup> Adapters { get; set; } = new();
+    }
+
+    // ====================== v0.4.4 TCP Nagle アルゴリズム無効化（Command 2択・物理アダプタ全台） ======================
+    //
+    // HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{GUID}\TCPNoDelay（DWORD）。
+    // TcpAckFrequency（v0.3.21・即時 ACK）の相棒＝両方 1 にして初めて Nagle アルゴリズムを完全に無効化する
+    // （TcpAckFrequency 単体は遅延 ACK タイマーのみ・TCPNoDelay 単体は送信側の小パケット結合のみを止める）。
+    // パス生成は TcpAckFrequencyHelper.BuildInterfacePath を再利用（同一キー配下・新規 Helper 不要）。
+    // 主に TCP ベースの対話的通信（ロビー/チャット等）向け。格闘ゲームの対戦データ自体は UDP が主流のため
+    // 効果は限定的な場合がある点を中立に明記。既存 TcpAckFrequency と同じ全アダプタ一括・システム再起動反映。
+
+    private SettingItem BuildTcpNoDelayItem()
+    {
+        const string name = "TCPNoDelay";
+        var choices = new List<string> { "既定（Nagle アルゴリズム有効）", "無効化（TCPNoDelay=1）" };
+
+        List<AdapterInfo> GetAdapters() => new NetworkService(_registry, _backup, _launcherForCommands).GetActivePhysicalAdapters();
+
+        return new SettingItem
+        {
+            Id = "network.tcpNoDelay",
+            Title = "TCP Nagle アルゴリズムを無効化（TCPNoDelay）",
+            Description = "TCP の Nagle アルゴリズム（小さなパケットを結合してから送る仕組み）を無効化し、送信データを即座に送出します。"
+                + "「TCP 即時 ACK」と合わせて設定すると Nagle アルゴリズムを完全に無効化できます（片方だけでは不完全）。"
+                + "対話的な通信（チャット・操作系）で体感レイテンシが下がる場合がある一方、小パケットが増えるためオーバーヘッドが増える場合もあり、効果には賛否があります（中立でおすすめしません）。"
+                + "⚠️ 格闘ゲーム等の対戦データ自体は多くが UDP 通信のため、本設定の恩恵はロビー・チャット等 TCP を使う部分に限られます。"
+                + "有効な物理ネットワークアダプタ全台に一括適用します。管理者権限必須。再起動で確実に反映。",
+            Category = CategoryType.Network,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var adapters = GetAdapters();
+                    if (adapters.Count == 0) return choices[0];
+                    var allDisabled = adapters.All(a =>
+                        RegistryValueCoercion.CoerceInt(_registry.ReadValue<object>(TcpAckFrequencyHelper.BuildInterfacePath(a.Id), name), 0) != 0);
+                    return allDisabled ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    if (label != choices[0] && label != choices[1]) return;  // 想定外＝no-op
+                    foreach (var a in GetAdapters())
+                    {
+                        var path = TcpAckFrequencyHelper.BuildInterfacePath(a.Id);
+                        if (label == choices[1])
+                            _registry.WriteValue<int>(path, name, 1, Microsoft.Win32.RegistryValueKind.DWord);
+                        else
+                            DeleteValueOrThrow(path, name, "TCP Nagle アルゴリズムの設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                },
+                Backup = () =>
+                {
+                    var list = GetAdapters().Select(a =>
+                    {
+                        var v = _registry.ReadValue<object>(TcpAckFrequencyHelper.BuildInterfacePath(a.Id), name);
+                        return new TcpAckAdapterBackup { Id = a.Id, ValueExisted = v != null, Value = RegistryValueCoercion.CoerceInt(v, 0) };
+                    }).ToList();
+                    return JsonSerializer.Serialize(new TcpAckBackup { Adapters = list });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<TcpAckBackup>(token);
+                    if (bk == null) return;
+                    foreach (var a in bk.Adapters)
+                    {
+                        var path = TcpAckFrequencyHelper.BuildInterfacePath(a.Id);
+                        if (a.ValueExisted)
+                            _registry.WriteValue<int>(path, name, a.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                        else
+                            DeleteValueOrThrow(path, name, "TCP Nagle アルゴリズムの設定を元に戻せませんでした（値の削除に失敗）。");
+                    }
+                }
+            }
+        };
+    }
+
+    // ====================== v0.4.5 配信の最適化：ピアツーピア共有を無効化（Command 2択・HKLM Policies） ======================
+    //
+    // HKLM\Software\Policies\Microsoft\Windows\DeliveryOptimization\DODownloadMode（DWORD）。
+    // Microsoft Learn 公式（Delivery Optimization reference）で確認：既定は LAN(1)＝同一ネットワーク内の
+    // 他PCとの間でWindows更新等をピアツーピア共有する。0=HTTP Only でP2P共有を無効化（Microsoft/Connected
+    // Cacheからの通常ダウンロードは継続）。バックグラウンドで他PCへアップロードする挙動が発生し得るため、
+    // 上り回線が細い環境では 4K 配信視聴中の帯域圧迫要因になり得る（Windows更新等が裏で動いている時のみ・
+    // 常時ではない点は中立に明記）。ConfirmFileDelete と同じ Policies 配下＝キー未存在から新規作成され得る
+    // ため、値単位の Command 型2択＋DeleteOrThrow で巻き添え回避。実機確認：Pro edition で本キー未作成。
+
+    private SettingItem BuildDeliveryOptimizationP2POffItem()
+    {
+        const string path = @"HKLM\Software\Policies\Microsoft\Windows\DeliveryOptimization";
+        const string name = "DODownloadMode";
+        var choices = new List<string> { "既定（LAN内で共有）", "無効化（HTTP Only）" };
+
+        return new SettingItem
+        {
+            Id = "network.doDownloadMode",
+            Title = "配信の最適化（Delivery Optimization）のピアツーピア共有を無効化",
+            Description = "Windows Update 等のコンテンツを同一ネットワーク上の他 PC と共有する「配信の最適化」機能のピアツーピア共有を無効化します"
+                + "（設定 > Windows Update > 配信の最適化 の詳細オプションに相当）。"
+                + "既定では同一ネットワーク内の他 PC への共有（アップロード）が発生し得ます。"
+                + "「無効化」にすると Microsoft のサーバーからのみダウンロードするようになり、バックグラウンドでのアップロードによる帯域圧迫を避けられます。"
+                + "⚠️ 効果があるのは Windows Update 等が裏で動いている時のみで、常時帯域を消費しているわけではありません（4K ストリーミング視聴中にたまたま重なった場合に効果）。"
+                + "管理者権限必須。即時反映（次回のダウンロード/共有動作から適用）。",
+            Category = CategoryType.Network,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    if (v == null) return choices[0];   // 未設定＝既定（LAN=1）
+                    return RegistryValueCoercion.CoerceInt(v, 1) == 0 ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    int val;
+                    if (label == choices[1]) val = 0;        // HTTP Only
+                    else if (label == choices[0]) val = 1;   // LAN（既定と同値を明示）
+                    else return;                             // 想定外＝no-op
+                    _registry.WriteValue<int>(path, name, val, Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new DoDownloadModeBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = RegistryValueCoercion.CoerceInt(v, 1)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<DoDownloadModeBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "配信の最適化の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>v0.4.5 DODownloadMode 用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class DoDownloadModeBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
     }
 
     // ====================== v0.3.21 手書き入力パッドの自動起動（宣言的 Command 2択・HKCU） ======================
