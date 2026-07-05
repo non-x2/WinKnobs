@@ -447,8 +447,9 @@ public static class NicPowerHelper
 
     /// <summary>
     /// 「スカラー単体／配列」どちらの JSON でも List&lt;T&gt; に読む（PS 5.1 単一要素展開の吸収）。
+    /// internal＝v0.4.6 InterruptModerationHelper 等、同一アセンブリ内の他 PS 出力パーサからも再利用可能。
     /// </summary>
-    private sealed class FlexibleListConverter<T> : JsonConverter<List<T>>
+    internal sealed class FlexibleListConverter<T> : JsonConverter<List<T>>
     {
         public override List<T>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

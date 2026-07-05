@@ -18,11 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - フォーカスアシスト自動条件（実装複雑度高で保留）
 - **v0.4.x Gaming 拡充**：プリセット機能（複数設定の一括切替）は設計ドラフト作成済み（[v0.4.x_Gamingプリセット機能_設計ドラフト.md](docs/v0.4.x_Gamingプリセット機能_設計ドラフト.md)・実装は承認後）
 - **v0.4.x ネットワーク細分化**（2026-07-05・格闘ゲーム遠距離対戦＋4K ストリーミング向け）で調査し**見送った**候補：
-  - **割り込み加減（Interrupt Moderation）OFF**：`*InterruptModeration`（`ValidRegistryValues={0,1}`・実機確認済で安全に一般化可能）。NIC 省電力プリセット（v0.2.2 `NicPowerService`）と同型の PowerShell 経由実装が必要（新規 Service 相当の工数）のため次回候補
   - **受信/送信バッファ最大化**：実機の Intel I219-V で `*ReceiveBuffers`/`*TransmitBuffers` の `ValidRegistryValues` が空（ドライバがレンジを公開しない個体）で「実機から動的に最大値を検出」ができず、ハードコードは他 NIC で無効値になるリスクがあるため見送り（本機は現在値 2048 で既に上限相当の可能性）
   - **QoS パケットスケジューラの予約帯域解除**（`NonBestEffortLimit`）：WebSearch 裏取りで「未使用の 20% を常時確保している」という前提自体が誤りと判明（QoS 要求時のみ有効になる予約上限であり、通常のゲーム/配信シナリオでは体感効果なしとの分析が定説）→ 実装見送り
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
 - **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+
+---
+
+## [0.4.6] - 2026-07-05（割り込み加減（Interrupt Moderation）無効化・ネットワーク）
+
+> 📝 `*InterruptModeration`（NDIS標準・PowerShell経由・物理アダプタ全台）。実機読取コマンドで動作確認済み。
+
+### Added
+- **割り込み加減（Interrupt Moderation）を無効化**（ネットワーク・🟡・要管理者・物理アダプタ全台一括）：
+  - `*InterruptModeration`（NDIS標準キーワード・`ValidRegistryValues={0,1}`実機確認済み・0=無効/1=有効(既定)）。NIC「詳細設定」のプロパティは固定レジストリパスを持たずドライバ内部で管理されるため、`Get/Set-NetAdapterAdvancedProperty`（PowerShell）経由（NIC省電力プリセット v0.2.2 と同じ理由）。
+  - 新規 `InterruptModerationHelper`（純粋関数・xUnit 15件）＋`InterruptModerationService`（-EncodedCommand実行・60秒タイムアウト）。単一の標準化キーワード・固定値域のため NicPowerService のような GUID単位スナップショットストアは持たず、退避はアプリ標準の SettingItem Backup/Restore（↩戻す）に委譲する軽量版。
+  - 無効化＝低遅延化する場合がある一方 CPU 負荷が増えるトレードオフのため中立表記。実機で読取コマンドの動作を確認済み（書込は実機ネットワーク切断リスクのため今回は自動テストのみ・在席実機検証は次回）。
 
 ---
 

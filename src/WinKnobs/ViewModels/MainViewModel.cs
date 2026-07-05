@@ -2381,6 +2381,9 @@ public partial class MainViewModel : ObservableObject
 
         // v0.4.5：配信の最適化のピアツーピア共有を無効化（network.doDownloadMode・HKLM Policies・要管理者）
         Items.Add(BuildDeliveryOptimizationP2POffItem());
+
+        // v0.4.6：割り込み加減（Interrupt Moderation）を無効化（network.interruptModeration・PowerShell経由・物理アダプタ全台）
+        Items.Add(BuildInterruptModerationItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -2849,6 +2852,78 @@ public partial class MainViewModel : ObservableObject
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }
+    }
+
+    // ====================== v0.4.6 割り込み加減（Interrupt Moderation）無効化（PowerShell経由・物理アダプタ全台） ======================
+    //
+    // *InterruptModeration（NDIS標準・ValidRegistryValues={0,1}実機確認済み）。0=無効／1=有効(既定)。
+    // NIC「詳細設定」のプロパティは固定レジストリパスを持たずドライバ内部で管理されるため、
+    // Set/Get-NetAdapterAdvancedProperty（PowerShell）経由が必須（NicPowerService と同じ理由）。
+    // 単一の標準化キーワード・固定値域のため NicPowerService のような GUID 単位スナップショット
+    // ストアは持たず、退避はこのアプリ標準の SettingItem Backup/Restore（↩戻す）に委譲する軽量版。
+    // 無効化＝低遅延化する場合がある一方 CPU 負荷が増えるトレードオフのため中立表記。
+    // 適用時に NIC の瞬断が起きる場合がある点は NIC 省電力プリセット（v0.2.2）と同様。
+
+    private SettingItem BuildInterruptModerationItem()
+    {
+        var choices = new List<string> { "既定（有効・CPU負荷を抑える）", "無効化（低遅延・CPU負荷増）" };
+        var service = new InterruptModerationService();
+
+        return new SettingItem
+        {
+            Id = "network.interruptModeration",
+            Title = "割り込み加減（Interrupt Moderation）を無効化",
+            Description = "NIC がパケット受信の割り込みをまとめて発生させる「割り込み加減」を無効化し、パケット到着のたびに即座に割り込みを発生させます"
+                + "（デバイスマネージャー › ネットワークアダプター › プロパティ › 詳細設定 の同名項目と同じ）。"
+                + "無効化するとわずかに遅延が下がる場合がある一方、CPU 負荷が上がります（トレードオフのため中立でおすすめしません）。"
+                + "対戦ゲームや対話的通信で少しでも遅延を削りたい時向けです。"
+                + "有効な物理ネットワークアダプタ全台に一括適用します（本項目に対応しないアダプタは対象外）。"
+                + "管理者権限必須。⚠️ 適用時に NIC の瞬断（数秒）が起きる場合があります（NIC省電力プリセットと同様）。",
+            Category = CategoryType.Network,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = choices[0],   // 中立：既定のまま
+            DefaultValue = choices[0],
+            Command = new CommandAction
+            {
+                Choices = choices,
+                Read = () =>
+                {
+                    if (service.Run(InterruptModerationHelper.BuildReadCommand(), out var output) != 0) return choices[0];
+                    var adapters = InterruptModerationHelper.TryParseRead(output);
+                    if (adapters == null) return choices[0];
+                    return InterruptModerationHelper.AllDisabled(adapters) ? choices[1] : choices[0];
+                },
+                Apply = label =>
+                {
+                    int val;
+                    if (label == choices[1]) val = 0;        // 無効化
+                    else if (label == choices[0]) val = 1;   // 既定（有効）
+                    else return;                             // 想定外＝no-op
+                    var exit = service.Run(InterruptModerationHelper.BuildApplyCommand(val), out var output);
+                    var counts = InterruptModerationHelper.ParseCounts(output);
+                    if (exit != 0 && (counts == null || counts.Value.Ok == 0))
+                        throw new InvalidOperationException("割り込み加減の設定に失敗しました（管理者権限・NIC状態を確認してください）。");
+                },
+                Backup = () =>
+                {
+                    service.Run(InterruptModerationHelper.BuildReadCommand(), out var readOutput);
+                    var adapters = InterruptModerationHelper.TryParseRead(readOutput)
+                        ?? new List<InterruptModerationHelper.AdapterValue>();
+                    return JsonSerializer.Serialize(adapters);
+                },
+                Restore = token =>
+                {
+                    var adapters = JsonSerializer.Deserialize<List<InterruptModerationHelper.AdapterValue>>(token);
+                    if (adapters == null || adapters.Count == 0) return;
+                    var exit = service.Run(InterruptModerationHelper.BuildRestoreCommand(adapters), out var output);
+                    var counts = InterruptModerationHelper.ParseCounts(output);
+                    if (exit != 0 && (counts == null || counts.Value.Ok == 0))
+                        throw new InvalidOperationException("割り込み加減の設定を元に戻せませんでした。");
+                }
+            }
+        };
     }
 
     // ====================== v0.3.21 手書き入力パッドの自動起動（宣言的 Command 2択・HKCU） ======================
