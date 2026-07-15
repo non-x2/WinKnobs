@@ -2384,6 +2384,14 @@ public partial class MainViewModel : ObservableObject
 
         // v0.4.6：割り込み加減（Interrupt Moderation）を無効化（network.interruptModeration・PowerShell経由・物理アダプタ全台）
         Items.Add(BuildInterruptModerationItem());
+
+        // ====================== v0.4.7 Copilot 無効化（2026-07-15 競合差分#2・Winaero Tweaker対抗） ======================
+
+        // v0.4.7a：Copilot を無効化（privacy.disableCopilot・HKCU Policies\WindowsCopilot・Command2択・厳密1判定）
+        Items.Add(BuildDisableCopilotItem());
+
+        // v0.4.7b：タスクバーのCopilotボタンを非表示（desktop.hideCopilotButton・HKCU Explorer\Advanced・Command2択）
+        Items.Add(BuildHideCopilotButtonItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -5392,6 +5400,132 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// v0.4.7a プライバシー「Copilot を無効化」を Command 型2択で構築。
+    /// HKCU\…\Policies\Microsoft\Windows\WindowsCopilot\TurnOffWindowsCopilot（DWORD・厳密1のみ無効）。**管理者不要**（HKCU）。
+    /// RestartScope=Logoff（既存の Cortana/アクティビティ履歴等 Policies 配下 AI 系項目と同じ値＝Explorer 単体再起動では
+    /// 反映しきらない可能性が高いという設計指摘を踏襲）。DisableCopilotHelper に純粋ロジックを委譲（TaskManagerHelper 同型）。
+    /// </summary>
+    private SettingItem BuildDisableCopilotItem()
+    {
+        var path = DisableCopilotHelper.RegistryPath;
+        var name = DisableCopilotHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "privacy.disableCopilot",
+            Title = "Copilot を無効化",
+            Description = "タスクバーの Copilot ボタンや右クリックメニュー等の AI 機能（Copilot）を無効化します"
+                + "（グループポリシー『Turn off Windows Copilot』相当・HKCU）。"
+                + "自分のユーザーのみに適用されます（他のアカウントには影響しません）。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 企業のグループポリシー管理下では、上位のポリシー設定が優先され本設定が効かない場合があります。"
+                + "⚠️ 反映にはログオフ・再ログオン（または PC 再起動）が必要な場合があります。"
+                + "※ TurnOffWindowsCopilot キーは 2026年7月時点の Windows 11 で有効ですが、"
+                + "対応するレガシー GPO は Microsoft が将来的に AppLocker への移行を示唆しており、将来非推奨になる可能性があります"
+                + "（出典：https://windowsforum.com/threads/hide-or-remove-windows-copilot-in-windows-11-2026-guide.398925/ ）。",
+            Category = CategoryType.Privacy,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = DisableCopilotHelper.EnabledLabel,   // 中立：Windows 既定のまま
+            DefaultValue = DisableCopilotHelper.EnabledLabel,
+            Command = new CommandAction
+            {
+                Choices = DisableCopilotHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    int? iv = v == null ? (int?)null : DisableCopilotHelper.CoerceInt(v, DisableCopilotHelper.ValueEnabled);
+                    return DisableCopilotHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    _registry.WriteValue<int>(path, name,
+                        DisableCopilotHelper.ValueForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new DisableCopilotBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = DisableCopilotHelper.CoerceInt(v, DisableCopilotHelper.ValueEnabled)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<DisableCopilotBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else   // 値単位の削除（キーは消さない＝Policies 巻き添え回避）
+                        DeleteValueOrThrow(path, name, "Copilot 無効化の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// v0.4.7b デスクトップ「タスクバーの Copilot ボタンを非表示」を Command 型2択で構築。
+    /// HKCU\…\Explorer\Advanced\ShowCopilotButton（DWORD・未設定/1=表示、0=非表示）。**管理者不要**（HKCU）。
+    /// Category=Desktop（既存のタスクバー系項目＝taskbarTaskView 等と同じ分類）。HideCopilotButtonHelper に純粋ロジックを委譲。
+    /// </summary>
+    private SettingItem BuildHideCopilotButtonItem()
+    {
+        var path = HideCopilotButtonHelper.RegistryPath;
+        var name = HideCopilotButtonHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "desktop.hideCopilotButton",
+            Title = "タスクバーの Copilot ボタンを非表示",
+            Description = "タスクバーに表示される Copilot ボタンの表示/非表示を切り替えます"
+                + "（設定 > 個人用設定 > タスクバー >「Copilot」トグルと同等の効果）。"
+                + "管理者権限は不要です（自分のユーザー設定）。"
+                + "⚠️ 反映にはエクスプローラの再起動が必要な場合があります。",
+            Category = CategoryType.Desktop,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.Explorer,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = HideCopilotButtonHelper.ShownLabel,   // 中立：Windows 既定のまま
+            DefaultValue = HideCopilotButtonHelper.ShownLabel,
+            Command = new CommandAction
+            {
+                Choices = HideCopilotButtonHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    int? iv = v == null ? (int?)null : HideCopilotButtonHelper.CoerceInt(v, HideCopilotButtonHelper.ValueShown);
+                    return HideCopilotButtonHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    _registry.WriteValue<int>(path, name,
+                        HideCopilotButtonHelper.ValueForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new HideCopilotButtonBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = HideCopilotButtonHelper.CoerceInt(v, HideCopilotButtonHelper.ValueShown)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<HideCopilotButtonBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "「Copilot ボタンの表示」の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
     /// Command 型 Restore の「未設定へ戻す」削除（値単位）。`DeleteValue` が false でも、
     /// 削除後に値が実際に残っている時だけ throw する（cross-reviewer 2026-06-30 指摘＝見落とし事例ログ
     /// 2026-06-10 の逆パターン）。`DeleteValue=false` には「削除失敗」と「元から値が無い（他ツールが先に削除済み＝
@@ -5444,5 +5578,19 @@ public partial class MainViewModel : ObservableObject
     private class ClassicMenuBackup
     {
         public bool KeyExisted { get; set; }
+    }
+
+    /// <summary>v0.4.7a Copilot 無効化（TurnOffWindowsCopilot）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class DisableCopilotBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.4.7b Copilot ボタン表示（ShowCopilotButton）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class HideCopilotButtonBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
     }
 }
