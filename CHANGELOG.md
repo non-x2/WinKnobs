@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.7] - 2026-07-15（Copilot 無効化 2 項目・プライバシー/デスクトップ）
+
+> 📝 privacy.disableCopilot（HKCU Policies・厳密1判定）＋desktop.hideCopilotButton（HKCU Explorer\Advanced）。いずれも管理者不要。
+
+### Added
+- **Copilot を無効化する 2 項目を追加**（プライバシー/デスクトップ・🟢・HKCU・管理者不要）：
+  - **privacy.disableCopilot**：`HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot\TurnOffWindowsCopilot`（REG_DWORD・厳密に1の時のみ無効化・0/未設定/1以外は「有効にする（既定）」扱い・RestartScope=Logoff）。企業のグループポリシー管理下では上位ポリシーが優先される場合がある。
+  - **desktop.hideCopilotButton**：`HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\ShowCopilotButton`（REG_DWORD・0=非表示／未設定・1=表示する（既定）・RestartScope=Explorer）。タスクバーの Copilot ボタンを非表示にする。
+  - 新規 `DisableCopilotHelper`/`HideCopilotButtonHelper`（純粋関数・TaskManagerHelper と同型）＋xUnit追加。競合差分ドキュメント（[競合差分_2026-07-06_LINE_Harness動画手法.md](docs/競合差分_2026-07-06_LINE_Harness動画手法.md)#2）の差分を実装済みに更新。
+
+---
+
 ## [0.4.6] - 2026-07-05（割り込み加減（Interrupt Moderation）無効化・ネットワーク）
 
 > 📝 `*InterruptModeration`（NDIS標準・PowerShell経由・物理アダプタ全台）。実機読取コマンドで動作確認済み。
