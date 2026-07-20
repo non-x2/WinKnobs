@@ -16,7 +16,7 @@
 
 | # | 機能 | 競合 | 危険度 | 差別化価値 | 推奨 |
 |---|---|---|---|---|---|
-| 1 | **クラシックコンテキストメニュー**（Win11右クリック→Win10フル表示） | 全競合 | 🟢 | ★★★ 超定番・検索需要大・HKCU CLSIDで可逆 | ◎最有力 |
+| 1 | **クラシックコンテキストメニュー**（Win11右クリック→Win10フル表示） | 全競合 | 🟢 | ★★★ 超定番・検索需要大・HKCU CLSIDで可逆 | ✅実装済みと2026-07-20判明（v0.1.0から`shell.classicContextMenu`が存在・本リスト作成時の「未実装」は調査漏れ） |
 | 2 | **Copilot無効化**（タスクバー/AI右クリック除去） | Winaero | 🟢〜🟡 | ★★★ タイムリー・Win11 24H2で需要増 | ✅実装済み（2026-07-15・`privacy.disableCopilot`+`desktop.hideCopilotButton`・v0.4.7） |
 | 3 | **プライバシー一括**（テレメトリ/広告ID/Bing検索/Cortana を束ねる） | UWT/Winaero | 🟡 | ★★ WinKnobsは散発のみ→"1画面で束ねる"導線が刺さる | ○ |
 | 4 | **バックグラウンドアプリ一括無効化** | Winaero | 🟢 | ★★ 省電力・8700K熱対策と親和 | ○ |
@@ -31,7 +31,7 @@
 
 ## 最優先の3手（この差分から）
 
-1. **クラシックコンテキストメニュー**（#1）＝🟢可逆・超定番・実装軽い。次スプリントの筆頭候補。
+1. ~~クラシックコンテキストメニュー（#1）~~＝**✅v0.1.0で実装済みと2026-07-20判明**（`shell.classicContextMenu`・UIAテストT-REG-4済み。本リストの「未実装」判定が誤り＝以後、着手前に実コードgrep必須）。
 2. **Copilot無効化**（#2）＝タイムリー・note/Shortsのネタにもなる（柱C/D連動）。**✅2026-07-15実装済み**（`privacy.disableCopilot` HKCU Policies\WindowsCopilot・`desktop.hideCopilotButton` HKCU Explorer\Advanced・v0.4.7）。
 3. **プライバシー"束ね"導線**（#3）＝既存の散発項目（Start_TrackProgs等）＋新規を1グループ化＝UX差別化。
 
