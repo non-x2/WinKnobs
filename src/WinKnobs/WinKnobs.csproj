@@ -14,9 +14,9 @@
     <AssemblyProduct>WinKnobs</AssemblyProduct>
     <Authors>nonlabo</Authors>
     <Copyright>Copyright (c) 2026 のんラボ</Copyright>
-    <AssemblyVersion>0.4.8.0</AssemblyVersion>
-    <FileVersion>0.4.8.0</FileVersion>
-    <Version>0.4.8</Version>
+    <AssemblyVersion>0.4.9.0</AssemblyVersion>
+    <FileVersion>0.4.9.0</FileVersion>
+    <Version>0.4.9</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/non-x2/WinKnobs</PackageProjectUrl>
     <RepositoryUrl>https://github.com/non-x2/WinKnobs</RepositoryUrl>

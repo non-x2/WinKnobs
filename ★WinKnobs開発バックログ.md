@@ -22,14 +22,16 @@
 
 | # | 項目 | 需要 | コスト | 北極星 | 状態 | 出典 |
 |---|---|---|---|---|---|---|
-| 2 | プライバシー一括（テレメトリ/広告ID/Bing検索/Cortanaを1画面で束ねる） | ★★ | 🟡 | +2 | ⬜未着手 | 競合差分 #3 |
 | 4 | Public化残項目の消化（git tag作成ほか🟢可7件・最短公開ルート約2h） | ★★★ | 🟢 | +2 | ⬜未着手（公開系＝pushは承認キュー） | final_output\WinKnobs_Public化残項目リスト_v1.0_2026-06-21.md |
+| 7 | Command型戻しトークンの永続化（設定画面を閉じると「戻す」不能→IDキーでJSONストア永続化・Command型全項目横断） | ★★ | 🟡 | +1 | ⬜未着手 | plan-validator/cross-reviewer 2026-07-21 指摘（v0.4.9サイクル） |
+| 8 | DeleteValueOrThrow昇格フロー統一（副次失敗経路が昇格誘導に乗らない→UnauthorizedAccessException化・既存15箇所超の回帰テスト必須） | ★ | 🟡 | +1 | ⬜未着手 | cross-reviewer 2026-07-21 should_fix②（既存ギャップ・v0.4.5〜に波及） |
 | 5 | 右クリックメニュー項目の追加/削除（クラシック化とは別） | ★★ | 🔴 | +1 | ⬜未着手（実装重め・計画のみ先行可） | 競合差分 #5 |
 | 6 | 特殊フォルダ名/アイコン変更（ごみ箱リネーム等） | ★ | 🟢 | +1 | ⬜未着手 | 競合差分 #6 |
 
 ## ✅ 完了
 | 日付 | 項目 | バージョン | 備考 |
 |---|---|---|---|
+| 2026-07-21 | プライバシー2本＝診断データ最小化＋広告ID無効化（privacy.telemetryMinimized / privacy.advertisingIdDisabled） | v0.4.9 | 競合差分 #3（旧バックログ#2）・品質ゲート0で判明＝Bing/Cortanaは実装済み（スコープ半減）・**束ねUI不採用**（個別ノブと二重管理になるため。Privacyカテゴリ画面で1画面要件充足）・plan-validator 4指摘反映（広告IDはBoolean禁止→Command型で巻き添え削除防止）・cross-reviewer must_fixゼロ・テスト1213件green・自走ループ第2サイクル |
 | 2026-07-21 | バックグラウンドアプリ一括無効化（system.disableBackgroundApps） | v0.4.8 | 競合差分 #4・品質ゲート0〜5全通過（plan-validator 6指摘反映・cross-reviewer must_fixゼロ・テスト1163件green）・自走ループ初回サイクル |
 | 2026-07-15 | Copilot無効化（privacy.disableCopilot / desktop.hideCopilotButton） | v0.4.7 | 競合差分 #2・cross-reviewer済 |
 | 2026-05-15 | クラシックコンテキストメニュー（shell.classicContextMenu） | v0.1.0 | **07-20判明＝競合差分#1の「未実装」は調査漏れ**（plan-validatorが検出・UIAテストT-REG-4済み）。教訓→品質ゲート0番を新設 |

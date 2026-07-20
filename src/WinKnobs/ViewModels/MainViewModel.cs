@@ -2397,6 +2397,14 @@ public partial class MainViewModel : ObservableObject
 
         // v0.4.8：バックグラウンドアプリを一括無効化（system.disableBackgroundApps・HKCU BackgroundAccessApplications・Command2択・厳密1判定）
         Items.Add(BuildDisableBackgroundAppsItem());
+
+        // ====================== v0.4.9 プライバシーノブ2本（2026-07-21・plan-validator精査済み） ======================
+
+        // v0.4.9a：診断データ送信を最小化（privacy.telemetryMinimized・HKLM Policies\DataCollection・Command2択・厳密1判定・既定=値削除）
+        Items.Add(BuildTelemetryMinimizeItem());
+
+        // v0.4.9b：広告IDを無効化（privacy.advertisingIdDisabled・HKCU AdvertisingInfo・Command2択・値単位トークン復元＝Id値の巻き添え防止）
+        Items.Add(BuildAdvertisingIdItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -5597,6 +5605,144 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// v0.4.9a プライバシー「診断データ送信を最小化」を Command 型2択で構築。
+    /// HKLM\…\Policies\Microsoft\Windows\DataCollection\AllowTelemetry（DWORD・厳密1のみ最小化済み）。**管理者必須**（HKLM）。
+    /// RestartScope=System。TelemetryMinimizeHelper に純粋ロジックを委譲（DisableCopilotHelper 同型）。
+    /// ※ 設定アプリと同一キーを別UIから操作するため表示鮮度レースがあり得るが、再Read方針は既存Command型ノブ共通の
+    /// 課題として踏襲する。
+    /// ※「既定に戻す」は Copilot/BackgroundApps の「既定=0書込」とは異なり、値の削除（ポリシー未構成へ）が正しい
+    /// （ポリシー不在が Windows 既定のため。plan-validator 指摘反映）。
+    /// </summary>
+    private SettingItem BuildTelemetryMinimizeItem()
+    {
+        var path = TelemetryMinimizeHelper.RegistryPath;
+        var name = TelemetryMinimizeHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "privacy.telemetryMinimized",
+            Title = "診断データ送信を最小化",
+            Description = "Windows の診断データ送信を必須データのみに最小化します"
+                + "（Win11 Home/Pro で選べる実質下限。Enterprise/Education 限定の「セキュリティ」レベルはこの設定では選べません）。"
+                + "設定アプリの「プライバシーとセキュリティ > 診断とフィードバック」の表示と食い違うことがあります"
+                + "（同一キーを別UIから操作するため。表示鮮度レースは既存 Command 型ノブ共通の割り切りとして踏襲）。"
+                + "管理者権限が必須です（HKLM）。"
+                + "⚠️ 反映には PC の再起動が必要です。"
+                + "⚠️ 企業のグループポリシー管理下では、上位のポリシー設定が優先される場合があります。",
+            Category = CategoryType.Privacy,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.System,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = TelemetryMinimizeHelper.DefaultLabel,   // 中立：Windows 既定のまま
+            DefaultValue = TelemetryMinimizeHelper.DefaultLabel,
+            Command = new CommandAction
+            {
+                Choices = TelemetryMinimizeHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    int? iv = v == null ? (int?)null : TelemetryMinimizeHelper.CoerceInt(v, 0);
+                    return TelemetryMinimizeHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    if (label == TelemetryMinimizeHelper.MinimizedLabel)
+                    {
+                        _registry.WriteValue<int>(path, name,
+                            TelemetryMinimizeHelper.ValueMinimized, Microsoft.Win32.RegistryValueKind.DWord);
+                    }
+                    else
+                    {
+                        // 既定に戻す＝ポリシー未構成（値削除）。「既定=0書込」ではない（上記クラス doc 参照）。
+                        DeleteValueOrThrow(path, name, "「診断データ送信を最小化」の設定を既定に戻せませんでした（値の削除に失敗）。");
+                    }
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new TelemetryMinimizeBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = TelemetryMinimizeHelper.CoerceInt(v, 0)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<TelemetryMinimizeBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "「診断データ送信を最小化」の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// v0.4.9b プライバシー「広告 ID を無効化」を Command 型2択で構築。
+    /// HKCU\…\CurrentVersion\AdvertisingInfo\Enabled（DWORD・厳密0のみ無効化済み）。**管理者不要**（HKCU）。
+    /// RestartScope=None（アプリは起動時に読む）。AdvertisingIdHelper に純粋ロジックを委譲（DisableCopilotHelper 同型）。
+    /// ⚠️ plan-validator 指摘により Boolean 型は不採用：Boolean の復元はキー削除マーカー経由で、同居する広告 ID
+    /// 実体 `Id` 値を巻き添えにする（2026-06-10 事例の再発防止）。Restore は値単位（Enabled 単体）の
+    /// DeleteValueOrThrow を使用し、Id 値には触れない。
+    /// </summary>
+    private SettingItem BuildAdvertisingIdItem()
+    {
+        var path = AdvertisingIdHelper.RegistryPath;
+        var name = AdvertisingIdHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "privacy.advertisingIdDisabled",
+            Title = "広告 ID を無効化",
+            Description = "アプリに広告識別子（広告 ID）を使わせず、興味関心に基づく広告を抑制します。"
+                + "自分のユーザーのみに適用され、管理者権限は不要です。"
+                + "⚠️ この設定画面を閉じると「戻す」ボタンは使えなくなります（他の Command 型項目と同じ仕様）。",
+            Category = CategoryType.Privacy,
+            Risk = RiskLevel.Green,
+            RestartScope = RestartScope.None,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = AdvertisingIdHelper.EnabledLabel,   // 中立：Windows 既定のまま
+            DefaultValue = AdvertisingIdHelper.EnabledLabel,
+            Command = new CommandAction
+            {
+                Choices = AdvertisingIdHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    int? iv = v == null ? (int?)null : AdvertisingIdHelper.CoerceInt(v, AdvertisingIdHelper.ValueEnabled);
+                    return AdvertisingIdHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    _registry.WriteValue<int>(path, name,
+                        AdvertisingIdHelper.ValueForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new AdvertisingIdBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = AdvertisingIdHelper.CoerceInt(v, AdvertisingIdHelper.ValueEnabled)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<AdvertisingIdBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        // 値単位のみ削除（キーごと削除しない＝同居する Id 値を巻き添えにしない）。
+                        DeleteValueOrThrow(path, name, "「広告 ID を無効化」の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
     /// Command 型 Restore の「未設定へ戻す」削除（値単位）。`DeleteValue` が false でも、
     /// 削除後に値が実際に残っている時だけ throw する（cross-reviewer 2026-06-30 指摘＝見落とし事例ログ
     /// 2026-06-10 の逆パターン）。`DeleteValue=false` には「削除失敗」と「元から値が無い（他ツールが先に削除済み＝
@@ -5667,6 +5813,20 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.4.8 バックグラウンドアプリ一括無効化（GlobalUserDisabled）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
     private class DisableBackgroundAppsBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.4.9a 診断データ送信最小化（AllowTelemetry）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class TelemetryMinimizeBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.4.9b 広告 ID 無効化（AdvertisingInfo\Enabled）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元・Id 値は非対象）。</summary>
+    private class AdvertisingIdBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }

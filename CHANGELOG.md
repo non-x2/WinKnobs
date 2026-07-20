@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.9] - 2026-07-21（プライバシーノブ2本・診断データ最小化＋広告ID無効化）
+
+> 📝 privacy.telemetryMinimized（HKLM Policies\DataCollection・厳密1判定・既定=値削除）＋privacy.advertisingIdDisabled（HKCU AdvertisingInfo・厳密0判定）。plan-validator 精査済み設計を反映。
+
+### Added
+- **プライバシーノブ2本を追加**（プライバシー・🟡/🟢）：
+  - **privacy.telemetryMinimized**：`HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection\AllowTelemetry`（REG_DWORD・厳密に1の時のみ最小化済み・0/2/3/未設定は「既定に戻す」扱い・RestartScope=System・要管理者）。Win11 Home/Pro で選べる実質下限（0 は Enterprise/Education 限定のため不採用）。「既定に戻す」は Copilot/BackgroundApps の「既定=0書込」とは異なり値の削除（ポリシー未構成へ）が正しい（ポリシー不在が Windows 既定・plan-validator 指摘反映）。
+  - **privacy.advertisingIdDisabled**：`HKCU\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo\Enabled`（REG_DWORD・厳密に0の時のみ無効化済み・未設定/1/その他は「既定に戻す」扱い・RestartScope=None・管理者不要）。plan-validator 指摘により Boolean 型は不採用：Boolean の復元はキー削除マーカー経由で同居する広告ID実体 `Id` 値を巻き添えにする（2026-06-10 事例の再発防止）。Command 2択＋値単位（Enabled 単体）のトークン復元とし、Id 値には触れない。
+  - 新規 `TelemetryMinimizeHelper`/`AdvertisingIdHelper`（純粋関数・DisableCopilotHelper と同型）＋xUnit 50件追加（全1213件 green）。
+
+---
+
 ## [0.4.8] - 2026-07-21（バックグラウンドアプリ一括無効化・システム）
 
 > 📝 system.disableBackgroundApps（HKCU BackgroundAccessApplications・厳密1判定）。管理者不要・自走開発ループ初回サイクル（バックログ#1）。
