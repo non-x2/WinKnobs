@@ -2392,6 +2392,11 @@ public partial class MainViewModel : ObservableObject
 
         // v0.4.7b：タスクバーのCopilotボタンを非表示（desktop.hideCopilotButton・HKCU Explorer\Advanced・Command2択）
         Items.Add(BuildHideCopilotButtonItem());
+
+        // ====================== v0.4.8 バックグラウンドアプリ一括無効化（バックログ#1・競合差分#4） ======================
+
+        // v0.4.8：バックグラウンドアプリを一括無効化（system.disableBackgroundApps・HKCU BackgroundAccessApplications・Command2択・厳密1判定）
+        Items.Add(BuildDisableBackgroundAppsItem());
     }
 
     // ====================== v0.2.0 Power Throttling（Command 2択・値単位復元） ======================
@@ -5526,6 +5531,72 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// v0.4.8 バックグラウンドアプリ「一括無効化」を Command 型2択で構築。
+    /// HKCU\…\CurrentVersion\BackgroundAccessApplications\GlobalUserDisabled（DWORD・厳密1のみ無効）。**管理者不要**（HKCU）。
+    /// RestartScope=Logoff（設定アプリの「バックグラウンドアプリ」設定と同様、反映にログオン単位のセッション再構築が
+    /// 必要という前提を踏襲）。DisableBackgroundAppsHelper に純粋ロジックを委譲（DisableCopilotHelper 同型）。
+    /// ※ 設定アプリと同一キーを別UIから操作するため表示鮮度レースがあり得るが、再Read方針は既存Command型ノブ共通の
+    /// 課題として踏襲する。
+    /// </summary>
+    private SettingItem BuildDisableBackgroundAppsItem()
+    {
+        var path = DisableBackgroundAppsHelper.RegistryPath;
+        var name = DisableBackgroundAppsHelper.ValueName;
+
+        return new SettingItem
+        {
+            Id = "system.disableBackgroundApps",
+            Title = "バックグラウンドアプリを一括無効化",
+            Description = "UWP/Store アプリ全部のバックグラウンド実行を一括で停止します（Win32 アプリは対象外）。"
+                + "⚠️ 設定アプリで個別に「許可」にしていたアプリの設定よりも優先して、全アプリを一律停止します。"
+                + "通知・新着メール・ライブタイル等が届かなくなる場合があります。"
+                + "自分のユーザーのみに適用され、管理者権限は不要です。"
+                + "⚠️ 反映にはログオフ・再ログオン（または PC 再起動）が必要です。元に戻す時も同様です。"
+                + "⚠️ 企業のグループポリシー管理下では、上位のポリシー設定（LetAppsRunInBackground）が優先され"
+                + "本設定が効かない場合があります。",
+            Category = CategoryType.System,
+            Risk = RiskLevel.Yellow,
+            RestartScope = RestartScope.Logoff,
+            ValueType = SettingValueType.Command,
+            RecommendedValue = DisableBackgroundAppsHelper.EnabledLabel,   // 中立：Windows 既定のまま
+            DefaultValue = DisableBackgroundAppsHelper.EnabledLabel,
+            Command = new CommandAction
+            {
+                Choices = DisableBackgroundAppsHelper.Choices,
+                Read = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    int? iv = v == null ? (int?)null : DisableBackgroundAppsHelper.CoerceInt(v, DisableBackgroundAppsHelper.ValueEnabled);
+                    return DisableBackgroundAppsHelper.LabelForValue(iv);
+                },
+                Apply = label =>
+                {
+                    _registry.WriteValue<int>(path, name,
+                        DisableBackgroundAppsHelper.ValueForLabel(label), Microsoft.Win32.RegistryValueKind.DWord);
+                },
+                Backup = () =>
+                {
+                    var v = _registry.ReadValue<object>(path, name);
+                    return JsonSerializer.Serialize(new DisableBackgroundAppsBackup
+                    {
+                        ValueExisted = v != null,
+                        Value = DisableBackgroundAppsHelper.CoerceInt(v, DisableBackgroundAppsHelper.ValueEnabled)
+                    });
+                },
+                Restore = token =>
+                {
+                    var bk = JsonSerializer.Deserialize<DisableBackgroundAppsBackup>(token);
+                    if (bk == null) return;
+                    if (bk.ValueExisted)
+                        _registry.WriteValue<int>(path, name, bk.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    else
+                        DeleteValueOrThrow(path, name, "バックグラウンドアプリ一括無効化の設定を元に戻せませんでした（値の削除に失敗）。");
+                }
+            }
+        };
+    }
+
+    /// <summary>
     /// Command 型 Restore の「未設定へ戻す」削除（値単位）。`DeleteValue` が false でも、
     /// 削除後に値が実際に残っている時だけ throw する（cross-reviewer 2026-06-30 指摘＝見落とし事例ログ
     /// 2026-06-10 の逆パターン）。`DeleteValue=false` には「削除失敗」と「元から値が無い（他ツールが先に削除済み＝
@@ -5589,6 +5660,13 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>v0.4.7b Copilot ボタン表示（ShowCopilotButton）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
     private class HideCopilotButtonBackup
+    {
+        public bool ValueExisted { get; set; }
+        public int Value { get; set; }
+    }
+
+    /// <summary>v0.4.8 バックグラウンドアプリ一括無効化（GlobalUserDisabled）用バックアップトークン（existed＋値・未設定→値単位 DeleteValue 復元）。</summary>
+    private class DisableBackgroundAppsBackup
     {
         public bool ValueExisted { get; set; }
         public int Value { get; set; }

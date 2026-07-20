@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.8] - 2026-07-21（バックグラウンドアプリ一括無効化・システム）
+
+> 📝 system.disableBackgroundApps（HKCU BackgroundAccessApplications・厳密1判定）。管理者不要・自走開発ループ初回サイクル（バックログ#1）。
+
+### Added
+- **バックグラウンドアプリを一括無効化**（システム・🟡・HKCU・管理者不要）：
+  - **system.disableBackgroundApps**：`HKCU\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications\GlobalUserDisabled`（REG_DWORD・厳密に1の時のみ無効化・0/未設定/1以外は「有効にする（既定）」扱い・RestartScope=Logoff）。UWP/Store アプリ全体のバックグラウンド実行を一括停止（Win32 アプリは対象外）。個別アプリごとの許可設定より優先して一律停止・通知/新着メール等が届かなくなる場合あり。反映と復元のいずれもログオフ・再ログオンが必要。企業のグループポリシー管理下では上位ポリシー（LetAppsRunInBackground）が優先される場合がある。
+  - 新規 `DisableBackgroundAppsHelper`（純粋関数・DisableCopilotHelper と同型）＋xUnit 26件追加（全1163件 green）。競合差分ドキュメント（[競合差分_2026-07-06_LINE_Harness動画手法.md](docs/競合差分_2026-07-06_LINE_Harness動画手法.md)#4）の差分を実装済みに更新。
+
+---
+
 ## [0.4.7] - 2026-07-15（Copilot 無効化 2 項目・プライバシー/デスクトップ）
 
 > 📝 privacy.disableCopilot（HKCU Policies・厳密1判定）＋desktop.hideCopilotButton（HKCU Explorer\Advanced）。いずれも管理者不要。
