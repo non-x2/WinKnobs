@@ -24,6 +24,7 @@
 |---|---|---|---|---|---|---|
 | 8 | DeleteValueOrThrow昇格フロー統一（副次失敗経路が昇格誘導に乗らない→UnauthorizedAccessException化・既存15箇所超の回帰テスト必須） | ★ | 🟡 | +1 | ⬜未着手 | cross-reviewer 2026-07-21 should_fix②（既存ギャップ・v0.4.5〜に波及） |
 | 10 | Commandトークンの鮮度表示＋孤児掃除（command_tokens.jsonに保存時刻を持たせ「◯月◯日適用時の状態に戻せます」表示／CanRestore喪失項目の孤児トークン掃除） | ★ | 🟢 | +1 | ⬜未着手 | cross-reviewer 2026-07-21 should_fix2＋nice_to_have4（v0.4.10サイクル・別セッションレビュー分） |
+| 11 | GraphicsService.RestoreAll無音no-op解消（退避なし/欠落/破損時にsilent return→GraphicsListViewModelが「↩戻しました」成功表示の芽。レース時限定・軽微。SystemSound同型のthrow化＋VM側ハンドリング。※NicPowerは退避なし時Success+説明メッセージ表示＝許容・注記のみ／HyperV・RDPは明示ダイアログ済で問題なし） | ★ | 🟢 | +1 | ⬜未着手 | 第6サイクル品質ゲート0宿題確認 2026-07-21（委譲型Command該当はSystemSoundのみと実証） |
 | 5 | 右クリックメニュー項目の追加/削除（クラシック化とは別） | ★★ | 🔴 | +1 | ⬜未着手（実装重め・計画のみ先行可） | 競合差分 #5 |
 | 6 | 特殊フォルダ名/アイコン変更（ごみ箱リネーム等） | ★ | 🟢 | +1 | ⬜未着手 | 競合差分 #6 |
 
