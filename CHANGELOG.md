@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.13] - 2026-07-21（GraphicsService.RestoreAllの無音no-op解消・バックログ#11）
+
+> 📝 plan-validator 2026-07-21 精査済み仕様（バックログ#11）を反映。品質ゲート1〜4完走。
+
+### Fixed
+- **GraphicsService.RestoreAllの無音no-op解消**（バックログ#11）：退避データが無い／欠落／破損の3経路で無音returnしていたのを、SystemSoundService.RestoreAllと同型の`InvalidOperationException`throwに変更。GraphicsListViewModel側は既存のtry/catchで正しくエラー表示されるため改修不要（既存実装が既に対応済みと確認）。
+
+### Notes
+- テスト：既存1246件＋新規2件＝計1248件green（GraphicsServiceRestoreAllTests新設+2）。
+
+---
+
 ## [0.4.12] - 2026-07-21（Commandトークンの鮮度表示＋孤児掃除・バックログ#10）
 
 > 📝 plan-validator 2026-07-21 精査済み仕様（バックログ#10）を反映。品質ゲート1〜4完走。

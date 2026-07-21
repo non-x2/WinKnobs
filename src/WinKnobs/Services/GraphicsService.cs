@@ -32,6 +32,9 @@ public class GraphicsService
     /// <summary>maintenance 退避ストアの機能キー。</summary>
     public const string FeatureKey = "graphics";
 
+    /// <summary>SystemSoundService.RestoreAllと同型で無音no-opを解消（バックログ#11）。退避データが見つからない/破損時にthrowする。</summary>
+    public const string NoBackupDataMessage = "復元用の退避データが見つかりません。既に復元済みか、データが失われています。";
+
     private readonly RegistryService _registry;
     private readonly BackupService _backup;
 
@@ -154,17 +157,18 @@ public class GraphicsService
 
     /// <summary>
     /// グラフィック設定を「WinKnobs で初めて触る前」へ復元。退避に無い値は削除し、退避値を書き戻す。
-    /// 退避破損（JsonException 等）は後始末だけして安全に抜ける（E2）。成功後は退避を削除（致命1）。
+    /// 退避破損（JsonException 等）は後始末をしてから呼び出し元へthrowする（無音no-op解消・バックログ#11）。成功後は退避を削除（致命1）。
     /// </summary>
     public void RestoreAll()
     {
-        if (!_backup.HasMaintenanceOriginal(FeatureKey)) return;
+        if (!_backup.HasMaintenanceOriginal(FeatureKey)) throw new InvalidOperationException(NoBackupDataMessage);
 
         var dict = _backup.LoadMaintenanceOriginals();
+        // この分岐はTOCTOU（他プロセスによる同時書換）限定でしか到達せず、単体テスト対象外（plan-validator確認済み）。
         if (!dict.TryGetValue(FeatureKey, out var json))
         {
             _backup.RemoveMaintenanceOriginal(FeatureKey);
-            return;
+            throw new InvalidOperationException(NoBackupDataMessage);
         }
 
         Dictionary<string, string>? snapshot;
@@ -175,7 +179,7 @@ public class GraphicsService
         {
             // 退避破損：これ以上壊さない。後始末のみ。
             _backup.RemoveMaintenanceOriginal(FeatureKey);
-            return;
+            throw new InvalidOperationException(NoBackupDataMessage);
         }
 
         var keep = new HashSet<string>(snapshot.Keys, StringComparer.OrdinalIgnoreCase);
