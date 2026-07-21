@@ -1637,7 +1637,7 @@ public partial class MainViewModel : ObservableObject
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
         var msg =
-            "🪟 WinKnobs v0.3.0\n" +
+            "🪟 WinKnobs v0.4.10\n" +
             "© WinKnobs Project / MIT License\n" +
             "\n" +
             "──── 実装済みカテゴリ・項目 ────\n" +
@@ -5697,8 +5697,7 @@ public partial class MainViewModel : ObservableObject
             Id = "privacy.advertisingIdDisabled",
             Title = "広告 ID を無効化",
             Description = "アプリに広告識別子（広告 ID）を使わせず、興味関心に基づく広告を抑制します。"
-                + "自分のユーザーのみに適用され、管理者権限は不要です。"
-                + "⚠️ この設定画面を閉じると「戻す」ボタンは使えなくなります（他の Command 型項目と同じ仕様）。",
+                + "自分のユーザーのみに適用され、管理者権限は不要です。",
             Category = CategoryType.Privacy,
             Risk = RiskLevel.Green,
             RestartScope = RestartScope.None,

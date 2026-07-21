@@ -13,6 +13,8 @@ namespace WinKnobs.Services;
 /// - F-5：保存先を %APPDATA%\WinKnobs\backup\ に変更（ThemeService と統一）
 /// - F-1：ExportKey 後にファイルサイズ＋ヘッダ検証
 /// - E-4：reg.exe を Environment.SystemDirectory のフルパス指定で起動
+/// - v0.4.10（バックログ#7）：Command 型戻しトークンを command_tokens.json に永続化。
+///   xUnit 分離用にコンストラクタへ backupDirOverride 引数を追加（既定 null＝従来通り %APPDATA%）
 ///
 /// 最大10件保持・古いものは自動削除（開発ガイドライン準拠）。
 /// </summary>
@@ -29,13 +31,22 @@ public class BackupService
     private readonly string _networkOriginalsPath;   // v0.1.7：原状 JSON（first-touch-wins）
     private readonly string _maintenanceBackupDir;       // v0.1.19：システム・メンテナンス退避ストア
     private readonly string _maintenanceOriginalsPath;   // v0.1.19：原状 JSON（first-touch-wins）
+    private readonly string _commandTokensPath;           // v0.4.10：Command 型戻しトークン永続化ストア（バックログ#7）
     private readonly string _regExePath;
 
-    public BackupService()
+    /// <summary>
+    /// backupDirOverride は xUnit 専用シーム（バックログ#7）：既定は %APPDATA%\WinKnobs\backup\ を使う。
+    /// 実測（2026-07-21）：Environment.SetEnvironmentVariable("APPDATA", ...) は
+    /// Environment.GetFolderPath(SpecialFolder.ApplicationData) の戻り値に反映されない
+    /// （Windows 版 .NET は SHGetKnownFolderPath でユーザープロファイルから解決するため）。
+    /// そのためテスト分離は環境変数差し替えでなくこのコンストラクタ引数で行う。
+    /// AddSingleton&lt;BackupService&gt;() からは DI が string の既定値を解決できず parameterless 相当で呼ばれる。
+    /// </summary>
+    public BackupService(string? backupDirOverride = null)
     {
         // F-5：%APPDATA%\WinKnobs\backup\ に変更
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        _backupDir = Path.Combine(appData, "WinKnobs", "backup");
+        _backupDir = backupDirOverride ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WinKnobs", "backup");
         Directory.CreateDirectory(_backupDir);
 
         // R-3 plan-validator 致命高1 対応：スタートアップ snapshot 専用サブディレクトリ。
@@ -56,6 +67,11 @@ public class BackupService
         Directory.CreateDirectory(_maintenanceBackupDir);
         _maintenanceOriginalsPath = Path.Combine(_maintenanceBackupDir, "originals.json");
 
+        // v0.4.10（plan-validator 2026-07-21・バックログ#7）：Command 型「戻す」トークンの永続化ストア。
+        // network/maintenance と同じ理由（道連れ破損防止）で別ファイルに分離。単一ファイルのみなので
+        // 専用サブディレクトリは持たず backup 直下に置く。
+        _commandTokensPath = Path.Combine(_backupDir, "command_tokens.json");
+
         // E-4：reg.exe はフルパス指定
         _regExePath = Path.Combine(Environment.SystemDirectory, "reg.exe");
     }
@@ -71,6 +87,9 @@ public class BackupService
 
     /// <summary>システム・メンテナンス退避ストア専用ディレクトリ（v0.1.19）。</summary>
     public string MaintenanceBackupDirectory => _maintenanceBackupDir;
+
+    /// <summary>Command 型戻しトークンストアのファイルパス（v0.4.10・テストからの直接検証用）。</summary>
+    public string CommandTokensPath => _commandTokensPath;
 
     // =================== v0.1.7：ネットワーク原状退避（JSON・first-touch-wins） ===================
     // plan-validator #4 反映：配信最適化 .reg(ExportKey) を使わず、各機能の原状を JSON 集約。
@@ -188,6 +207,70 @@ public class BackupService
         var tmp = _maintenanceOriginalsPath + ".tmp";
         File.WriteAllText(tmp, json);
         File.Copy(tmp, _maintenanceOriginalsPath, overwrite: true);
+        try { File.Delete(tmp); } catch { /* 無害 */ }
+    }
+
+    // =================== v0.4.10：Command 型戻しトークン永続化（JSON・first-touch-wins） ===================
+    // plan-validator 2026-07-21（バックログ#7）：設定画面を閉じると CommandAction.Backup が返すトークンが
+    // ViewModel のフィールド（_lastCommandToken）にしか残らず消える → 再度開くと「戻す」が使えない不具合の解消。
+    // itemId 単位で JSON 永続化し、Load 時に読み戻す。network/maintenance 版と同じ first-touch-wins・原子的置換。
+    //
+    // 既知の弱点（plan-validator 指摘・意識的な割り切り）：
+    // 1. admin/非admin 並存中の read-modify-write は Lost Update しうる（既存 network/maintenance 2 ストアと
+    //    同じ弱点をそのまま継承。プロセス間ロックは持たない）。
+    // 2. 委譲型 Command（トークンが「マーカー」のみで実データは Maintenance ストア側にある設計・例：
+    //    SaveMaintenanceOriginalIfAbsent と組み合わせる Command）では、このストアのマーカーと Maintenance
+    //    側の実データがズレると「戻す」が例外を出さず無音で no-op になりうる（信頼境界。呼び出し元の
+    //    CommandAction.Restore 実装が両ストアの整合を保証する責務を持つ）。
+
+    /// <summary>Command 型項目の復元用トークンを itemId 単位で退避（既に退避済みなら何もしない＝first-touch-wins）。</summary>
+    public void SaveCommandTokenIfAbsent(string itemId, string token)
+    {
+        var dict = LoadCommandTokensDict();
+        if (dict.ContainsKey(itemId)) return;
+        dict[itemId] = token;
+        SaveCommandTokensDict(dict);
+    }
+
+    /// <summary>itemId の復元用トークンを読む（未保存 or 破損時は null。破損時は全件喪失＝既存 Network/Maintenance と同じ割り切り）。</summary>
+    public string? LoadCommandToken(string itemId)
+    {
+        var dict = LoadCommandTokensDict();
+        return dict.TryGetValue(itemId, out var token) ? token : null;
+    }
+
+    /// <summary>itemId のトークンを削除（戻し完了後の後始末）。削除失敗（ファイルロック等）は無害として握り潰す（ClearNetworkOriginals 同型）。</summary>
+    public void RemoveCommandToken(string itemId)
+    {
+        try
+        {
+            var dict = LoadCommandTokensDict();
+            if (dict.Remove(itemId)) SaveCommandTokensDict(dict);
+        }
+        catch { /* 後始末失敗は無害 */ }
+    }
+
+    private Dictionary<string, string> LoadCommandTokensDict()
+    {
+        try
+        {
+            if (!File.Exists(_commandTokensPath)) return new();
+            var json = File.ReadAllText(_commandTokensPath);
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private void SaveCommandTokensDict(Dictionary<string, string> dict)
+    {
+        // network/maintenance 版と同じ原子的置換（temp 書込 → コピー上書き → temp 削除）。
+        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+        var tmp = _commandTokensPath + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Copy(tmp, _commandTokensPath, overwrite: true);
         try { File.Delete(tmp); } catch { /* 無害 */ }
     }
 

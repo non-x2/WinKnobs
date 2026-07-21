@@ -30,6 +30,12 @@ namespace WinKnobs.ViewModels;
 /// - 「現在値（読み取り専用）」と「新しい値（編集可）」の 2 行構造を統合
 /// - 1 つの編集 UI（ComboBox/TextBox）で OriginalValue を直接編集
 /// - IsModified で「編集中（適用前）」状態を視覚化
+///
+/// v0.4.10（バックログ#7・plan-validator 2026-07-21 精査済み）：
+/// - Command 型戻しトークンを BackupService（command_tokens.json）へ永続化。
+///   設定画面を閉じても「戻す」が使えるようになる（従来は _lastCommandToken フィールドのみで揮発）。
+/// - トークン保存タイミングは Apply 成功後（Apply 例外時に幽霊トークンを残さない・指摘1）
+/// - Load 時にトークンが残っていれば IsApplied=true にして「戻す」を活性化（信頼境界・指摘4）
 /// </summary>
 public partial class SettingDialogViewModel : ObservableObject
 {
@@ -122,6 +128,22 @@ public partial class SettingDialogViewModel : ObservableObject
         _lastCommandToken = null;
         IsApplied = false;
 
+        // バックログ#7（plan-validator指摘4）：Command 型は前回適用時のトークンを永続ストアから復元。
+        // トークン存在＝適用済みとみなす信頼境界（外部で手動復元済みでも「戻す」ボタンが出てしまい得る）。
+        // 変数名は cross-reviewer ⚪指摘反映：LastBackupPath（レジストリ型の.reg存在）と紛らわしいため
+        // 「command_tokens.json から読めた」ことを明示する名前にした。
+        bool hasPersistedCommandToken = false;
+        if (item.ValueType == SettingValueType.Command && item.Command?.CanRestore == true)
+        {
+            var savedToken = _backup.LoadCommandToken(item.Id);
+            if (savedToken != null)
+            {
+                _lastCommandToken = savedToken;
+                IsApplied = true;
+                hasPersistedCommandToken = true;
+            }
+        }
+
         if (item.ValueType == SettingValueType.Command)
         {
             RegistryPathDisplay = "(コマンド型項目)";
@@ -156,7 +178,9 @@ public partial class SettingDialogViewModel : ObservableObject
             OriginalValue = EditableValue;
         }
 
-        StatusMessage = "値を変更して「適用」または「OK」で反映します。";
+        StatusMessage = hasPersistedCommandToken
+            ? "📦 前回適用時のバックアップを復元できます。"
+            : "値を変更して「適用」または「OK」で反映します。";
         IsModified = false;   // Load 完了後の初期化は変更と見なさない
     }
 
@@ -548,11 +572,24 @@ public partial class SettingDialogViewModel : ObservableObject
             }
 
             IsApplied = true;
+            // バックログ#7（plan-validator指摘1）：Command 型の戻しトークンは Apply 成功後に永続化する
+            // （Backup.Invoke() 直後ではなくここで呼ぶことで、Apply 例外時にディスクへ幽霊トークンを残さない）。
+            // cross-reviewer 2026-07-21 should_fix1：トークン保存はレジストリ変更（Apply 本体）とは独立の
+            // 後始末 I/O なので、失敗しても Apply 成功の報告を覆さない（外側の汎用 catch に落とすと
+            // 「実際は適用済みなのに ❌ 適用失敗」と誤報告になる）。失敗時は副次警告のみ。
+            bool tokenSaveFailed = false;
+            if (_item.ValueType == SettingValueType.Command && _lastCommandToken != null)
+            {
+                try { _backup.SaveCommandTokenIfAbsent(_item.Id, _lastCommandToken); }
+                catch { tokenSaveFailed = true; }
+            }
             // 適用後は OriginalValue を最新に更新（三者同期）
             ReadAndSyncCurrentValue();
             // EditableValue は変えず（ユーザーの選択を保持）、IsModified を再評価
             UpdateIsModified();
-            StatusMessage = $"✅ 適用完了。{_item.RestartScope.ToHint()}";
+            StatusMessage = tokenSaveFailed
+                ? $"✅ 適用完了。⚠️「戻す」用バックアップの保存に失敗（画面を閉じると戻せません）。{_item.RestartScope.ToHint()}"
+                : $"✅ 適用完了。{_item.RestartScope.ToHint()}";
             return true;
         }
         // v0.1.4 BUG-3：権限不足例外を分岐 → 管理者再起動を提案
@@ -670,6 +707,8 @@ public partial class SettingDialogViewModel : ObservableObject
                 try
                 {
                     _item.Command.Restore!(_lastCommandToken);
+                    // バックログ#7：戻し成功後は永続ストアのトークンを削除（後始末）。
+                    _backup.RemoveCommandToken(_item.Id);
                     StatusMessage = "✅ Command を適用前の状態に戻しました。";
                     IsApplied = false;
                     ReadAndSyncCurrentValue();
@@ -680,6 +719,15 @@ public partial class SettingDialogViewModel : ObservableObject
                 catch (UnauthorizedAccessException) when (HandleElevationNeeded()) { return; }
                 catch (SecurityException)         when (HandleElevationNeeded()) { return; }
                 catch (InvalidOperationException ex) when (LooksLikeAccessDenied(ex.Message) && HandleElevationNeeded()) { return; }
+                // cross-reviewer should_fix①：委譲型 Command（マーカーのみのトークン）で実データが既に無い場合
+                // （SystemSoundService.NoBackupDataMessage 等）。マーカーと実データがズレたまま持ち越さないよう
+                // 幽霊トークンを掃除する（掃除しないと次回 Load でも「戻す」が誤って活性化し続ける）。
+                catch (InvalidOperationException ex) when (ex.Message == SystemSoundService.NoBackupDataMessage)
+                {
+                    _backup.RemoveCommandToken(_item.Id);
+                    Dialogs.Error($"戻しに失敗しました：\n{ex.Message}", "戻し失敗");
+                    StatusMessage = "❌ 戻し失敗：退避データなし（トークンを破棄しました）";
+                }
                 catch (Exception ex)
                 {
                     Dialogs.Error($"戻しに失敗しました：\n{ex.Message}", "戻し失敗");

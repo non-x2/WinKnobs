@@ -27,6 +27,14 @@ public class SystemSoundService
     /// <summary>maintenance 退避ストアの機能キー。</summary>
     public const string FeatureKey = "systemsounds";
 
+    /// <summary>
+    /// cross-reviewer should_fix①（2026-07-21）：委譲型 Command（CommandAction.Backup がマーカーのみを返し、
+    /// 実データは Maintenance ストア側にある設計）向け。RestoreAll が実際には何も復元できなかった場合に
+    /// この文言で throw する。SettingDialogViewModel 側でこの文言を判定し、幽霊トークン（command_tokens.json）
+    /// を掃除する（マーカーと実データがズレた状態を持ち越さない）。
+    /// </summary>
+    public const string NoBackupDataMessage = "復元用の退避データが見つかりません。既に復元済みか、データが失われています。";
+
     private readonly RegistryService _registry;
     private readonly BackupService _backup;
 
@@ -140,21 +148,27 @@ public class SystemSoundService
     /// </summary>
     public void RestoreAll()
     {
-        if (!_backup.HasMaintenanceOriginal(FeatureKey)) return;
+        // cross-reviewer should_fix①（2026-07-21）：退避なし時の無音 no-op をやめ throw する。
+        // 委譲型 Command は CommandAction.Backup がマーカー文字列しか返さないため、SettingDialogViewModel は
+        // 「Restore が例外を投げなかった＝成功」としか判定できない。無音 return のままだと、マーカー
+        // （command_tokens.json）だけが残って実データ（Maintenance ストア）が既に無い状態でも
+        // 「✅ Command を適用前の状態に戻しました。」という偽成功が表示されてしまう。
+        if (!_backup.HasMaintenanceOriginal(FeatureKey))
+            throw new InvalidOperationException(NoBackupDataMessage);
 
         var dict = _backup.LoadMaintenanceOriginals();
         if (!dict.TryGetValue(FeatureKey, out var json))
         {
             _backup.RemoveMaintenanceOriginal(FeatureKey);
-            return;
+            throw new InvalidOperationException(NoBackupDataMessage);
         }
 
         var backup = SystemSoundHelper.TryDeserialize(json);
         if (backup == null)
         {
-            // 退避破損：これ以上壊さない。後始末のみ。
+            // 退避破損：これ以上壊さない。後始末のみ。破損も「実質的に復元用データを失った」ため同じ扱いで throw。
             _backup.RemoveMaintenanceOriginal(FeatureKey);
-            return;
+            throw new InvalidOperationException(NoBackupDataMessage);
         }
 
         var failures = new List<string>();

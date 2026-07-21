@@ -27,6 +27,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.10] - 2026-07-21（Command型戻しトークンの永続化・バックログ#7）
+
+> 📝 plan-validator/cross-reviewer 2026-07-21 指摘（v0.4.9サイクル）を反映。Command 型全項目横断でトークンストア（command_tokens.json）を新設。
+
+### Fixed
+- **Command 型戻しトークンの永続化**（バックログ#7）：設定画面を閉じると `_lastCommandToken`（ViewModel フィールドのみ保持）が消え「戻す」ボタンが使えなくなっていた不具合を解消。`BackupService` に itemId 単位の JSON ストア（`command_tokens.json`・first-touch-wins・原子的置換）を新設し、`SettingDialogViewModel.Load` で読み戻すことで画面を閉じても「戻す」が使える。
+  - plan-validator 指摘1：トークンの永続化は `Backup.Invoke()` 直後でなく Apply 成功後に行い、Apply 例外時にディスクへ幽霊トークンを残さない。
+  - plan-validator 指摘2：「この設定画面を閉じると『戻す』ボタンは使えなくなります」という旧仕様の案内文言（privacy.advertisingIdDisabled のみ該当・全数grep確認済み）を削除。
+  - cross-reviewer should_fix1：トークン永続化 I/O の失敗（ディスク容量不足・AVロック等）を Apply 本体の失敗として誤報告しないよう独立 try/catch 化。レジストリ変更成功は ✅ のまま「⚠️ 戻す用バックアップの保存に失敗」の副次警告のみ表示。
+  - plan-validator 指摘4：Load 時にトークンが残っていれば `IsApplied=true` として「戻す」を活性化（外部で手動復元済みでも出せてしまう信頼境界を doc コメントに明記）。
+  - 既知の弱点2点を doc コメントに明記：admin/非admin 並存中の read-modify-write Lost Update（既存 network/maintenance ストアと同型）／委譲型 Command のマーカーと実データのズレによる無音 no-op。
+  - 新規 `BackupServiceCommandTokenTests`（xUnit・APPDATA 非依存の分離コンストラクタ経由）を追加。
+
+---
+
 ## [0.4.9] - 2026-07-21（プライバシーノブ2本・診断データ最小化＋広告ID無効化）
 
 > 📝 privacy.telemetryMinimized（HKLM Policies\DataCollection・厳密1判定・既定=値削除）＋privacy.advertisingIdDisabled（HKCU AdvertisingInfo・厳密0判定）。plan-validator 精査済み設計を反映。
