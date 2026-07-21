@@ -29,6 +29,13 @@ param(
     [switch]$DryRun
 )
 
+# リポジトリ直下以外での誤実行防止（55件の警告羅列で気づきにくい事故を防ぐ）
+$repoRoot = git rev-parse --show-toplevel 2>$null
+if (-not $repoRoot -or -not (Test-Path (Join-Path $repoRoot 'WinKnobs.slnx'))) {
+    Write-Error "WinKnobs リポジトリ直下で実行してください（git rev-parse 失敗 or WinKnobs.slnx が見つかりません）。"
+    exit 1
+}
+
 $ErrorActionPreference = "Stop"
 
 # バージョン → コミットハッシュ 対応表（2026-07-21 時点・filter-repo 実行前）
