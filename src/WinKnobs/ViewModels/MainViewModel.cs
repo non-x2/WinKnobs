@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Data;
@@ -176,6 +177,35 @@ public partial class MainViewModel : ObservableObject
 
         InitializeCategories();
         InitializeSettingItems();
+
+        // v0.4.12（バックログ#10）：起動時1回、カタログから外れた孤児トークン/パスを掃除。
+        // ベストエフォート（失敗しても起動は止めない）。2つの掃除は個別 try/catch にして、
+        // 片方の失敗がもう片方を巻き添えにしないようにする（plan-validator 指摘）。
+        // 注：UAC 昇格自己再起動の数秒ウィンドウでは新旧2プロセスが起動時掃除を並行実行し得る
+        // （書込頻度は従来より増えるが、既存3ストアと同じ原子的置換＋割り切りの延長として許容）。
+        try
+        {
+            var validCommandIds = Items
+                .Where(i => i.ValueType == SettingValueType.Command && i.Command?.CanRestore == true)
+                .Select(i => i.Id);
+            _backup.CleanupOrphanedCommandTokens(validCommandIds);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MainViewModel] 孤児Commandトークン掃除に失敗（起動は継続）: {ex.Message}");
+        }
+
+        try
+        {
+            var validRegistryIds = Items
+                .Where(i => i.ValueType != SettingValueType.Command && !string.IsNullOrEmpty(i.RegistryPath))
+                .Select(i => i.Id);
+            _backup.CleanupOrphanedRegistryBackupPaths(validRegistryIds);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MainViewModel] 孤児レジストリバックアップパス掃除に失敗（起動は継続）: {ex.Message}");
+        }
 
         FilteredItems = CollectionViewSource.GetDefaultView(Items);
         FilteredItems.Filter = FilterItem;

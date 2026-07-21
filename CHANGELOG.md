@@ -27,6 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.12] - 2026-07-21（Commandトークンの鮮度表示＋孤児掃除・バックログ#10）
+
+> 📝 plan-validator 2026-07-21 精査済み仕様（バックログ#10）を反映。品質ゲート1〜4完走。
+
+### Added
+- **Commandトークンの鮮度表示**（バックログ#10）：`command_tokens.json` にitemId単位の保存時刻（`SavedAt`）を持たせ、設定ダイアログで「◯月◯日適用時の状態に戻せます」を表示。旧v0.4.10形式（token文字列のみ）は互換ロードで読み続けられ、`SavedAt`は「記録なし」として扱う（次回保存時に新形式へ遅延移行）。
+- **孤児トークン／孤児パスの起動時掃除**（バックログ#10）：`command_tokens.json`・`registry_backup_paths.json`ともCanRestore喪失項目（カタログから外れた／CanRestoreが剥奪された項目）のエントリを起動時1回自動掃除。`registry_backup_paths.json`側の孤児掃除は`CleanupOldBackups()`の参照保護（バックログ#9）を解除する効果も兼ねる＝孤児化した`.reg`が永久保護されず通常の10件ローテーションに戻る。
+  - 安全弁：カタログ側の集合が空（登録itemId 0件）の異常時は削除せず0件で終了（回帰バグ時の「戻す」全滅防止・plan-validator指摘反映）。
+  - 起動時掃除は2ストアを個別try/catchで実行（片方の失敗がもう片方を巻き添えにしない）。失敗は起動を止めずDebug.WriteLineのみ。
+  - 既知の注記：UAC昇格自己再起動の待機ウィンドウ中は理論上2プロセスが並行して起動時掃除を実行し得る（既存3ストアと同型の割り切り）。
+
+### Notes
+- 初回起動時、孤児が1件でもあれば`command_tokens.json`は即座に新形式（オブジェクト値）へ書き換わる。旧バージョンへロールバックする場合は同ファイルを手動退避／削除すること（旧コードは型不一致で読み込み全件喪失扱いになるがクラッシュはしない）。
+- テスト：既存1229件＋新規17件＝計1246件green（BackupServiceCommandTokenTests +10／BackupServiceRegistryBackupPathTests +5／SettingDialogViewModelTests新設+2）。
+
+---
+
 ## [0.4.11] - 2026-07-21（レジストリ型LastBackupPathの永続化・バックログ#9）
 
 > 📝 plan-validator 2026-07-21 精査済み仕様（バックログ#9）を反映。v0.4.10 の Command 型戻しトークン永続化をレジストリ型へ横展開。

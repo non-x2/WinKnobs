@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using WinKnobs.Services;
 
 namespace WinKnobs.Tests;
@@ -98,5 +99,124 @@ public class BackupServiceCommandTokenTests : IDisposable
 
         Assert.True(File.Exists(_sut.CommandTokensPath));
         Assert.False(File.Exists(_sut.CommandTokensPath + ".tmp"));
+    }
+
+    // =================== v0.4.12（バックログ#10）：鮮度表示・旧形式互換・孤児掃除 ===================
+
+    [Fact]
+    public void SaveCommandTokenIfAbsent_保存時刻が記録される()
+    {
+        var before = DateTimeOffset.Now;
+
+        _sut.SaveCommandTokenIfAbsent("privacy.advertisingIdDisabled", "token-abc");
+
+        var after = DateTimeOffset.Now;
+        var savedAt = _sut.LoadCommandTokenSavedAt("privacy.advertisingIdDisabled");
+
+        Assert.NotNull(savedAt);
+        Assert.InRange(savedAt!.Value, before.AddSeconds(-1), after.AddSeconds(1));
+    }
+
+    [Fact]
+    public void LoadCommandTokenSavedAt_未保存キーはnull()
+    {
+        Assert.Null(_sut.LoadCommandTokenSavedAt("no.such.item"));
+    }
+
+    [Fact]
+    public void LoadCommandToken_旧形式JSON文字列のみでも読める()
+    {
+        // v0.4.10 形式（値はトークン文字列のみ）を手書きで再現。
+        File.WriteAllText(_sut.CommandTokensPath, "{\"privacy.advertisingIdDisabled\":\"legacy-token\"}");
+
+        var loaded = _sut.LoadCommandToken("privacy.advertisingIdDisabled");
+
+        Assert.Equal("legacy-token", loaded);
+    }
+
+    [Fact]
+    public void LoadCommandTokenSavedAt_旧形式JSONはnullを返す()
+    {
+        File.WriteAllText(_sut.CommandTokensPath, "{\"privacy.advertisingIdDisabled\":\"legacy-token\"}");
+
+        Assert.Null(_sut.LoadCommandTokenSavedAt("privacy.advertisingIdDisabled"));
+    }
+
+    [Fact]
+    public void SaveCommandTokenIfAbsent_旧形式ファイル上での新規保存後は新形式で保存される_遅延移行確認()
+    {
+        File.WriteAllText(_sut.CommandTokensPath, "{\"existing.item\":\"old-token\"}");
+
+        _sut.SaveCommandTokenIfAbsent("new.item", "new-token");
+
+        // 旧エントリも含めてファイル全体が新形式（オブジェクト値）で書き直されている。
+        var raw = File.ReadAllText(_sut.CommandTokensPath);
+        using var doc = JsonDocument.Parse(raw);
+        Assert.Equal(JsonValueKind.Object, doc.RootElement.GetProperty("existing.item").ValueKind);
+        Assert.Equal(JsonValueKind.Object, doc.RootElement.GetProperty("new.item").ValueKind);
+
+        // 互換ロード＋新規保存の往復も正しく機能する。
+        Assert.Equal("old-token", _sut.LoadCommandToken("existing.item"));
+        Assert.Equal("new-token", _sut.LoadCommandToken("new.item"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedCommandTokens_有効itemId以外は削除される()
+    {
+        _sut.SaveCommandTokenIfAbsent("keep.me", "token-1");
+        _sut.SaveCommandTokenIfAbsent("orphan.me", "token-2");
+
+        _sut.CleanupOrphanedCommandTokens(new[] { "keep.me" });
+
+        Assert.Null(_sut.LoadCommandToken("orphan.me"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedCommandTokens_有効itemIdに含まれるものは残る()
+    {
+        _sut.SaveCommandTokenIfAbsent("keep.me", "token-1");
+        _sut.SaveCommandTokenIfAbsent("orphan.me", "token-2");
+
+        _sut.CleanupOrphanedCommandTokens(new[] { "keep.me" });
+
+        Assert.Equal("token-1", _sut.LoadCommandToken("keep.me"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedCommandTokens_空集合を渡すと削除せず0件を返す_安全弁()
+    {
+        // plan-validator 指摘：validItemIds が空集合かつストアに1件以上ある場合、
+        // カタログ構築の回帰バグ等で誤って全滅させる事故を防ぐため削除しない。
+        _sut.SaveCommandTokenIfAbsent("keep.me", "token-1");
+
+        var removed = _sut.CleanupOrphanedCommandTokens(Array.Empty<string>());
+
+        Assert.Equal(0, removed);
+        Assert.Equal("token-1", _sut.LoadCommandToken("keep.me"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedCommandTokens_削除件数が戻り値に一致する()
+    {
+        _sut.SaveCommandTokenIfAbsent("keep.me", "token-1");
+        _sut.SaveCommandTokenIfAbsent("orphan.1", "token-2");
+        _sut.SaveCommandTokenIfAbsent("orphan.2", "token-3");
+
+        var removed = _sut.CleanupOrphanedCommandTokens(new[] { "keep.me" });
+
+        Assert.Equal(2, removed);
+    }
+
+    [Fact]
+    public void CleanupOrphanedCommandTokens_該当なしなら0件でファイルも変化しない()
+    {
+        _sut.SaveCommandTokenIfAbsent("keep.me", "token-1");
+        var before = File.ReadAllText(_sut.CommandTokensPath);
+
+        var removed = _sut.CleanupOrphanedCommandTokens(new[] { "keep.me", "not.present" });
+
+        var after = File.ReadAllText(_sut.CommandTokensPath);
+        Assert.Equal(0, removed);
+        Assert.Equal(before, after);
     }
 }

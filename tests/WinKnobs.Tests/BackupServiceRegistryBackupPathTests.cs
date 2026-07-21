@@ -157,4 +157,85 @@ public class BackupServiceRegistryBackupPathTests : IDisposable
         Assert.True(remainingNonReferenced <= 10,
             $"非参照 .reg が MaxKeepCount(10) を超えて残っている: {remainingNonReferenced}");
     }
+
+    // =================== v0.4.12（バックログ#10）：孤児掃除＋#9保護解除連鎖 ===================
+
+    [Fact]
+    public void CleanupOrphanedRegistryBackupPaths_有効itemId以外は削除される()
+    {
+        _sut.SaveRegistryBackupPath("keep.me", "keep.reg");
+        _sut.SaveRegistryBackupPath("orphan.me", "orphan.reg");
+
+        _sut.CleanupOrphanedRegistryBackupPaths(new[] { "keep.me" });
+
+        Assert.Null(_sut.LoadRegistryBackupPath("orphan.me"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRegistryBackupPaths_有効itemIdに含まれるものは残る()
+    {
+        _sut.SaveRegistryBackupPath("keep.me", "keep.reg");
+        _sut.SaveRegistryBackupPath("orphan.me", "orphan.reg");
+
+        _sut.CleanupOrphanedRegistryBackupPaths(new[] { "keep.me" });
+
+        Assert.Equal("keep.reg", _sut.LoadRegistryBackupPath("keep.me"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRegistryBackupPaths_削除件数が戻り値に一致する()
+    {
+        _sut.SaveRegistryBackupPath("keep.me", "keep.reg");
+        _sut.SaveRegistryBackupPath("orphan.1", "orphan1.reg");
+        _sut.SaveRegistryBackupPath("orphan.2", "orphan2.reg");
+
+        var removed = _sut.CleanupOrphanedRegistryBackupPaths(new[] { "keep.me" });
+
+        Assert.Equal(2, removed);
+    }
+
+    [Fact]
+    public void CleanupOrphanedRegistryBackupPaths_空集合を渡すと削除せず0件を返す_安全弁()
+    {
+        // plan-validator 指摘：Command 側と同じ安全弁。空集合渡し時はカタログ構築の回帰バグを疑って削除しない。
+        _sut.SaveRegistryBackupPath("keep.me", "keep.reg");
+
+        var removed = _sut.CleanupOrphanedRegistryBackupPaths(Array.Empty<string>());
+
+        Assert.Equal(0, removed);
+        Assert.Equal("keep.reg", _sut.LoadRegistryBackupPath("keep.me"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRegistryBackupPaths実行後_CleanupOldBackupsの保護が解除され通常ローテーション対象になる()
+    {
+        // #9 で導入した CleanupOldBackups() の参照保護（referencedPaths）が、孤児掃除実行後に
+        // 正しく解除される＝最重要テスト。ExportKey は非存在キー名を使い実レジストリに触れない。
+        var referencedKey = @"HKCU\Software\WinKnobsTests_NonExistent_" + Guid.NewGuid().ToString("N");
+        var referencedPath = _sut.ExportKey(referencedKey, "referenced_item");
+        _sut.SaveRegistryBackupPath("referenced_item", referencedPath);
+
+        // 保護解除が効いているかを厳しく検証するため「最も古い」扱いにする。
+        File.SetLastWriteTime(referencedPath, DateTime.Now.AddMinutes(-1000));
+
+        // カタログから "referenced_item" が孤児化した想定で掃除を実行（#9保護解除）。
+        var removed = _sut.CleanupOrphanedRegistryBackupPaths(new[] { "some.other.item" });
+        Assert.Equal(1, removed);
+        Assert.Null(_sut.LoadRegistryBackupPath("referenced_item"));
+
+        // 非参照の .reg を11件作り、MaxKeepCount(10) を超えさせてローテーションを発火。
+        var nonReferencedPaths = new List<string>();
+        for (int i = 0; i < 11; i++)
+        {
+            var otherKey = @"HKCU\Software\WinKnobsTests_NonExistent_" + Guid.NewGuid().ToString("N");
+            var path = _sut.ExportKey(otherKey, $"non_referenced_{i:D2}");
+            File.SetLastWriteTime(path, DateTime.Now.AddMinutes(-100 + i));
+            nonReferencedPaths.Add(path);
+        }
+        var triggerKey = @"HKCU\Software\WinKnobsTests_NonExistent_" + Guid.NewGuid().ToString("N");
+        _sut.ExportKey(triggerKey, "trigger_cleanup");
+
+        // 保護が解除されたので、最も古いタイムスタンプの referencedPath は通常ローテーションで削除される。
+        Assert.False(File.Exists(referencedPath));
+    }
 }

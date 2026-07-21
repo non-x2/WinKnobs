@@ -42,6 +42,12 @@ namespace WinKnobs.ViewModels;
 ///   （registry_backup_paths.json）へ横展開して永続化。Command 型と同じく Apply 成功後に保存し、
 ///   Load 時に File.Exists を確認して復元（stale なら掃除して IsApplied は立てない）。
 ///   latest-wins（Command 型の first-touch-wins とは意図的に異なる＝BackupService 側 doc コメント参照）。
+///
+/// v0.4.12（バックログ#10・plan-validator 2026-07-21 精査済み）：
+/// - Command 型の永続トークンに保存時刻（SavedAt）が付いたため、Load 時に StatusMessage へ鮮度表示を
+///   差し込む（時刻あり：「◯月◯日 HH:mm適用時の状態に戻せます。」／時刻なし＝旧形式引き継ぎ：
+///   「前回適用時のバックアップを復元できます（適用日時は記録されていません）」）。
+///   レジストリ型は鮮度表示スコープ外（既存文言を維持）。
 /// </summary>
 public partial class SettingDialogViewModel : ObservableObject
 {
@@ -139,6 +145,8 @@ public partial class SettingDialogViewModel : ObservableObject
         // 変数名は cross-reviewer ⚪指摘反映：LastBackupPath（レジストリ型の.reg存在）と紛らわしいため
         // 「command_tokens.json から読めた」ことを明示する名前にした。
         bool hasPersistedCommandToken = false;
+        // v0.4.12（バックログ#10）：鮮度表示用。null＝旧形式（v0.4.10）引き継ぎで保存時刻が記録されていない。
+        DateTimeOffset? commandTokenSavedAt = null;
         if (item.ValueType == SettingValueType.Command && item.Command?.CanRestore == true)
         {
             var savedToken = _backup.LoadCommandToken(item.Id);
@@ -147,6 +155,7 @@ public partial class SettingDialogViewModel : ObservableObject
                 _lastCommandToken = savedToken;
                 IsApplied = true;
                 hasPersistedCommandToken = true;
+                commandTokenSavedAt = _backup.LoadCommandTokenSavedAt(item.Id);
             }
         }
 
@@ -216,7 +225,15 @@ public partial class SettingDialogViewModel : ObservableObject
         }
 
         // バックログ#9：Command 型とレジストリ型は排他なので両立ケースはない（if/else if で可読に）。
-        if (hasPersistedCommandToken || hasPersistedRegistryBackup)
+        // バックログ#10：Command 型のみ鮮度表示（保存時刻あり/なしで文言分岐）。レジストリ型は
+        // 保存時刻を持たないためスコープ外＝従来文言を維持。
+        if (hasPersistedCommandToken)
+        {
+            StatusMessage = commandTokenSavedAt.HasValue
+                ? $"📦 {commandTokenSavedAt.Value.LocalDateTime:yyyy年M月d日 HH:mm}適用時の状態に戻せます。"
+                : "📦 前回適用時のバックアップを復元できます（適用日時は記録されていません）。";
+        }
+        else if (hasPersistedRegistryBackup)
         {
             StatusMessage = "📦 前回適用時のバックアップを復元できます。";
         }

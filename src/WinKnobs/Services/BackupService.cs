@@ -16,6 +16,9 @@ namespace WinKnobs.Services;
 /// - v0.4.10（バックログ#7）：Command 型戻しトークンを command_tokens.json に永続化。
 ///   xUnit 分離用にコンストラクタへ backupDirOverride 引数を追加（既定 null＝従来通り %APPDATA%）
 /// - v0.4.11（バックログ#9）：レジストリ型 LastBackupPath を registry_backup_paths.json に永続化（latest-wins）。
+/// - v0.4.12（バックログ#10）：command_tokens.json に保存時刻（SavedAt）を追加し鮮度表示に対応（旧形式との
+///   互換ロードは JsonDocument で構造分岐・保存は常に新形式＝遅延移行）。加えて command_tokens.json /
+///   registry_backup_paths.json の両方にカタログ孤児（CanRestore 喪失・項目削除）エントリの掃除機能を追加。
 ///
 /// 最大10件保持・古いものは自動削除（開発ガイドライン準拠）。
 /// </summary>
@@ -231,13 +234,22 @@ public class BackupService
     //    SaveMaintenanceOriginalIfAbsent と組み合わせる Command）では、このストアのマーカーと Maintenance
     //    側の実データがズレると「戻す」が例外を出さず無音で no-op になりうる（信頼境界。呼び出し元の
     //    CommandAction.Restore 実装が両ストアの整合を保証する責務を持つ）。
+    //
+    // v0.4.12（バックログ#10）：保存時刻（SavedAt）を持たせて鮮度表示に対応。
+    // 旧形式（v0.4.10、値はトークン文字列のみ）との互換ロードは LoadCommandTokensDict 内で
+    // JsonDocument により1エントリずつ構造分岐する。保存は常に新形式（オブジェクト）＝遅延移行。
+
+    /// <summary>
+    /// v0.4.12：command_tokens.json の1エントリ。SavedAt は旧形式読込時「不明」を表すため nullable。
+    /// </summary>
+    private sealed record CommandTokenEntry(string Token, DateTimeOffset? SavedAt);
 
     /// <summary>Command 型項目の復元用トークンを itemId 単位で退避（既に退避済みなら何もしない＝first-touch-wins）。</summary>
     public void SaveCommandTokenIfAbsent(string itemId, string token)
     {
         var dict = LoadCommandTokensDict();
         if (dict.ContainsKey(itemId)) return;
-        dict[itemId] = token;
+        dict[itemId] = new CommandTokenEntry(token, DateTimeOffset.Now);
         SaveCommandTokensDict(dict);
     }
 
@@ -245,7 +257,17 @@ public class BackupService
     public string? LoadCommandToken(string itemId)
     {
         var dict = LoadCommandTokensDict();
-        return dict.TryGetValue(itemId, out var token) ? token : null;
+        return dict.TryGetValue(itemId, out var entry) ? entry.Token : null;
+    }
+
+    /// <summary>
+    /// v0.4.12（バックログ#10）：itemId のトークン保存時刻を読む（UI鮮度表示用）。
+    /// 未保存キー・旧形式（v0.4.10）読込時・破損時はいずれも null。
+    /// </summary>
+    public DateTimeOffset? LoadCommandTokenSavedAt(string itemId)
+    {
+        var dict = LoadCommandTokensDict();
+        return dict.TryGetValue(itemId, out var entry) ? entry.SavedAt : null;
     }
 
     /// <summary>itemId のトークンを削除（戻し完了後の後始末）。削除失敗（ファイルロック等）は無害として握り潰す（ClearNetworkOriginals 同型）。</summary>
@@ -259,22 +281,65 @@ public class BackupService
         catch { /* 後始末失敗は無害 */ }
     }
 
-    private Dictionary<string, string> LoadCommandTokensDict()
+    /// <summary>
+    /// v0.4.12（バックログ#10・plan-validator 空集合ガード）：カタログ（MainViewModel.Items）から外れた
+    /// 孤児 itemId（CanRestore 喪失・項目削除を含む）のトークンを削除する。
+    /// validItemIds が空集合かつストアに1件以上ある場合は、カタログ構築の回帰バグ等で誤って
+    /// 全滅させる事故を防ぐ安全弁として削除せず 0 を返す。
+    /// </summary>
+    /// <returns>削除した件数。</returns>
+    public int CleanupOrphanedCommandTokens(IEnumerable<string> validItemIds)
+    {
+        var dict = LoadCommandTokensDict();
+        if (dict.Count == 0) return 0;
+
+        var validSet = new HashSet<string>(validItemIds, StringComparer.Ordinal);
+        if (validSet.Count == 0) return 0;   // 安全弁：空集合渡し時は削除しない
+
+        var orphanKeys = dict.Keys.Where(k => !validSet.Contains(k)).ToList();
+        if (orphanKeys.Count == 0) return 0;
+
+        foreach (var key in orphanKeys) dict.Remove(key);
+        SaveCommandTokensDict(dict);
+        return orphanKeys.Count;
+    }
+
+    private Dictionary<string, CommandTokenEntry> LoadCommandTokensDict()
     {
         try
         {
             if (!File.Exists(_commandTokensPath)) return new();
             var json = File.ReadAllText(_commandTokensPath);
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+            using var doc = JsonDocument.Parse(json);
+            var result = new Dictionary<string, CommandTokenEntry>();
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    // 旧形式（v0.4.10）：値はトークン文字列のみ→保存時刻は「不明」= null
+                    result[prop.Name] = new CommandTokenEntry(prop.Value.GetString() ?? "", null);
+                }
+                else if (prop.Value.ValueKind == JsonValueKind.Object)
+                {
+                    // 新形式（v0.4.12）：{ Token, SavedAt }
+                    var entry = prop.Value.Deserialize<CommandTokenEntry>();
+                    if (entry != null) result[prop.Name] = entry;
+                }
+                // それ以外の ValueKind（想定外）は当該エントリのみ読み捨てる
+            }
+            return result;
         }
         catch
         {
+            // 破損時は全件喪失（既存 Network/Maintenance と同じ割り切り）
             return new();
         }
     }
 
-    private void SaveCommandTokensDict(Dictionary<string, string> dict)
+    private void SaveCommandTokensDict(Dictionary<string, CommandTokenEntry> dict)
     {
+        // 常に新形式（オブジェクト）で書き出す。旧形式ファイルは次回何らかの保存操作が走った時点で
+        // 自動的に新形式へ書き換わる（明示的な一括マイグレーション処理は作らない＝遅延移行）。
         // network/maintenance 版と同じ原子的置換（temp 書込 → コピー上書き → temp 削除）。
         var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
         var tmp = _commandTokensPath + ".tmp";
@@ -325,6 +390,32 @@ public class BackupService
             if (dict.Remove(itemId)) SaveRegistryBackupPathsDict(dict);
         }
         catch { /* 後始末失敗は無害 */ }
+    }
+
+    /// <summary>
+    /// v0.4.12（バックログ#10・plan-validator 空集合ガード）：カタログ（MainViewModel.Items）から外れた
+    /// 孤児 itemId（CanRestore 喪失・項目削除を含む）の LastBackupPath エントリを削除する。
+    /// 削除すると CleanupOldBackups() の referencedPaths 保護（#9）から自然に外れ、通常の
+    /// MaxKeepCount ローテーション対象へ戻る（#9 保護解除の要求）。.reg 実ファイルはここでは削除しない
+    /// （実ファイル削除は既存 CleanupOldBackups() に任せる＝責務分離）。
+    /// validItemIds が空集合かつストアに1件以上ある場合は、カタログ構築の回帰バグ等で誤って
+    /// 全滅させる事故を防ぐ安全弁として削除せず 0 を返す。
+    /// </summary>
+    /// <returns>削除した件数。</returns>
+    public int CleanupOrphanedRegistryBackupPaths(IEnumerable<string> validItemIds)
+    {
+        var dict = LoadRegistryBackupPathsDict();
+        if (dict.Count == 0) return 0;
+
+        var validSet = new HashSet<string>(validItemIds, StringComparer.Ordinal);
+        if (validSet.Count == 0) return 0;   // 安全弁：空集合渡し時は削除しない
+
+        var orphanKeys = dict.Keys.Where(k => !validSet.Contains(k)).ToList();
+        if (orphanKeys.Count == 0) return 0;
+
+        foreach (var key in orphanKeys) dict.Remove(key);
+        SaveRegistryBackupPathsDict(dict);
+        return orphanKeys.Count;
     }
 
     private Dictionary<string, string> LoadRegistryBackupPathsDict()
