@@ -103,6 +103,9 @@ docs/apply_test_result.json
 scripts/*.ps1
 scripts/*.bat
 
+# 2026-07-21 例外：VM/ホスト固有情報を含まない公開用リリース管理スクリプト
+!scripts/create_release_tags.ps1
+
 # 2026-05-31 追加：VM-UIA 自動実行（★2方式）の実行時テンポラリ。
 # scripts/ 直下の `_` プレフィックスはランナーが書く進捗マーカー・中間出力の規約
 # （_schtest.txt / _vm_session_check.txt / _vm_test_done.marker / _vm_test_cmd.ps1 等）。

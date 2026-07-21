@@ -21,7 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **受信/送信バッファ最大化**：実機の Intel I219-V で `*ReceiveBuffers`/`*TransmitBuffers` の `ValidRegistryValues` が空（ドライバがレンジを公開しない個体）で「実機から動的に最大値を検出」ができず、ハードコードは他 NIC で無効値になるリスクがあるため見送り（本機は現在値 2048 で既に上限相当の可能性）
   - **QoS パケットスケジューラの予約帯域解除**（`NonBestEffortLimit`）：WebSearch 裏取りで「未使用の 20% を常時確保している」という前提自体が誤りと判明（QoS 要求時のみ有効になる予約上限であり、通常のゲーム/配信シナリオでは体感効果なしとの分析が定説）→ 実装見送り
 - **M-1 リファクタ**（v0.2 期間中漸進対応）：HKLM 3 択フォールバックのヘルパー化
-- **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）：v0.1.6 タグ / Releases / Sponsors / Dependabot / Discussions / Security Advisory / Branch Protection / Public 化
+- **Public 化前残作業**（[Public化前準備物 v1](docs/Public化前準備物_v1.md)）・2026-07-21 時点 v0.4.9：
+  - ✅ 完了（ローカル）：バージョンタグ v0.1.0〜v0.4.9 一括作成（[scripts/create_release_tags.ps1](scripts/create_release_tags.ps1)・55件・冪等・DryRun対応）／CodeQL C# 解析ワークフロー追加（[.github/workflows/codeql.yml](.github/workflows/codeql.yml)・windows-latest・manual build）／v0.4.9 リリースノート下書き（[docs/release_notes_v0.4.9_draft.md](docs/release_notes_v0.4.9_draft.md)）
+  - ⬜ 未着手（のんさん判断待ち・push含む）：Releases 公開 / Sponsors 申請 / Dependabot / Discussions / Security Advisory / Secret Scanning / Branch Protection / Public 化
 
 ---
 
