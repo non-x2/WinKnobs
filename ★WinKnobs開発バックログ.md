@@ -1,7 +1,7 @@
 ---
 名前: WinKnobs開発バックログ
-最終更新: 2026-07-20
-鮮度確認: 2026-07-20（次回目安: 2026-10-20）
+最終更新: 2026-07-21
+鮮度確認: 2026-07-21（次回目安: 2026-10-21）
 正本: この文書（WinKnobs自走開発の「次に何を作るか」の単一情報源）
 レーン: WinKnobs
 ---
@@ -23,13 +23,13 @@
 | # | 項目 | 需要 | コスト | 北極星 | 状態 | 出典 |
 |---|---|---|---|---|---|---|
 | 8 | DeleteValueOrThrow昇格フロー統一（副次失敗経路が昇格誘導に乗らない→UnauthorizedAccessException化・既存15箇所超の回帰テスト必須） | ★ | 🟡 | +1 | ⬜未着手 | cross-reviewer 2026-07-21 should_fix②（既存ギャップ・v0.4.5〜に波及） |
-| 11 | GraphicsService.RestoreAll無音no-op解消（退避なし/欠落/破損時にsilent return→GraphicsListViewModelが「↩戻しました」成功表示の芽。レース時限定・軽微。SystemSound同型のthrow化＋VM側ハンドリング。※NicPowerは退避なし時Success+説明メッセージ表示＝許容・注記のみ／HyperV・RDPは明示ダイアログ済で問題なし） | ★ | 🟢 | +1 | ⬜未着手 | 第6サイクル品質ゲート0宿題確認 2026-07-21（委譲型Command該当はSystemSoundのみと実証） |
 | 5 | 右クリックメニュー項目の追加/削除（クラシック化とは別） | ★★ | 🔴 | +1 | ⬜未着手（実装重め・計画のみ先行可） | 競合差分 #5 |
 | 6 | 特殊フォルダ名/アイコン変更（ごみ箱リネーム等） | ★ | 🟢 | +1 | ⬜未着手 | 競合差分 #6 |
 
 ## ✅ 完了
 | 日付 | 項目 | バージョン | 備考 |
 |---|---|---|---|
+| 2026-07-21 | GraphicsService.RestoreAll無音no-op解消（#11・退避なし/欠落/破損の3経路をSystemSoundService同型のInvalidOperationException throw化） | v0.4.13 | plan-validator確認＝GraphicsListViewModel側は既存try/catchで対応済みのためVM改修不要（バックログ記載の「VM側ハンドリングが必須」は誤前提と判明）。3分岐目（TOCTOU限定）は単体テスト対象外と判断（SystemSoundService側の同型分岐も未テストと確認）。cross-reviewer must_fixゼロ・テスト1246件→1248件green（新規2件）。自走ループ第7サイクル・commit（未push）。第6サイクルからのリレー継続（品質ゲート0はリレー元が完了済み） |
 | 2026-07-21 | Commandトークンの鮮度表示＋孤児掃除（#10・command_tokens.jsonにitemId単位SavedAt追加＋2ストア起動時孤児掃除） | v0.4.12 | 品質ゲート0＝両ストアともDictionary<string,string>で保存時刻なし・孤児掃除コードなしを実証（#10未実装）。スコープ確定＝鮮度表示はcommand_tokensのみ（レジストリ型は.regファイル名に時刻あり）、孤児掃除は両ストア（registry側は#9 CleanupOldBackups参照保護の解除も兼ねる）。旧v0.4.10形式（token文字列のみ）は互換ロード＋次回保存時に遅延移行。plan-validator3指摘反映（空集合安全弁＝カタログ0件時は削除せず0件・try/catch個別分離・ロールバック時の新形式化注記）。cross-reviewer must_fixゼロ＋should_fix1件反映（鮮度表示に年追加＝年またぎの誤誘導防止）。テスト1246件green（新規17件）・自走ループ第6サイクル後半・commit ae255d2（未push） |
 | 2026-07-21 | レジストリ型LastBackupPathの永続化（#9・backup\registry_backup_paths.json新設） | v0.4.11 | 品質ゲート0＝未実装実証（LastBackupPathはVMプロパティのみ・Load時nullリセット）＋command_tokens.json同型/ファイル分離で相乗り。latest-wins（レジストリ型のセッション内挙動の鏡・Command型first-touch-winsとの非対称はダイアログ文言+CHANGELOG明記）。保存はDoApply書込成功後のみ（幽霊エントリ防止）。CleanupOldBackups参照中.reg保護（共有10件枠の押し出し対策）。plan-validator 8指摘反映・cross-reviewer must_fixゼロ+should_fix3件対処（③VM統合テストは#7先例のストア層テストで受容＝机上トレース済み）・テスト1229件green（新規9件）・build 0警告・自走ループ第5サイクル・commit 188ac3c |
 | 2026-07-21 | Command型戻しトークンの永続化（#7・backup\command_tokens.json新設） | v0.4.10 | 品質ゲート0＝既存BackupServiceのJSON原状退避パターンに相乗り（二重ストア回避）。first-touch-wins＋原子的置換。Load時トークン復元→閉じても「戻す」可能に。plan-validator 7指摘反映（保存はApply成功後＝幽霊トークン防止・旧仕様文言更新等）・cross-reviewer must_fixゼロ＋should_fix2件反映（SystemSoundService無音no-op→例外化で偽成功排除・横展開は#9起票）・テスト1220件green（新規7件）・自走ループ第4サイクル |
