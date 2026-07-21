@@ -22,15 +22,16 @@
 
 | # | 項目 | 需要 | コスト | 北極星 | 状態 | 出典 |
 |---|---|---|---|---|---|---|
-| 4 | Public化残項目の消化（git tag作成ほか🟢可7件・最短公開ルート約2h） | ★★★ | 🟢 | +2 | ⬜未着手（公開系＝pushは承認キュー） | final_output\WinKnobs_Public化残項目リスト_v1.0_2026-06-21.md |
-| 7 | Command型戻しトークンの永続化（設定画面を閉じると「戻す」不能→IDキーでJSONストア永続化・Command型全項目横断） | ★★ | 🟡 | +1 | ⬜未着手 | plan-validator/cross-reviewer 2026-07-21 指摘（v0.4.9サイクル） |
 | 8 | DeleteValueOrThrow昇格フロー統一（副次失敗経路が昇格誘導に乗らない→UnauthorizedAccessException化・既存15箇所超の回帰テスト必須） | ★ | 🟡 | +1 | ⬜未着手 | cross-reviewer 2026-07-21 should_fix②（既存ギャップ・v0.4.5〜に波及） |
+| 9 | レジストリ型LastBackupPathの永続化（#7でCommand型のみ「閉じても戻せる」になり型間で「戻す」生存期間が非対称→レジストリ型へ横展開） | ★★ | 🟡 | +1 | ⬜未着手 | cross-reviewer 2026-07-21 should_fix②（v0.4.10サイクル） |
 | 5 | 右クリックメニュー項目の追加/削除（クラシック化とは別） | ★★ | 🔴 | +1 | ⬜未着手（実装重め・計画のみ先行可） | 競合差分 #5 |
 | 6 | 特殊フォルダ名/アイコン変更（ごみ箱リネーム等） | ★ | 🟢 | +1 | ⬜未着手 | 競合差分 #6 |
 
 ## ✅ 完了
 | 日付 | 項目 | バージョン | 備考 |
 |---|---|---|---|
+| 2026-07-21 | Command型戻しトークンの永続化（#7・backup\command_tokens.json新設） | v0.4.10 | 品質ゲート0＝既存BackupServiceのJSON原状退避パターンに相乗り（二重ストア回避）。first-touch-wins＋原子的置換。Load時トークン復元→閉じても「戻す」可能に。plan-validator 7指摘反映（保存はApply成功後＝幽霊トークン防止・旧仕様文言更新等）・cross-reviewer must_fixゼロ＋should_fix2件反映（SystemSoundService無音no-op→例外化で偽成功排除・横展開は#9起票）・テスト1220件green（新規7件）・自走ループ第4サイクル |
+| 2026-07-21 | Public化残項目のローカル完結分（#4） | bumpなし（アプリコード変更なし） | タグ55件ローカル作成（冪等スクリプトscripts\create_release_tags.ps1・filter-repo後も1コマンド再生成可）＋codeql.yml＋リリースノート下書き＋のんさん手順書（指示書\WinKnobs_Public化_のんさん手順書_2026-07-21.md）。commit de7bf6f+954a9a4（ローカルのみ）。秘匿5ファイルの履歴クリーン実測済み。**残＝のんさん側**：push承認（計4commit+55tag）→Settings操作→Public化。plan-validator 4指摘・cross-reviewer must_fix1+should_fix5全て反映・テスト1213件green・自走ループ第3サイクル |
 | 2026-07-21 | プライバシー2本＝診断データ最小化＋広告ID無効化（privacy.telemetryMinimized / privacy.advertisingIdDisabled） | v0.4.9 | 競合差分 #3（旧バックログ#2）・品質ゲート0で判明＝Bing/Cortanaは実装済み（スコープ半減）・**束ねUI不採用**（個別ノブと二重管理になるため。Privacyカテゴリ画面で1画面要件充足）・plan-validator 4指摘反映（広告IDはBoolean禁止→Command型で巻き添え削除防止）・cross-reviewer must_fixゼロ・テスト1213件green・自走ループ第2サイクル |
 | 2026-07-21 | バックグラウンドアプリ一括無効化（system.disableBackgroundApps） | v0.4.8 | 競合差分 #4・品質ゲート0〜5全通過（plan-validator 6指摘反映・cross-reviewer must_fixゼロ・テスト1163件green）・自走ループ初回サイクル |
 | 2026-07-15 | Copilot無効化（privacy.disableCopilot / desktop.hideCopilotButton） | v0.4.7 | 競合差分 #2・cross-reviewer済 |
