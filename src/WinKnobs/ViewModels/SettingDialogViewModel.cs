@@ -36,6 +36,12 @@ namespace WinKnobs.ViewModels;
 ///   設定画面を閉じても「戻す」が使えるようになる（従来は _lastCommandToken フィールドのみで揮発）。
 /// - トークン保存タイミングは Apply 成功後（Apply 例外時に幽霊トークンを残さない・指摘1）
 /// - Load 時にトークンが残っていれば IsApplied=true にして「戻す」を活性化（信頼境界・指摘4）
+///
+/// v0.4.11（バックログ#9・plan-validator 2026-07-21 精査済み）：
+/// - レジストリ型 LastBackupPath（適用時 ExportKey した .reg パス）を BackupService
+///   （registry_backup_paths.json）へ横展開して永続化。Command 型と同じく Apply 成功後に保存し、
+///   Load 時に File.Exists を確認して復元（stale なら掃除して IsApplied は立てない）。
+///   latest-wins（Command 型の first-touch-wins とは意図的に異なる＝BackupService 側 doc コメント参照）。
 /// </summary>
 public partial class SettingDialogViewModel : ObservableObject
 {
@@ -144,6 +150,37 @@ public partial class SettingDialogViewModel : ObservableObject
             }
         }
 
+        // バックログ#9（plan-validator指摘）：レジストリ型は LastBackupPath（適用時 ExportKey した .reg パス）を
+        // 永続ストアから復元。Command 型とは ValueType で排他（両立ケースはない）。
+        // 信頼境界：外部（regedit・他ツール）で値が変更済みでも「戻す」ボタンが出てしまい得る（現在値との突合は
+        // しない割り切り）。ここでは File.Exists のみ確認し .reg のヘッダ検証まではしない
+        // （ImportKey 実行時に ValidateBackupFile が再検証するため、Load 時点の重複検証は不要）。
+        bool hasPersistedRegistryBackup = false;
+        bool staleRegistryBackupCleaned = false;
+        if (item.ValueType != SettingValueType.Command && !string.IsNullOrEmpty(item.RegistryPath))
+        {
+            var savedPath = _backup.LoadRegistryBackupPath(item.Id);
+            if (savedPath != null)
+            {
+                if (File.Exists(savedPath))
+                {
+                    LastBackupPath = savedPath;
+                    IsApplied = true;   // ストア存在＝適用済みとみなす信頼境界（#7 と同じ割り切り）
+                    hasPersistedRegistryBackup = true;
+                }
+                else
+                {
+                    // stale（ローテーション10件枠で.regが押し出された等）＝エントリ掃除・IsAppliedは立てない
+                    // cross-reviewer 2026-07-21 should_fix②：Load() にこの書込副作用（RemoveRegistryBackupPath）
+                    // がある点は既知の非対称（読み込むだけの想定の Load に永続ストアへの削除が混じる）。
+                    // 現状はダイアログを単発オープンする用途のみで呼ばれる前提。将来 Load を一覧プレビュー等で
+                    // ループ呼び出しする場合は、この掃除処理を Load 本体から分離すること。
+                    _backup.RemoveRegistryBackupPath(item.Id);
+                    staleRegistryBackupCleaned = true;
+                }
+            }
+        }
+
         if (item.ValueType == SettingValueType.Command)
         {
             RegistryPathDisplay = "(コマンド型項目)";
@@ -178,9 +215,21 @@ public partial class SettingDialogViewModel : ObservableObject
             OriginalValue = EditableValue;
         }
 
-        StatusMessage = hasPersistedCommandToken
-            ? "📦 前回適用時のバックアップを復元できます。"
-            : "値を変更して「適用」または「OK」で反映します。";
+        // バックログ#9：Command 型とレジストリ型は排他なので両立ケースはない（if/else if で可読に）。
+        if (hasPersistedCommandToken || hasPersistedRegistryBackup)
+        {
+            StatusMessage = "📦 前回適用時のバックアップを復元できます。";
+        }
+        else if (staleRegistryBackupCleaned)
+        {
+            // cross-reviewer 2026-07-21 should_fix①でローテーション保護（CleanupOldBackups の参照除外）を
+            // 入れた後も、手動削除・手動保存等で押し出され得るため注意文言は残す。
+            StatusMessage = "⏳ 前回のバックアップはローテーションで消去されたため「戻す」は使えません。（他の項目の変更でバックアップが押し出された可能性があります）";
+        }
+        else
+        {
+            StatusMessage = "値を変更して「適用」または「OK」で反映します。";
+        }
         IsModified = false;   // Load 完了後の初期化は変更と見なさない
     }
 
@@ -583,6 +632,13 @@ public partial class SettingDialogViewModel : ObservableObject
                 try { _backup.SaveCommandTokenIfAbsent(_item.Id, _lastCommandToken); }
                 catch { tokenSaveFailed = true; }
             }
+            // バックログ#9（plan-validator指摘）：レジストリ型の LastBackupPath も同じ理由（幽霊エントリ防止）
+            // で ExportKey 直後（バックアップ作成時点）ではなく Apply 成功後のここで永続化する。
+            if (_item.ValueType != SettingValueType.Command && LastBackupPath != null)
+            {
+                try { _backup.SaveRegistryBackupPath(_item.Id, LastBackupPath); }
+                catch { tokenSaveFailed = true; }
+            }
             // 適用後は OriginalValue を最新に更新（三者同期）
             ReadAndSyncCurrentValue();
             // EditableValue は変えず（ユーザーの選択を保持）、IsModified を再評価
@@ -745,13 +801,16 @@ public partial class SettingDialogViewModel : ObservableObject
             }
 
             var confirm = Dialogs.Confirm(
-                $"バックアップから復元します：\n{Path.GetFileName(LastBackupPath)}\n\n続行しますか？",
+                $"バックアップから復元します：\n{Path.GetFileName(LastBackupPath)}\n\n※ 直前の適用前の状態に戻します（初期状態とは限りません）。\n※ 適用後に外部で値を変更していた場合、その変更もバックアップ時点の状態で上書きされます。\n\n続行しますか？",
                 "戻す");
             if (!confirm) return;
 
             try
             {
                 _backup.ImportKey(LastBackupPath);
+                // バックログ#9：戻し成功後は永続ストアのエントリを削除（後始末・Command型 CaseB と同順）。
+                _backup.RemoveRegistryBackupPath(_item.Id);
+                LastBackupPath = null;
                 StatusMessage = "✅ バックアップから復元しました。";
                 IsApplied = false;
                 ReadAndSyncCurrentValue();

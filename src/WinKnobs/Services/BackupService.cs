@@ -15,6 +15,7 @@ namespace WinKnobs.Services;
 /// - E-4：reg.exe を Environment.SystemDirectory のフルパス指定で起動
 /// - v0.4.10（バックログ#7）：Command 型戻しトークンを command_tokens.json に永続化。
 ///   xUnit 分離用にコンストラクタへ backupDirOverride 引数を追加（既定 null＝従来通り %APPDATA%）
+/// - v0.4.11（バックログ#9）：レジストリ型 LastBackupPath を registry_backup_paths.json に永続化（latest-wins）。
 ///
 /// 最大10件保持・古いものは自動削除（開発ガイドライン準拠）。
 /// </summary>
@@ -32,6 +33,7 @@ public class BackupService
     private readonly string _maintenanceBackupDir;       // v0.1.19：システム・メンテナンス退避ストア
     private readonly string _maintenanceOriginalsPath;   // v0.1.19：原状 JSON（first-touch-wins）
     private readonly string _commandTokensPath;           // v0.4.10：Command 型戻しトークン永続化ストア（バックログ#7）
+    private readonly string _registryBackupPathsPath;     // v0.4.11：レジストリ型 LastBackupPath 永続化ストア（バックログ#9）
     private readonly string _regExePath;
 
     /// <summary>
@@ -72,6 +74,10 @@ public class BackupService
         // 専用サブディレクトリは持たず backup 直下に置く。
         _commandTokensPath = Path.Combine(_backupDir, "command_tokens.json");
 
+        // v0.4.11（plan-validator 2026-07-21・バックログ#9）：レジストリ型 LastBackupPath の永続化ストア。
+        // command_tokens.json と同じ理由で分離。単一ファイルのみなので backup 直下に置く。
+        _registryBackupPathsPath = Path.Combine(_backupDir, "registry_backup_paths.json");
+
         // E-4：reg.exe はフルパス指定
         _regExePath = Path.Combine(Environment.SystemDirectory, "reg.exe");
     }
@@ -90,6 +96,9 @@ public class BackupService
 
     /// <summary>Command 型戻しトークンストアのファイルパス（v0.4.10・テストからの直接検証用）。</summary>
     public string CommandTokensPath => _commandTokensPath;
+
+    /// <summary>レジストリ型 LastBackupPath 永続化ストアのファイルパス（v0.4.11・テストからの直接検証用）。</summary>
+    public string RegistryBackupPathsPath => _registryBackupPathsPath;
 
     // =================== v0.1.7：ネットワーク原状退避（JSON・first-touch-wins） ===================
     // plan-validator #4 反映：配信最適化 .reg(ExportKey) を使わず、各機能の原状を JSON 集約。
@@ -271,6 +280,74 @@ public class BackupService
         var tmp = _commandTokensPath + ".tmp";
         File.WriteAllText(tmp, json);
         File.Copy(tmp, _commandTokensPath, overwrite: true);
+        try { File.Delete(tmp); } catch { /* 無害 */ }
+    }
+
+    // =================== v0.4.11：レジストリ型 LastBackupPath 永続化（JSON・latest-wins） ===================
+    // plan-validator 2026-07-21（バックログ#9）：v0.4.10 で Command 型戻しトークンは永続化済みだが、
+    // レジストリ型の LastBackupPath（適用時 ExportKey した .reg パス）は ViewModel プロパティのみで
+    // 画面を閉じると消える → 再度開くと「戻す」が使えない不具合の解消。itemId 単位で JSON 永続化し、
+    // Load 時に読み戻す。network/maintenance/command_tokens と同じ原子的置換。
+    //
+    // Command 型（SaveCommandTokenIfAbsent）と異なり **無条件上書き（latest-wins）** にする。
+    // 理由：レジストリ型はセッション内挙動が「毎適用のたび ExportKey → LastBackupPath 上書き」であり、
+    // 永続ストアはその鏡とする（セッション内挙動と永続化後の挙動を一致させる）。
+    //
+    // 既知の弱点（plan-validator 指摘・意識的な割り切り）：
+    // 1. admin/非admin・クロスセッション並存中の read-modify-write は Lost Update しうる（既存 3 ストアと
+    //    同じ割り切り・プロセス間ロックなし）。さらにレジストリ型は CleanupOldBackups() の実ファイル削除が
+    //    絡むため、「片方のセッションが作った直後の .reg を、もう片方セッションの CleanupOldBackups が
+    //    10 件枠のローテーションで押し出して削除してしまう」実ファイル消失リスクを併せ持つ。
+    // 2. latest-wins のため「戻す」は直前適用前の状態であり、初期状態とは限らない
+    //    （Command 型の first-touch-wins との既知の UX 非対称）。
+
+    /// <summary>レジストリ型項目の LastBackupPath を itemId 単位で退避（無条件上書き＝latest-wins）。</summary>
+    public void SaveRegistryBackupPath(string itemId, string path)
+    {
+        var dict = LoadRegistryBackupPathsDict();
+        dict[itemId] = path;
+        SaveRegistryBackupPathsDict(dict);
+    }
+
+    /// <summary>itemId の LastBackupPath を読む（未保存 or 破損時は null。破損時は全件喪失＝既存ストアと同じ割り切り）。</summary>
+    public string? LoadRegistryBackupPath(string itemId)
+    {
+        var dict = LoadRegistryBackupPathsDict();
+        return dict.TryGetValue(itemId, out var path) ? path : null;
+    }
+
+    /// <summary>itemId の LastBackupPath を削除（戻し完了後の後始末）。削除失敗（ファイルロック等）は無害として握り潰す（RemoveCommandToken 同型）。</summary>
+    public void RemoveRegistryBackupPath(string itemId)
+    {
+        try
+        {
+            var dict = LoadRegistryBackupPathsDict();
+            if (dict.Remove(itemId)) SaveRegistryBackupPathsDict(dict);
+        }
+        catch { /* 後始末失敗は無害 */ }
+    }
+
+    private Dictionary<string, string> LoadRegistryBackupPathsDict()
+    {
+        try
+        {
+            if (!File.Exists(_registryBackupPathsPath)) return new();
+            var json = File.ReadAllText(_registryBackupPathsPath);
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private void SaveRegistryBackupPathsDict(Dictionary<string, string> dict)
+    {
+        // 既存 3 ストアと同じ原子的置換（temp 書込 → コピー上書き → temp 削除）。
+        var json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+        var tmp = _registryBackupPathsPath + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Copy(tmp, _registryBackupPathsPath, overwrite: true);
         try { File.Delete(tmp); } catch { /* 無害 */ }
     }
 
@@ -466,14 +543,27 @@ public class BackupService
                 $"backup file header invalid (not a .reg file): {filepath}");
     }
 
+    /// <summary>
+    /// v0.4.11（バックログ#9・cross-reviewer 2026-07-21 should_fix①）：registry_backup_paths.json に
+    /// 現在参照されている .reg パス（LoadRegistryBackupPathsDict() の Values）は削除対象から除外する。
+    /// #9 で永続化した「戻す」が、他項目の適用や手動保存（共有 10 件枠）で数操作のうちに押し出されて
+    /// 実効性を失うのを防ぐ。保護数は登録項目数で有界（≤30 程度）なので無制限成長はしない。
+    /// 再適用時は latest-wins 上書きで旧参照が外れ、次回ローテーションで自然回収される。
+    /// MaxKeepCount=10 自体は変えない（非参照ファイルにのみ適用）。
+    /// </summary>
     private void CleanupOldBackups()
     {
+        var referencedPaths = new HashSet<string>(
+            LoadRegistryBackupPathsDict().Values, StringComparer.OrdinalIgnoreCase);
+
         var files = Directory.GetFiles(_backupDir, "*.reg")
             .Select(f => new FileInfo(f))
             .OrderByDescending(f => f.LastWriteTime)
             .ToList();
 
-        foreach (var old in files.Skip(MaxKeepCount))
+        var deletable = files.Where(f => !referencedPaths.Contains(f.FullName)).ToList();
+
+        foreach (var old in deletable.Skip(MaxKeepCount))
         {
             try { old.Delete(); }
             catch { /* 削除失敗は無視 */ }

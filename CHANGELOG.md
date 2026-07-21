@@ -27,6 +27,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.11] - 2026-07-21（レジストリ型LastBackupPathの永続化・バックログ#9）
+
+> 📝 plan-validator 2026-07-21 精査済み仕様（バックログ#9）を反映。v0.4.10 の Command 型戻しトークン永続化をレジストリ型へ横展開。
+
+### Fixed
+- **レジストリ型 LastBackupPath の永続化**（バックログ#9）：設定画面を閉じると `LastBackupPath`（ViewModel プロパティのみ保持）が消え、レジストリ型項目の「戻す」ボタンが使えなくなっていた不具合を解消。`BackupService` に itemId 単位の JSON ストア（`registry_backup_paths.json`・latest-wins・原子的置換）を新設し、`SettingDialogViewModel.Load` で読み戻すことで画面を閉じても「戻す」が使える。
+  - latest-wins（Command 型の first-touch-wins とは意図的に異なる）：レジストリ型はセッション内挙動が毎適用ExportKey→LastBackupPath上書きであり、永続ストアはその挙動をそのまま鏡写しにする設計。
+  - トークン保存タイミングは Apply 成功後（ExportKey 直後ではなく）に行い、書込失敗時にディスクへ幽霊エントリを残さない（v0.4.10 の教訓を踏襲）。
+  - Load 時に永続パスが残っていれば `IsApplied=true` として「戻す」を活性化（信頼境界：外部で手動復元済みでも出せてしまう・File.Exists のみで判定しヘッダ検証は ImportKey 側に委譲）。stale（ローテーション10件枠で.regが押し出された等）なら自動掃除し、専用ステータスメッセージを表示。
+  - 「戻す」確認ダイアログに「直前の適用前の状態に戻す（初期状態とは限らない）」「外部変更もバックアップ時点の状態で上書きされる」旨の注意文言を追加。
+  - 既知の制限をコード内 doc コメントに明記：admin/非admin・クロスセッション並存中の Lost Update（既存3ストアと同型）に加え、レジストリ型は `CleanupOldBackups()` の実ファイル削除ローテーションが絡むため他セッションが作った直後の `.reg` を押し出して消してしまうリスクを併せ持つ／latest-wins による「戻す」＝初期状態とは限らないという UX 非対称／現在値との突合はしない（外部変更の検知なし）。
+  - 新規 `BackupServiceRegistryBackupPathTests`（xUnit・APPDATA 非依存の分離コンストラクタ経由）を追加。
+
+---
+
 ## [0.4.10] - 2026-07-21（Command型戻しトークンの永続化・バックログ#7）
 
 > 📝 plan-validator/cross-reviewer 2026-07-21 指摘（v0.4.9サイクル）を反映。Command 型全項目横断でトークンストア（command_tokens.json）を新設。
