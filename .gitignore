@@ -175,3 +175,10 @@ docs/スタートアップ系_設計書_v1.md
 # VM 作業の一時ログ（前セッション残骸・追跡しない）
 scripts/move_vm_log.txt
 scripts/*_vm_log.txt
+
+# バックアップ類（2026-07-28 追加）
+.gitignore_backup_2026-07-21.txt
+CHANGELOG_backup_2026-07-21.md
+CHANGELOG_backup__2.md
+_backup_2026-07-21/
+バックアップ/
