@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.14] - 2026-10-22（配布EXEにビルドしたPCのフォルダ名を埋め込まない）
+
+### Security
+- **配布EXEからビルド環境のパスを除去**：Release ビルドに `PathMap`（リポジトリ直下→`/_/`）と `Deterministic` を設定。v0.4.9 の配布EXEでは、同梱 WinKnobs.dll のデバッグ情報にビルドしたPCの絶対パス（Windowsのユーザー名を含む）が1か所埋め込まれていた。v0.4.14 以降は `/_/src/WinKnobs/obj/...` 表記になり、`C:\Users\` の出現は 1→0。
+- APIキー等の既知形式の秘密は v0.4.9 でも0件（配布EXEを展開して点検・アプリはそもそも鍵を使わない）。
+
+### Notes
+- アプリの機能変更はなし。テスト 1248件 green。
+
 ## [0.4.13] - 2026-07-21（GraphicsService.RestoreAllの無音no-op解消・バックログ#11）
 
 > 📝 plan-validator 2026-07-21 精査済み仕様（バックログ#11）を反映。品質ゲート1〜4完走。
